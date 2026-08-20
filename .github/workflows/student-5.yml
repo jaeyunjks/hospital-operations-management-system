@@ -1,0 +1,28 @@
+# ==========================================================================
+# CI/CD workflow — student-5 (PLACEHOLDER)
+# ==========================================================================
+# Owner: student-5  (see docs/architecture/feature-ownership.md)
+#
+# This is a placeholder. There is no application code for student-5 yet, so
+# this workflow intentionally does NOT build or test anything and does NOT run
+# on push / pull_request — it will not report a passing check against code that
+# has not been validated.
+#
+# When student-5's microservice exists, replace the body below with a real
+# pipeline scoped to `student-5/**` (setup Python -> install -> lint ->
+# pytest student-5/tests -> docker build from student-5/Dockerfile).
+# See .github/workflows/README.md.
+# ==========================================================================
+name: student-5 (placeholder)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Not yet implemented
+        run: |
+          echo "student-5 CI/CD is a placeholder — no pipeline implemented yet."
+          echo "See .github/workflows/README.md for the required future steps."

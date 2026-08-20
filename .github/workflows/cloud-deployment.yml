@@ -1,0 +1,28 @@
+# ==========================================================================
+# Cloud Deployment (PLACEHOLDER)
+# ==========================================================================
+# Team-wide deployment to the selected cloud platform: Microsoft Azure
+# (preferred service: Azure Container Apps). Planned for a later release.
+#
+# This is a PLACEHOLDER. Deployment is not implemented yet, so this workflow
+# does NOT deploy anything and does NOT run on push / pull_request — it will
+# not pretend that a deployment pipeline exists.
+#
+# When ready, replace the body below with a real deployment pipeline (build /
+# push images, then deploy to Azure Container Apps), using repository secrets
+# for credentials — never commit secrets. Choose an appropriate trigger then
+# (e.g. release tag or manual dispatch on a reviewed build).
+# ==========================================================================
+name: cloud-deployment (placeholder)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Not yet implemented
+        run: |
+          echo "Cloud deployment is a placeholder — no deployment pipeline implemented yet."
+          echo "Target: Microsoft Azure (Azure Container Apps). See .github/workflows/README.md."

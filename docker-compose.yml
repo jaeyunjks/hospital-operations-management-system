@@ -1,0 +1,39 @@
+# ==========================================================================
+# Hospital Operations Management System — Root Docker Compose (SCAFFOLD)
+# ==========================================================================
+# STATUS: Initial scaffold only. No service definitions are declared yet
+# because the underlying services do not exist. Adding placeholder/fake
+# services here would fail to build, so they are intentionally omitted.
+#
+# This file is kept syntactically valid so `docker compose config` succeeds.
+#
+# When implementation begins, this file will eventually orchestrate:
+#
+#   * Five frontend services          (student-1..5 frontend)
+#   * Five Flask backend/API services (student-1..5 backend)
+#   * Five database services          (student-1..5 SQLite; volume-backed)
+#   * AI-Mode service                 (ai-services/ai-mode)
+#   * Ollama runtime                  (approved open-source LLM host)
+#   * Later releases:
+#       - MCP server                  (ai-services/mcp-server)      [Release 1]
+#       - RAG server                  (ai-services/rag-server)      [Release 1]
+#       - Multi-Agent server          (ai-services/multi-agent-server) [Release 2]
+#
+# Each service will reference its own Dockerfile (e.g. student-1/Dockerfile)
+# and expose the appropriate ports / networks / volumes once implemented.
+# ==========================================================================
+
+# Compose Specification: the top-level `version` key is obsolete and omitted.
+
+services: {}
+# services:
+#   student-1-backend:
+#     build: ./student-1
+#     # ... to be defined when the service exists
+
+# networks:
+#   hospital-net:
+#     driver: bridge
+
+# volumes:
+#   student-1-db:

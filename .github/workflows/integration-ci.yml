@@ -1,0 +1,28 @@
+# ==========================================================================
+# Integration CI (PLACEHOLDER)
+# ==========================================================================
+# Team-wide integration CI for the assembled application (all five student
+# microservices + shared frontend + AI services, orchestrated via
+# docker-compose.yml).
+#
+# This is a PLACEHOLDER. Integration is not implemented yet, so this workflow
+# does NOT build or test anything and does NOT run on push / pull_request — it
+# will not report a passing check against an integration that does not exist.
+#
+# When the services exist, replace the body below with a real integration
+# pipeline (e.g. `docker compose build`, bring the stack up, run integrated /
+# end-to-end tests, tear down). Trigger on push / pull_request at that point.
+# ==========================================================================
+name: integration-ci (placeholder)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  placeholder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Not yet implemented
+        run: |
+          echo "Integration CI is a placeholder — no integration pipeline implemented yet."
+          echo "See .github/workflows/README.md for the required future steps."
