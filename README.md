@@ -25,11 +25,11 @@ medication administration, bed management, and shift management.
 
 | # | Feature area | Owner |
 |---|-----------------------------------------|-------------------------|
-| 1 | Patient & Admission Management          | _TBD — see `docs/architecture/feature-ownership.md`_ |
-| 2 | Doctor / Clinical Staff Management      | _TBD_ |
-| 3 | Medication Administration Records       | _TBD_ |
-| 4 | Room & Bed Management                   | _TBD_ |
-| 5 | Staff / Shift Management                | _TBD_ |
+| 1 | Patient & Admission Management          | _Jesse_ — see `docs/architecture/feature-ownership.md`_ |
+| 2 | Doctor / Clinical Staff Management      | _Jordan_ |
+| 3 | Medication Administration Records       | _Tirth_ |
+| 4 | Room & Bed Management                   | _Asher_ |
+| 5 | Staff / Shift Management                | _Yafie_ |
 
 Feature-to-student assignment is tracked in
 [`docs/architecture/feature-ownership.md`](docs/architecture/feature-ownership.md).
