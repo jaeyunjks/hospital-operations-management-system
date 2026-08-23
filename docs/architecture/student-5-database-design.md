@@ -16,13 +16,15 @@ Stores hospital workforce information.
 
 Attributes:
 
-- staff_id
+- staff_id (Primary Key)
 - name
 - role
 - department
+- specialisation
 - availability_status
 - employment_status
 - notes
+
 
 
 ### Shift
