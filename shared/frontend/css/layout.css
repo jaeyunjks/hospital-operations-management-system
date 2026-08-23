@@ -1,0 +1,230 @@
+/* ==========================================================================
+   Hospital Operations Management System — Layout
+   --------------------------------------------------------------------------
+   Application shell, page structure, and grid utilities shared by every
+   hospital module. Depends on variables.css.
+   ========================================================================== */
+
+/* ------------------------------------------------------------- app shell */
+.app-shell {
+  display: grid;
+  grid-template-columns: var(--container-sidebar) 1fr;
+  min-height: 100vh;
+}
+
+.app-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-5) var(--space-4);
+  background: var(--color-bg-inverse);
+  color: var(--color-text-inverse);
+  border-right: 1px solid var(--color-border-inverse);
+}
+
+.app-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-2);
+  font-size: var(--fs-heading-sm);
+  font-weight: var(--fw-bold);
+  letter-spacing: var(--ls-tight);
+  color: var(--color-text-inverse);
+}
+
+.app-sidebar__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.app-sidebar__label {
+  padding: 0 var(--space-2);
+  margin-bottom: var(--space-1);
+  font-size: var(--fs-micro);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-wide);
+  text-transform: uppercase;
+  color: var(--color-text-inverse-secondary);
+}
+
+.app-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-body-sm);
+  font-weight: var(--fw-medium);
+  color: var(--color-text-inverse-secondary);
+  border-radius: var(--radius-md);
+  transition: background var(--duration-fast) var(--ease-standard),
+              color var(--duration-fast) var(--ease-standard);
+}
+
+.app-nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--color-text-inverse);
+  text-decoration: none;
+}
+
+.app-nav-item[aria-current="page"],
+.app-nav-item.is-active {
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--color-text-inverse);
+}
+
+.app-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;   /* lets wide tables scroll instead of stretching the grid */
+}
+
+/* ---------------------------------------------------------------- topbar */
+.app-topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--container-topbar);
+  padding: 0 var(--space-6);
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.app-topbar__title {
+  font-size: var(--fs-heading-sm);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-tight);
+}
+
+.app-topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* ------------------------------------------------------------------ page */
+.page {
+  flex: 1;
+  width: 100%;
+  max-width: var(--container-max);
+  padding: var(--space-6);
+  margin: 0 auto;
+}
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.page-header__title {
+  margin: 0;
+  font-size: var(--fs-display-sm);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-tighter);
+}
+
+.page-header__subtitle {
+  margin-top: var(--space-1);
+  font-size: var(--fs-body-md);
+  color: var(--color-text-secondary);
+}
+
+.page-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.page-section {
+  margin-bottom: var(--space-8);
+}
+
+.page-section__title {
+  margin-bottom: var(--space-4);
+  font-size: var(--fs-heading-md);
+  font-weight: var(--fw-semibold);
+  letter-spacing: var(--ls-tight);
+}
+
+/* ------------------------------------------------------------------ grid */
+.grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* Auto-fitting grid for stat rows and card decks. */
+.grid--auto {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+/* Main content beside a supporting rail (e.g. roster + AI panel). */
+.grid--sidebar {
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+}
+
+/* ----------------------------------------------------------------- stack */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.stack--sm { gap: var(--space-2); }
+.stack--lg { gap: var(--space-6); }
+
+/* ------------------------------------------------------------------ row */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.row--wrap { flex-wrap: wrap; }
+.row--between { justify-content: space-between; }
+.row--end { justify-content: flex-end; }
+.row--top { align-items: flex-start; }
+
+.spacer { margin-left: auto; }
+
+/* ------------------------------------------------------------ responsive */
+@media (max-width: 1100px) {
+  .grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid--sidebar { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 900px) {
+  .app-shell { grid-template-columns: 1fr; }
+
+  .app-sidebar {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-4);
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--color-border-inverse);
+  }
+
+  .app-sidebar__section { flex-direction: row; }
+  .app-sidebar__label { display: none; }
+  .grid--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .page { padding: var(--space-4); }
+  .grid--2,
+  .grid--3,
+  .grid--4 { grid-template-columns: minmax(0, 1fr); }
+  .page-header__actions { margin-left: 0; }
+}
