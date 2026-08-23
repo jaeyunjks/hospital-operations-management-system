@@ -19,6 +19,7 @@ following prompt artefact `S5-DB-001` in
 | `seed_data.py` | Seed records and the `seed()` routine |
 | `init_db.py` | Database initialisation CLI |
 | `verify_db.py` | Validation script mapped to the approved validation criteria |
+| `service.py` | HTTP data service exposing the repository to the backend microservice |
 
 ## Entities
 
@@ -90,6 +91,21 @@ STUDENT5_DATABASE_PATH=/data/staff_shift.db python3 init_db.py
 ```
 
 Both scripts also accept `--path`.
+
+## Running as a service
+
+The backend/API microservice reaches this data over HTTP rather than opening
+the SQLite file, so the data service must be running:
+
+```bash
+cd student-5/database && python3 service.py
+```
+
+Serves on port 5051 (override with `DATABASE_SERVICE_PORT`). Check it with:
+
+```bash
+curl -s http://127.0.0.1:5051/health
+```
 
 ## Notes
 
