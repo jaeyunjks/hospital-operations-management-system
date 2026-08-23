@@ -1,61 +1,168 @@
-# Student 5 — Backend Development Prompt Artefacts
+# Student 5 Backend Development Prompt Artefact
 
-**Feature:** Staff & Shift Management
-**Area:** Flask backend/API microservice development
+## Prompt ID
 
-> **Status:** Template only. No prompts have been recorded yet.
-> Record one entry per prompt used during Flask backend/API microservice development work, following the structure
-> below. Keep entries in chronological order.
+S5-BE-001
 
----
+## Date
 
-## Prompt Entry Template
+2026-08-23
 
-Copy the block below for each recorded prompt.
+## Model / Tool
 
-### Prompt ID
-
-`S5-BE-001`
-
-### Date
-
-_YYYY-MM-DD_
-
-### Model / Tool
-
-_Ollama runtime + approved open-source LLM (Llama / Qwen / DeepSeek)._
+Claude Code
 
 ---
 
-### Purpose
+# Purpose
 
-_What this prompt was intended to achieve._
+Implement the backend/API microservice for the Student 5 Staff & Shift Management feature.
 
-### Context
-
-_Context supplied to the AI: files, schemas, prior decisions, constraints from
-the ASD project brief, and any relevant repository state._
-
-### Task Instructions
-
-_The instruction given to the AI, recorded as issued._
-
-### Constraints
-
-_Boundaries placed on the response — prescribed ASD technology stack, scope
-limits, and anything the AI was told not to do._
-
-### Expected Output
-
-_The form and content of the response expected before it was generated._
-
-### Validation Criteria
-
-_How the output was checked before being accepted, amended, or rejected._
+The backend will provide REST APIs that allow the frontend microservice to manage staff information, shifts, assignments, and AI-assisted staffing functionality.
 
 ---
 
-### Outcome
+# Context
 
-_Result of the prompt and any follow-up needed. Cross-reference the related
-agent workflow log in `docs/agent-logs/student-5/` where applicable._
+We are developing the Hospital Operations Management System for UTS Advanced Software Development (41026) Release 0.
+
+Student 5 owns:
+
+## Staff & Shift Management
+
+The feature supports:
+
+- Staff information management
+- Staff availability management
+- Shift scheduling
+- Staff assignment
+- Staffing coverage monitoring
+- AI-assisted staff recommendations
+
+The database microservice has already been implemented.
+
+Database entities:
+
+- Staff
+- Shift
+- Shift Assignment
+
+Relationship:
+
+Staff 1:M Shift Assignment M:1 Shift
+
+---
+
+# Existing Architecture
+
+The system follows:
+
+HTMX Frontend
+        |
+        v
+Backend/API Microservice
+        |
+        v
+Database Microservice
+        |
+        v
+SQLite Database
+
+The backend should act as the application service layer.
+
+---
+
+# Task Instructions
+
+Implement the backend/API microservice inside:
+
+student-5/backend/
+
+The implementation should:
+
+1. Create a Flask REST API service.
+2. Provide endpoints for Staff & Shift Management.
+3. Validate incoming requests.
+4. Handle errors appropriately.
+5. Communicate with the database microservice.
+6. Maintain separation between services.
+
+Required functionality:
+
+## Staff
+
+- Retrieve staff information
+- Search staff
+- Update staff availability
+
+
+## Shift
+
+- Create shifts
+- Retrieve shifts
+- Update shifts
+- Delete shifts
+
+
+## Assignment
+
+- Assign staff to shifts
+- Remove staff assignments
+- Retrieve staffing coverage
+
+
+## AI Preparation
+
+Create backend structure that allows future AI integration:
+
+- Staff recommendation
+- Coverage analysis
+
+Do not implement the actual LLM integration yet.
+
+---
+
+# Constraints
+
+Do not:
+
+- Create frontend files
+- Modify database schema without justification
+- Add authentication
+- Access SQLite files directly from frontend
+- Implement unrelated features
+
+Follow the existing repository structure.
+
+---
+
+# Expected Output
+
+Provide:
+
+- Backend source files
+- Flask application setup
+- API route structure
+- Service layer
+- Database communication layer
+- README documentation
+- Testing instructions
+
+---
+
+# Validation Criteria
+
+The backend should:
+
+- Start successfully.
+- Provide working REST endpoints.
+- Correctly interact with database services.
+- Handle invalid requests.
+- Return appropriate responses.
+- Follow the approved architecture.
+
+---
+
+# Outcome
+
+(To be completed after AI execution)
