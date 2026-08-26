@@ -1,0 +1,37 @@
+/* ==========================================================================
+   Staff & Shift Management — feature-local styles
+   --------------------------------------------------------------------------
+   Loaded AFTER the shared design system. Only rules that cannot reasonably be
+   reused by another module belong here; everything else lives in
+   shared/frontend/css/. Never hard-code a colour — always use a shared token.
+   ========================================================================== */
+
+/* Coverage cell: a compact "assigned / required" figure with its meter.
+   Specific to the staffing-coverage concept, so it stays local. */
+.coverage-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 132px;
+}
+
+.coverage-cell__figure {
+  font-family: var(--font-mono);
+  font-size: var(--size-data-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-data);
+  white-space: nowrap;
+}
+
+.coverage-cell .meter {
+  flex: 1;
+  min-width: 48px;
+}
+
+/* Shift time range — keeps overnight ranges on one line. */
+.shift-time {
+  font-family: var(--font-mono);
+  font-size: var(--size-data-sm);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}

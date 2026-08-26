@@ -3,65 +3,230 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Hospital Operations Management System</title>
+  <title>HOMS — CoreBoard</title>
   <meta name="description"
-        content="Integrated Agentic AI application supporting hospital operational coordination.">
+        content="Hospital Operations Management System — shared entry point for integrated operational modules.">
+
+  <!-- Webfonts. Self-host into assets/fonts/ for offline and Docker
+       deployments; the stacks in variables.css fall back to Georgia and the
+       system sans/mono faces when these are unavailable. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+
   <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
-  <header class="site-header">
-    <h1>Hospital Operations Management System</h1>
-    <p class="tagline">Integrated Agentic AI application for hospital operational coordination</p>
-  </header>
+  <a class="skip-link" href="#main">Skip to main content</a>
 
-  <nav class="main-nav" aria-label="Feature areas">
-    <ul>
-      <li><a href="#patient-admission">Patient &amp; Admission Management</a></li>
-      <li><a href="#clinical-staff">Doctor / Clinical Staff Management</a></li>
-      <li><a href="#medication">Medication Administration Records</a></li>
-      <li><a href="#room-bed">Room &amp; Bed Management</a></li>
-      <li><a href="#staff-shift">Staff / Shift Management</a></li>
-    </ul>
-  </nav>
+  <div class="app">
 
-  <main>
-    <section class="notice" aria-labelledby="dev-heading">
-      <h2 id="dev-heading">Integrated interface under development</h2>
-      <p>
-        This shared landing page is a placeholder. The integrated team interface,
-        the shared UI theme, and the five feature areas are not yet implemented.
-        The navigation above links to placeholder feature sections only.
-      </p>
-    </section>
+    <!-- ================================================== global header -->
+    <header class="app-header">
+      <a class="app-header__brand" href="index.html">
+        HOMS
+        <span class="app-header__context">Hospital Operations</span>
+      </a>
 
-    <section id="patient-admission" aria-labelledby="f1-heading">
-      <h2 id="f1-heading">Patient &amp; Admission Management</h2>
-      <p>Placeholder. Feature not yet implemented.</p>
-    </section>
+      <nav class="app-header__nav" aria-label="Primary">
+        <a class="nav-link" href="index.html" aria-current="page">CoreBoard</a>
+        <a class="nav-link" href="#modules">Modules</a>
+      </nav>
 
-    <section id="clinical-staff" aria-labelledby="f2-heading">
-      <h2 id="f2-heading">Doctor / Clinical Staff Management</h2>
-      <p>Placeholder. Feature not yet implemented.</p>
-    </section>
+      <div class="app-header__actions">
+        <label class="visually-hidden" for="role-select">Active role</label>
+        <select class="role-select" id="role-select">
+          <option>Operations Manager</option>
+          <option>Nurse Unit Manager</option>
+          <option>Clinical Lead</option>
+          <option>Read-only</option>
+        </select>
 
-    <section id="medication" aria-labelledby="f3-heading">
-      <h2 id="f3-heading">Medication Administration Records</h2>
-      <p>Placeholder. Feature not yet implemented.</p>
-    </section>
+        <div class="user-chip">
+          <span class="avatar avatar--inverse" aria-hidden="true">YF</span>
+          <span class="user-chip__identity">
+            <span class="user-chip__name">Signed in</span>
+            <span class="user-chip__role">Placeholder session</span>
+          </span>
+        </div>
+      </div>
+    </header>
 
-    <section id="room-bed" aria-labelledby="f4-heading">
-      <h2 id="f4-heading">Room &amp; Bed Management</h2>
-      <p>Placeholder. Feature not yet implemented.</p>
-    </section>
+    <div class="app-body">
 
-    <section id="staff-shift" aria-labelledby="f5-heading">
-      <h2 id="f5-heading">Staff / Shift Management</h2>
-      <p>Placeholder. Feature not yet implemented.</p>
-    </section>
-  </main>
+      <!-- ================================================ feature rail -->
+      <nav class="app-sidenav" aria-label="Modules">
+        <div class="app-sidenav__group">
+          <p class="app-sidenav__label" id="nav-modules">Operational modules</p>
+          <a class="sidenav-link" href="#patient-admission">Patient &amp; Admission</a>
+          <a class="sidenav-link" href="#clinical-staff">Clinical Staff</a>
+          <a class="sidenav-link" href="#medication">Pharmacy &amp; Medication</a>
+          <a class="sidenav-link" href="#room-bed">Room &amp; Bed</a>
+          <a class="sidenav-link" href="#staff-shift">Staff &amp; Shift</a>
+        </div>
 
-  <footer class="site-footer">
-    <p>ASD 2026 Project &middot; Hospital Operations Management System &middot; Scaffold</p>
-  </footer>
+        <div class="app-sidenav__group">
+          <p class="app-sidenav__label">Shared</p>
+          <a class="sidenav-link" href="#status">Integration status</a>
+        </div>
+      </nav>
+
+      <!-- ========================================================= main -->
+      <main class="app-main" id="main">
+        <div class="page">
+
+          <div class="page-header">
+            <div>
+              <span class="page-header__eyebrow">CoreBoard</span>
+              <h1 class="page-header__title">Hospital Operations Management System</h1>
+              <p class="page-header__description">
+                Shared entry point for the integrated application. Each module below is
+                developed and deployed as an independent microservice.
+              </p>
+            </div>
+          </div>
+
+          <!-- Integration status is illustrative until the services are wired
+               into Docker Compose; no backend route is implied here. -->
+          <section class="section" id="status" aria-labelledby="status-title">
+            <div class="section-header">
+              <h2 class="section-header__title" id="status-title">Integration status</h2>
+              <span class="section-header__meta">Release 0</span>
+            </div>
+
+            <div class="stat-row">
+              <div class="stat">
+                <span class="stat__label">Modules</span>
+                <span class="stat__value">5</span>
+                <span class="stat__meta">Independently owned</span>
+              </div>
+              <div class="stat">
+                <span class="stat__label">Services live</span>
+                <span class="stat__value stat__value--warning">1</span>
+                <span class="stat__meta">
+                  <span class="status status--warning"><span class="status__dot"></span>In progress</span>
+                </span>
+              </div>
+              <div class="stat">
+                <span class="stat__label">Shared design system</span>
+                <span class="stat__value stat__value--success">Ready</span>
+                <span class="stat__meta">
+                  <span class="status status--success"><span class="status__dot"></span>Available</span>
+                </span>
+              </div>
+              <div class="stat">
+                <span class="stat__label">AI mode</span>
+                <span class="stat__value">Advisory</span>
+                <span class="stat__meta">Human approval required</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- ================================================== modules -->
+          <section class="section" id="modules" aria-labelledby="modules-title">
+            <div class="section-header">
+              <h2 class="section-header__title" id="modules-title">Operational modules</h2>
+              <span class="section-header__meta">Five microservices</span>
+            </div>
+
+            <div class="grid grid--2">
+
+              <article class="panel" id="patient-admission">
+                <div class="panel__header">
+                  <h3 class="panel__title">Patient &amp; Admission Management</h3>
+                  <span class="badge-pending">Not deployed</span>
+                </div>
+                <div class="panel__body">
+                  <p class="u-muted">Admissions, patient records, and transfer coordination.</p>
+                </div>
+                <div class="panel__footer row">
+                  <span class="u-label">Module 1</span>
+                  <span class="spacer"></span>
+                  <button class="btn-secondary btn-compact" disabled aria-disabled="true">Open</button>
+                </div>
+              </article>
+
+              <article class="panel" id="clinical-staff">
+                <div class="panel__header">
+                  <h3 class="panel__title">Clinical Staff Management</h3>
+                  <span class="badge-pending">Not deployed</span>
+                </div>
+                <div class="panel__body">
+                  <p class="u-muted">Clinician records, credentials, and departmental assignment.</p>
+                </div>
+                <div class="panel__footer row">
+                  <span class="u-label">Module 2</span>
+                  <span class="spacer"></span>
+                  <button class="btn-secondary btn-compact" disabled aria-disabled="true">Open</button>
+                </div>
+              </article>
+
+              <article class="panel" id="medication">
+                <div class="panel__header">
+                  <h3 class="panel__title">Pharmacy &amp; Medication Inventory</h3>
+                  <span class="badge-pending">Not deployed</span>
+                </div>
+                <div class="panel__body">
+                  <p class="u-muted">Medication administration records and inventory control.</p>
+                </div>
+                <div class="panel__footer row">
+                  <span class="u-label">Module 3</span>
+                  <span class="spacer"></span>
+                  <button class="btn-secondary btn-compact" disabled aria-disabled="true">Open</button>
+                </div>
+              </article>
+
+              <article class="panel" id="room-bed">
+                <div class="panel__header">
+                  <h3 class="panel__title">Room &amp; Bed Management</h3>
+                  <span class="badge-pending">Not deployed</span>
+                </div>
+                <div class="panel__body">
+                  <p class="u-muted">Ward capacity, bed allocation, and occupancy tracking.</p>
+                </div>
+                <div class="panel__footer row">
+                  <span class="u-label">Module 4</span>
+                  <span class="spacer"></span>
+                  <button class="btn-secondary btn-compact" disabled aria-disabled="true">Open</button>
+                </div>
+              </article>
+
+              <article class="panel" id="staff-shift">
+                <div class="panel__header">
+                  <h3 class="panel__title">Staff &amp; Shift Management</h3>
+                  <span class="badge-success">API available</span>
+                </div>
+                <div class="panel__body">
+                  <p class="u-muted">
+                    Workforce coverage, shift planning, staff assignment, and AI-assisted
+                    staffing recommendations.
+                  </p>
+                </div>
+                <div class="panel__footer row">
+                  <span class="u-label">Module 5</span>
+                  <span class="spacer"></span>
+                  <a class="btn-secondary btn-compact"
+                     href="../../student-5/frontend/index.html">Open</a>
+                </div>
+              </article>
+
+            </div>
+          </section>
+
+          <div class="alert alert--info">
+            <div>
+              <p class="alert__title">Placeholder navigation</p>
+              <p class="alert__body">
+                Module links resolve once each service is registered in Docker Compose.
+                No backend routes are assumed by this page.
+              </p>
+            </div>
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
 </body>
 </html>

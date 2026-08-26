@@ -1,152 +1,140 @@
 /* ==========================================================================
-   Hospital Operations Management System — Components
+   HOMS — Components
    --------------------------------------------------------------------------
-   Reusable UI components shared by all hospital modules (Staff, Shift, Bed,
-   Admission, Medication). Depends on variables.css.
+   Reusable UI shared by all five feature microservices:
+   Patient & Admission · Clinical Staff · Pharmacy & Medication Inventory ·
+   Room & Bed · Staff & Shift.
 
-   Conventions
-   -----------
-   * Blue is for actions. Indigo/violet is reserved for AI content only.
-   * Status colour always carries a text label as well — never colour alone.
-   * Icons inherit currentColor and sit on no background of their own.
+   Principles
+   ----------
+   * Structure comes from hairline borders and alignment, not radius/shadow.
+   * One quiet indigo accent. Green/amber/red carry operational status only.
+   * Status is never colour alone — a dot or icon is always paired with text.
+   * AI proposes; a human decides. AI surfaces are marked, never dominant.
    ========================================================================== */
 
 /* ==========================================================================
-   Card
+   Navigation
    ========================================================================== */
-.card {
+
+/* Top-level product navigation, sitting in the dark global header. */
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 var(--space-4);
+  font-size: var(--size-ui-sm);
+  font-weight: var(--weight-medium);
+  color: var(--grey-7);
+  border-bottom: 2px solid transparent;
+  transition: color var(--dur) var(--ease);
+}
+
+.nav-link:hover {
+  color: var(--color-text-inverse);
+  text-decoration: none;
+}
+
+.nav-link[aria-current="page"],
+.nav-link.is-active {
+  color: var(--color-text-inverse);
+  border-bottom-color: var(--color-accent);
+}
+
+/* Feature navigation in the sidenav rail. */
+.sidenav-link {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-5);
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xs);
-}
-
-/* Cards that hold a table or list edge-to-edge. */
-.card--flush {
-  gap: 0;
-  padding: 0;
-  overflow: hidden;
-}
-
-.card--sunken {
-  background: var(--color-bg-surface-sunken);
-  box-shadow: none;
-}
-
-.card--interactive {
-  cursor: pointer;
-  transition: box-shadow var(--duration-base) var(--ease-standard),
-              border-color var(--duration-base) var(--ease-standard),
-              transform var(--duration-base) var(--ease-standard);
-}
-
-.card--interactive:hover {
-  border-color: var(--color-border-default);
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
-
-.card__header {
-  display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: var(--space-3);
-}
-
-.card--flush .card__header {
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--color-border-subtle);
-}
-
-.card__title {
-  font-size: var(--fs-heading-sm);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-tight);
-  color: var(--color-text-primary);
-}
-
-.card__subtitle {
-  margin-top: var(--space-1);
-  font-size: var(--fs-body-sm);
+  padding: var(--space-3) var(--gutter);
+  font-size: var(--size-ui-sm);
   color: var(--color-text-secondary);
+  border-left: 2px solid transparent;
+  transition: background var(--dur-fast) var(--ease);
 }
 
-.card__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+.sidenav-link:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.sidenav-link[aria-current="page"],
+.sidenav-link.is-active {
+  background: var(--color-accent-soft);
+  border-left-color: var(--color-accent);
+  color: var(--color-text-primary);
+  font-weight: var(--weight-medium);
+}
+
+.sidenav-link__count {
   margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: var(--size-data-sm);
+  color: var(--color-text-label);
 }
 
-.card__body { flex: 1; }
-
-.card__footer {
+/* User / profile block in the global header. */
+.user-chip {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border-subtle);
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-text-inverse);
 }
 
-.card--flush .card__footer {
-  padding: var(--space-3) var(--space-5);
+.user-chip__identity { line-height: 1.25; }
+
+.user-chip__name {
+  font-size: var(--size-ui-sm);
+  font-weight: var(--weight-medium);
 }
 
-/* ==========================================================================
-   Stat card — dashboard metrics
-   ========================================================================== */
-.stat-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-5);
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xs);
-}
-
-.stat-card__label {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-wide);
+.user-chip__role {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
-  color: var(--color-text-tertiary);
+  color: var(--grey-7);
 }
 
-.stat-card__value {
-  font-size: var(--fs-display-sm);
-  font-weight: var(--fw-semibold);
-  line-height: 1.1;
-  letter-spacing: var(--ls-tighter);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-text-primary);
-}
-
-.stat-card__meta {
-  display: flex;
+.avatar {
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  font-size: var(--fs-body-sm);
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--size-data-sm);
+  font-weight: var(--weight-medium);
   color: var(--color-text-secondary);
+  background: var(--color-surface-muted);
+  border: var(--border-strong);
 }
 
-/* Semantic emphasis for the value only — the label stays neutral. */
-.stat-card__value--success { color: var(--color-status-success-fg); }
-.stat-card__value--warning { color: var(--color-status-warning-fg); }
-.stat-card__value--danger  { color: var(--color-status-danger-fg); }
+.avatar--inverse {
+  background: var(--grey-11);
+  border-color: var(--grey-10);
+  color: var(--color-text-inverse);
+}
 
-/* Left accent bar for at-a-glance severity in a stat row. */
-.stat-card--accent { border-left: 3px solid var(--color-action-primary); }
-.stat-card--accent-success { border-left: 3px solid var(--color-status-success-fg); }
-.stat-card--accent-warning { border-left: 3px solid var(--color-status-warning-fg); }
-.stat-card--accent-danger  { border-left: 3px solid var(--color-status-danger-fg); }
+/* Role selector — a select styled to sit in the dark header. */
+.role-select {
+  height: var(--control-height);
+  padding: 0 var(--space-3);
+  font-size: var(--size-ui-sm);
+  color: var(--color-text-inverse);
+  background: var(--grey-11);
+  border: 1px solid var(--grey-10);
+  border-radius: var(--radius-none);
+  cursor: pointer;
+}
+
+.role-select:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
 
 /* ==========================================================================
    Buttons
@@ -155,525 +143,791 @@
 .btn-primary,
 .btn-secondary,
 .btn-ghost,
-.btn-danger,
-.btn-ai {
+.btn-danger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: var(--space-2);
-  padding: 9px var(--space-4);
-  font-family: var(--font-sans);
-  font-size: var(--fs-body-sm);
-  font-weight: var(--fw-medium);
-  line-height: 1.4;
+  height: var(--control-height);
+  padding: var(--control-pad);
+  font-family: var(--font-ui);
+  font-size: var(--size-ui-sm);
+  font-weight: var(--weight-medium);
+  line-height: 1;
   white-space: nowrap;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-none);
   cursor: pointer;
-  transition: background var(--duration-fast) var(--ease-standard),
-              border-color var(--duration-fast) var(--ease-standard),
-              color var(--duration-fast) var(--ease-standard);
+  transition: background var(--dur-fast) var(--ease),
+              border-color var(--dur-fast) var(--ease),
+              color var(--dur-fast) var(--ease);
 }
 
-/* -- Primary: the single main action on a view. Blue, never black. -------- */
+/* Primary — one per view. */
 .btn-primary {
-  background: var(--color-action-primary);
-  color: var(--color-action-primary-text);
-  box-shadow: var(--shadow-action);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-text-on-accent);
 }
 
-.btn-primary:hover { background: var(--color-action-primary-hover); }
-.btn-primary:active { background: var(--color-action-primary-active); }
+.btn-primary:hover {
+  background: var(--color-accent-hover);
+  border-color: var(--color-accent-hover);
+}
 
-/* -- Secondary: white surface with a subtle border. ----------------------- */
+.btn-primary:active {
+  background: var(--color-accent-press);
+  border-color: var(--color-accent-press);
+}
+
+/* Secondary — outlined, the default for most actions. */
 .btn-secondary {
-  background: var(--color-action-secondary);
+  background: var(--color-surface);
+  border-color: var(--color-border-control);
   color: var(--color-text-primary);
-  border-color: var(--color-action-secondary-border);
-  box-shadow: var(--shadow-xs);
 }
 
 .btn-secondary:hover {
-  background: var(--color-action-secondary-hover);
-  border-color: var(--color-border-strong);
+  background: var(--color-surface-muted);
+  border-color: var(--color-text-label);
 }
 
-/* -- Ghost: low-emphasis inline action. ---------------------------------- */
+/* Ghost — low emphasis, inline. */
 .btn-ghost {
   background: transparent;
-  color: var(--color-text-secondary);
+  color: var(--color-text-muted);
 }
 
 .btn-ghost:hover {
-  background: var(--color-bg-surface-sunken);
+  background: var(--color-surface-muted);
   color: var(--color-text-primary);
 }
 
-/* -- Danger: destructive confirmation only. ------------------------------ */
+/* Destructive — confirmation steps only. */
 .btn-danger {
-  background: var(--color-action-danger);
-  color: var(--white);
+  background: var(--color-surface);
+  border-color: var(--color-danger);
+  color: var(--color-danger);
 }
 
-.btn-danger:hover { background: var(--color-action-danger-hover); }
-
-/* -- AI: triggers an AI-assisted action. Indigo marks it as AI. ---------- */
-.btn-ai {
-  background: var(--color-ai-wash);
-  color: var(--color-ai-ink);
-  border-color: var(--color-ai-border);
+.btn-danger:hover {
+  background: var(--color-danger);
+  color: var(--color-text-on-accent);
 }
 
-.btn-ai:hover {
-  background: var(--white);
-  border-color: var(--color-ai-accent);
+/* Sizes. */
+.btn-lg {
+  height: var(--control-height-lg);
+  padding: var(--control-pad-lg);
+  font-size: var(--size-ui);
 }
 
-.btn-ai:focus-visible { box-shadow: var(--color-ai-focus-ring); }
+/* Compact action button — for table rows and toolbars. */
+.btn-compact {
+  height: 24px;
+  padding: 0 var(--space-3);
+  font-size: var(--size-ui-xs);
+}
 
-/* -- Sizes --------------------------------------------------------------- */
-.btn-sm { padding: 5px var(--space-3); font-size: var(--fs-micro); }
-.btn-lg { padding: 11px var(--space-5); font-size: var(--fs-body-md); }
 .btn-block { width: 100%; }
 
-/* -- States -------------------------------------------------------------- */
+/* States. */
 .btn:disabled,
 .btn-primary:disabled,
 .btn-secondary:disabled,
 .btn-ghost:disabled,
 .btn-danger:disabled,
-.btn-ai:disabled,
 [aria-disabled="true"] {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
   pointer-events: none;
 }
 
-/* Icons inside buttons inherit colour and carry no background. */
 .btn svg,
 .btn-primary svg,
 .btn-secondary svg,
 .btn-ghost svg,
-.btn-danger svg,
-.btn-ai svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 2;
+.btn-danger svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.75;
 }
 
 /* ==========================================================================
-   Badges — status pills
-   Always pair colour with a text label; colour alone is not an indicator.
+   Status
+   Colour is always paired with text. .status__dot is decorative only.
    ========================================================================== */
+.status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--size-ui-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.status__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-dot);
+  background: var(--color-neutral-mark);
+  flex-shrink: 0;
+}
+
+.status--success .status__dot { background: var(--color-success-mark); }
+.status--warning .status__dot { background: var(--color-warning-mark); }
+.status--danger  .status__dot { background: var(--color-danger-mark); }
+.status--info    .status__dot { background: var(--color-info-mark); }
+.status--pending .status__dot {
+  background: transparent;
+  border: 1.5px solid var(--color-neutral-mark);
+}
+
+/* Badge — a filled status chip for table cells and headers. */
 .badge,
 .badge-success,
 .badge-warning,
 .badge-danger,
 .badge-info,
 .badge-neutral,
-.badge-review {
+.badge-pending {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  padding: 3px var(--space-2);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-medium);
-  line-height: 1.5;
+  gap: var(--space-2);
+  padding: 2px var(--space-3);
+  font-size: var(--size-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
   white-space: nowrap;
-  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  border-radius: var(--radius-none);
 }
 
 .badge,
 .badge-neutral {
-  background: var(--color-status-neutral-bg);
-  color: var(--color-status-neutral-fg);
+  background: var(--color-neutral-soft);
+  color: var(--color-neutral);
 }
 
 .badge-success {
-  background: var(--color-status-success-bg);
-  color: var(--color-status-success-fg);
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 
 .badge-warning {
-  background: var(--color-status-warning-bg);
-  color: var(--color-status-warning-fg);
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
 }
 
 .badge-danger {
-  background: var(--color-status-danger-bg);
-  color: var(--color-status-danger-fg);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
 }
 
 .badge-info {
-  background: var(--color-status-info-bg);
-  color: var(--color-status-info-fg);
+  background: var(--color-info-soft);
+  color: var(--color-info);
 }
 
-/* For records awaiting human review — including AI output. */
-.badge-review {
-  background: var(--color-status-review-bg);
-  color: var(--color-status-review-fg);
-}
-
-/* Uppercase variant for high-urgency states (e.g. CRITICAL). */
-.badge--caps {
-  text-transform: uppercase;
-  letter-spacing: var(--ls-wide);
-  font-weight: var(--fw-semibold);
-}
-
-/* Outlined variant for use on tinted backgrounds. */
-.badge--outline {
-  background: var(--color-bg-surface);
-  border: 1px solid currentColor;
-}
-
-/* Optional leading dot. */
-.badge__dot {
-  width: 6px;
-  height: 6px;
-  background: currentColor;
-  border-radius: var(--radius-full);
-  flex-shrink: 0;
+.badge-pending {
+  background: transparent;
+  border-color: var(--color-border-control);
+  color: var(--color-text-muted);
 }
 
 /* ==========================================================================
-   Table
+   Panels and data cards
    ========================================================================== */
-.table-container {
-  width: 100%;
-  overflow-x: auto;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-xs);
+.panel {
+  background: var(--color-surface);
+  border: var(--border-strong);
 }
 
-/* A table already inside .card--flush needs no second frame. */
-.card--flush .table-container {
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-}
-
-.table-container__header {
+.panel__header {
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--color-border-subtle);
+  padding: var(--band-pad-y) var(--space-5);
+  background: var(--color-surface-band);
+  border-bottom: var(--border-hair);
 }
+
+.panel__title {
+  font-family: var(--font-ui);
+  font-size: var(--size-ui-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.panel__meta {
+  font-family: var(--font-mono);
+  font-size: var(--size-data-sm);
+  color: var(--color-text-label);
+}
+
+.panel__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.panel__body { padding: var(--space-5); }
+.panel__body--flush { padding: 0; }
+
+.panel__footer {
+  padding: var(--space-4) var(--space-5);
+  border-top: var(--border-hair);
+  background: var(--color-surface-band);
+}
+
+/* .card is retained as an alias of .panel for continuity with earlier
+   feature work; new code should prefer .panel. */
+.card { background: var(--color-surface); border: var(--border-strong); }
+
+.card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--band-pad-y) var(--space-5);
+  background: var(--color-surface-band);
+  border-bottom: var(--border-hair);
+}
+
+.card__body { padding: var(--space-5); }
+
+/* Section header — a sans label above a group, no panel chrome. */
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-bottom: var(--border-hair);
+}
+
+.section-header__title {
+  font-size: var(--size-ui-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.section-header__meta {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+/* ==========================================================================
+   KPI / stat card
+   Designed to sit inside .stat-row, which supplies the 1px hairline grid.
+   ========================================================================== */
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  background: var(--color-surface);
+}
+
+.stat__label {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+.stat__value {
+  font-family: var(--font-mono);
+  font-size: var(--size-data-xl);
+  font-weight: var(--weight-semibold);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+
+.stat__unit {
+  font-size: var(--size-data);
+  font-weight: var(--weight-regular);
+  color: var(--color-text-muted);
+}
+
+.stat__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-muted);
+}
+
+.stat__value--success { color: var(--color-success); }
+.stat__value--warning { color: var(--color-warning); }
+.stat__value--danger  { color: var(--color-danger); }
+
+/* .stat-card retained as an alias for continuity. */
+.stat-card { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-5); background: var(--color-surface); }
+
+/* ==========================================================================
+   Progress / coverage meter
+   ========================================================================== */
+.meter {
+  height: 4px;
+  background: var(--color-surface-muted);
+  overflow: hidden;
+}
+
+.meter__fill {
+  height: 100%;
+  background: var(--color-accent);
+  transition: width var(--dur-slow) var(--ease);
+}
+
+.meter--success .meter__fill { background: var(--color-success-mark); }
+.meter--warning .meter__fill { background: var(--color-warning-mark); }
+.meter--danger  .meter__fill { background: var(--color-danger-mark); }
+
+.meter-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.meter-row .meter { flex: 1; }
+
+.meter-row__value {
+  font-family: var(--font-mono);
+  font-size: var(--size-data-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-data);
+  min-width: 3.5em;
+  text-align: right;
+}
+
+/* ==========================================================================
+   Tables — the primary operational surface
+   ========================================================================== */
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  background: var(--color-surface);
+  border: var(--border-strong);
+}
+
+/* A table already inside a .panel does not need a second frame. */
+.panel .table-wrap { border: none; }
 
 .table {
   width: 100%;
   min-width: 640px;
   border-collapse: collapse;
-  font-size: var(--fs-body-sm);
+  font-size: var(--size-ui-sm);
 }
 
 .table thead th {
-  padding: var(--space-2) var(--space-5);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--band-pad-y) var(--row-pad-x);
   text-align: left;
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-wide);
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
   white-space: nowrap;
-  color: var(--color-text-tertiary);
-  background: var(--color-bg-surface-sunken);
-  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text-label);
+  background: var(--color-surface-band);
+  border-bottom: var(--border-strong);
 }
 
 .table tbody td {
-  padding: var(--space-4) var(--space-5);
+  height: var(--row-height);
+  padding: var(--row-pad-y) var(--row-pad-x);
   vertical-align: middle;
-  color: var(--color-text-primary);
-  border-bottom: 1px solid var(--color-border-subtle);
+  color: var(--color-text-data);
+  border-bottom: var(--border-hair);
 }
 
 .table tbody tr:last-child td { border-bottom: none; }
+.table tbody tr:hover td { background: var(--color-surface-hover); }
 
-.table tbody tr:hover { background: var(--color-bg-surface-sunken); }
+.table--zebra tbody tr:nth-child(even) td { background: var(--color-surface-alt); }
+.table--zebra tbody tr:hover td { background: var(--color-surface-hover); }
 
-.table__cell--numeric {
-  text-align: right;
+/* Cell modifiers. */
+.table__id,
+.table__num {
+  font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
 
-.table__cell--muted { color: var(--color-text-secondary); }
+.table__num { text-align: right; }
 
-.table__cell--actions {
+.table__name {
+  font-family: var(--font-ui);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-primary);
+}
+
+.table__muted { color: var(--color-text-muted); }
+
+.table__actions {
   width: 1%;
   white-space: nowrap;
   text-align: right;
 }
 
-/* Sticky header for long rosters and medication lists. */
-.table-container--sticky .table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
-
-/* ==========================================================================
-   AI components
-   --------------------------------------------------------------------------
-   Indigo/violet is used ONLY here. One label per AI region is enough — do not
-   repeat an "AI" tag on every child element.
-   ========================================================================== */
-.ai-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  background: var(--color-ai-wash);
-  border: 1px solid var(--color-ai-border);
-  border-radius: var(--radius-lg);
-}
-
-.ai-card__header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.ai-card__title {
-  font-size: var(--fs-body-sm);
-  font-weight: var(--fw-semibold);
-  color: var(--color-ai-ink);
-}
-
-.ai-card__body {
-  font-size: var(--fs-body-sm);
-  line-height: var(--lh-normal);
-  color: var(--color-text-secondary);
-}
-
-.ai-card__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-/* One badge per AI region identifies the source of the content. */
-.ai-badge {
+/* Sortable column header. */
+.table__sort {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  padding: 3px var(--space-2);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-semibold);
-  border-radius: var(--radius-full);
-  background: var(--color-ai-wash);
-  color: var(--color-ai-ink);
-  flex-shrink: 0;
-}
-
-.ai-badge--solid {
-  background: var(--color-ai-accent-strong);
-  color: var(--white);
-}
-
-/* A single AI suggestion the user can accept or dismiss. */
-.ai-suggestion {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  width: 100%;
-  padding: var(--space-3);
-  text-align: left;
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-ai-border);
-  border-radius: var(--radius-md);
+  gap: var(--space-2);
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
   cursor: pointer;
-  transition: border-color var(--duration-fast) var(--ease-standard),
-              box-shadow var(--duration-fast) var(--ease-standard);
 }
 
-.ai-suggestion:hover {
-  border-color: var(--color-ai-accent);
-  box-shadow: var(--shadow-sm);
-}
-
-.ai-suggestion__main { flex: 1; min-width: 0; }
-
-.ai-suggestion__title {
-  font-size: var(--fs-body-sm);
-  font-weight: var(--fw-medium);
-  color: var(--color-text-primary);
-}
-
-.ai-suggestion__reason {
-  margin-top: 2px;
-  font-size: var(--fs-micro);
-  color: var(--color-text-secondary);
-}
-
-/* Confidence / match score. */
-.ai-score {
-  font-size: var(--fs-body-sm);
-  font-weight: var(--fw-semibold);
-  font-variant-numeric: tabular-nums;
-  color: var(--color-ai-ink);
-}
-
-/* Required disclaimer: AI output is decision support, not a decision. */
-.ai-disclaimer {
-  font-size: var(--fs-micro);
-  line-height: var(--lh-snug);
-  color: var(--color-text-tertiary);
-}
+.table__sort:hover { color: var(--color-text-primary); }
 
 /* ==========================================================================
-   Forms
+   Filters
    ========================================================================== */
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
+.filter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
-.field__label {
-  font-size: var(--fs-body-sm);
-  font-weight: var(--fw-medium);
-  color: var(--color-text-primary);
-}
-
-.field__hint {
-  font-size: var(--fs-micro);
-  color: var(--color-text-tertiary);
-}
-
-.field__error {
-  font-size: var(--fs-micro);
-  color: var(--color-status-danger-fg);
+.filter__label {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
 }
 
 .input,
 .select,
 .textarea {
-  width: 100%;
-  padding: 8px var(--space-3);
-  font-family: var(--font-sans);
-  font-size: var(--fs-body-sm);
+  height: var(--control-height);
+  padding: var(--control-pad);
+  font-family: var(--font-ui);
+  font-size: var(--size-ui-sm);
   color: var(--color-text-primary);
-  background: var(--color-bg-surface);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-md);
-  transition: border-color var(--duration-fast) var(--ease-standard),
-              box-shadow var(--duration-fast) var(--ease-standard);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-control);
+  border-radius: var(--radius-none);
+  transition: border-color var(--dur-fast) var(--ease);
 }
+
+.input:hover,
+.select:hover { border-color: var(--color-text-label); }
 
 .input:focus,
 .select:focus,
 .textarea:focus {
   outline: none;
-  border-color: var(--color-border-focus);
-  box-shadow: var(--color-focus-ring);
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
 }
 
 .input::placeholder,
-.textarea::placeholder { color: var(--color-text-tertiary); }
+.textarea::placeholder { color: var(--color-text-label); }
 
 .input[aria-invalid="true"],
-.select[aria-invalid="true"] { border-color: var(--color-status-danger-fg); }
+.select[aria-invalid="true"] { border-color: var(--color-danger); }
 
-.textarea { min-height: 88px; resize: vertical; }
+.textarea {
+  height: auto;
+  min-height: 80px;
+  padding: var(--space-3);
+  line-height: var(--leading-ui);
+  resize: vertical;
+}
+
+.input--search { min-width: 220px; }
+
+/* Field wrapper. */
+.field { display: flex; flex-direction: column; gap: var(--space-2); }
+
+.field__label {
+  font-size: var(--size-ui-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+}
+
+.field__hint {
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-muted);
+}
+
+.field__error {
+  font-size: var(--size-ui-xs);
+  color: var(--color-danger);
+}
+
+/* Segmented control — view switching without a dropdown. */
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--color-border-control);
+}
+
+.segmented__item {
+  height: var(--control-height);
+  padding: 0 var(--space-4);
+  font-size: var(--size-ui-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border-control);
+}
+
+.segmented__item:last-child { border-right: none; }
+
+.segmented__item[aria-pressed="true"],
+.segmented__item.is-active {
+  background: var(--color-accent-soft);
+  color: var(--color-text-primary);
+}
 
 /* ==========================================================================
-   Supporting pieces
+   Alert banner — operational notices, not marketing
    ========================================================================== */
-
-/* Section divider. */
-.divider {
-  height: 1px;
-  background: var(--color-border-subtle);
-  border: none;
+.alert {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--size-ui-sm);
+  background: var(--color-surface);
+  border: var(--border-strong);
+  border-left: 3px solid var(--color-neutral-mark);
+  color: var(--color-text-secondary);
 }
 
-/* Empty state for lists with no records yet. */
-.empty-state {
+.alert--success { border-left-color: var(--color-success-mark); background: var(--color-success-soft); }
+.alert--warning { border-left-color: var(--color-warning-mark); background: var(--color-warning-soft); }
+.alert--danger  { border-left-color: var(--color-danger-mark);  background: var(--color-danger-soft); }
+.alert--info    { border-left-color: var(--color-info-mark);    background: var(--color-info-soft); }
+
+.alert__title {
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.alert__body { margin-top: var(--space-1); }
+
+.alert__actions {
   display: flex;
-  flex-direction: column;
-  align-items: center;
   gap: var(--space-2);
-  padding: var(--space-10) var(--space-6);
-  text-align: center;
-}
-
-.empty-state__title {
-  font-size: var(--fs-body-lg);
-  font-weight: var(--fw-semibold);
-}
-
-.empty-state__body {
-  max-width: 420px;
-  font-size: var(--fs-body-sm);
-  color: var(--color-text-secondary);
-}
-
-/* Inline notice / alert. */
-.notice {
-  display: flex;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  font-size: var(--fs-body-sm);
-  border: 1px solid var(--color-border-subtle);
-  border-left-width: 3px;
-  border-radius: var(--radius-md);
-  background: var(--color-bg-surface-sunken);
-}
-
-.notice--info {
-  background: var(--color-status-info-bg);
-  border-left-color: var(--color-status-info-fg);
-  color: var(--color-status-info-fg);
-}
-
-.notice--success {
-  background: var(--color-status-success-bg);
-  border-left-color: var(--color-status-success-fg);
-  color: var(--color-status-success-fg);
-}
-
-.notice--warning {
-  background: var(--color-status-warning-bg);
-  border-left-color: var(--color-status-warning-fg);
-  color: var(--color-status-warning-fg);
-}
-
-.notice--danger {
-  background: var(--color-status-danger-bg);
-  border-left-color: var(--color-status-danger-fg);
-  color: var(--color-status-danger-fg);
-}
-
-/* Avatar / initials chip for staff and patients. */
-.avatar {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-semibold);
-  color: var(--color-text-secondary);
-  background: var(--color-bg-surface-sunken);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-full);
+  margin-left: auto;
   flex-shrink: 0;
 }
 
-/* Text utilities used across modules. */
-.text-secondary { color: var(--color-text-secondary); }
-.text-tertiary  { color: var(--color-text-tertiary); }
-.text-sm        { font-size: var(--fs-body-sm); }
-.text-micro     { font-size: var(--fs-micro); }
-.text-medium    { font-weight: var(--fw-medium); }
-.text-semibold  { font-weight: var(--fw-semibold); }
-.text-mono      { font-family: var(--font-mono); }
+/* ==========================================================================
+   Empty state
+   ========================================================================== */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-9) var(--space-6);
+  text-align: center;
+}
 
-/* HTMX loading indicator — shown only while a request is in flight. */
-.htmx-indicator { opacity: 0; transition: opacity var(--duration-base) var(--ease-standard); }
+.empty__title {
+  font-size: var(--size-ui-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.empty__body {
+  max-width: 46ch;
+  font-size: var(--size-ui-sm);
+  color: var(--color-text-muted);
+}
+
+/* ==========================================================================
+   AI / advisory
+   --------------------------------------------------------------------------
+   AI proposes; a human decides. Every AI surface must:
+     1. carry an .ai-label so its origin is unambiguous,
+     2. state its basis (.ai-basis) rather than asserting authority,
+     3. end in an explicit human decision (.ai-decision).
+   AI uses the same indigo family as the rest of the system — it is marked by
+   tint and label, never by decorative styling.
+   ========================================================================== */
+.ai-panel {
+  background: var(--color-surface);
+  border: var(--border-strong);
+}
+
+.ai-panel__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--band-pad-y) var(--space-5);
+  background: var(--color-ai-soft);
+  border-bottom: var(--border-hair);
+}
+
+.ai-panel__title {
+  font-size: var(--size-ui-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.ai-panel__body { padding: var(--space-5); }
+
+/* The label that marks content as machine-generated. One per region. */
+.ai-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-ai);
+  background: var(--color-ai-soft);
+  border: 1px solid var(--color-ai-border);
+}
+
+.ai-label__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: var(--radius-dot);
+  background: var(--color-ai-mark);
+}
+
+/* Standing reminder of the human-in-the-loop contract. */
+.ai-disclaimer {
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-muted);
+}
+
+/* A single ranked recommendation. */
+.recommendation {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: var(--border-hair);
+}
+
+.recommendation:last-child { border-bottom: none; }
+
+.recommendation__rank {
+  font-family: var(--font-mono);
+  font-size: var(--size-data-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-label);
+  min-width: 1.5em;
+}
+
+.recommendation__main { flex: 1; min-width: 0; }
+
+.recommendation__name {
+  font-size: var(--size-ui-sm);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-primary);
+}
+
+/* Why the system proposed this — reasoning, not assertion. */
+.ai-basis {
+  margin-top: var(--space-2);
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-muted);
+}
+
+.recommendation__decision,
+.ai-decision {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* Confidence — expressed as a labelled bar, never as a bare percentage. */
+.confidence {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 92px;
+}
+
+.confidence__label {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--size-label-sm);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+.confidence__track {
+  height: 3px;
+  background: var(--color-surface-muted);
+}
+
+.confidence__fill {
+  height: 100%;
+  background: var(--color-ai-mark);
+}
+
+/* Human approval outcome. */
+.approval {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-muted);
+}
+
+.approval--approved { color: var(--color-success); }
+.approval--rejected { color: var(--color-danger); }
+
+.approval--pending {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+/* ==========================================================================
+   Utilities — deliberately few
+   ========================================================================== */
+.u-label {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+.u-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.u-muted { color: var(--color-text-muted); }
+.u-strong { font-weight: var(--weight-semibold); color: var(--color-text-primary); }
+.u-nowrap { white-space: nowrap; }
+
+.divider { height: 1px; background: var(--color-border); border: none; }
+
+/* HTMX request indicator — hidden unless a request is in flight. */
+.htmx-indicator { opacity: 0; transition: opacity var(--dur) var(--ease); }
 .htmx-request .htmx-indicator,
 .htmx-request.htmx-indicator { opacity: 1; }

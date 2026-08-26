@@ -1,195 +1,245 @@
-# Shared Frontend — Design System
+# HOMS Shared Design System
 
-The shared UI foundation for the **Hospital Operations Management System**.
-Every student module builds on these assets so the integrated application reads
-as one product rather than five.
+The shared frontend foundation for the **Hospital Operations Management System**.
+All five feature microservices consume this system so the integrated application
+reads as one product.
 
-Extracted from the approved Claude Design mockup
-(*HOMS Staff and Shift Management*, offline v2).
+Derived from the approved HOMS design (*Staff & Shift Management*, v3), which is
+the visual source of truth.
 
-> **Scope:** design system only. No feature pages are implemented here.
+## Design intent
+
+Precise, restrained, enterprise-grade, information-dense. Built for desk
+monitors and long shifts.
+
+Structure is carried by **hairline borders, alignment and typography** — not by
+radius, shadow, or colour. The interface is **square by design** (`--radius-*: 0`)
+and effectively **shadow-free** (elevation is reserved for dialogs). There are no
+gradients, no glassmorphism, and no decorative animation.
 
 ## Contents
 
 ```
 shared/frontend/
-├── index.html              # placeholder landing shell
+├── index.html          # CoreBoard — shared entry point
 ├── css/
-│   ├── main.css            # entry point — imports the four files below
-│   ├── variables.css       # design tokens (colour, type, spacing, radius, shadow)
-│   ├── reset.css           # browser normalisation + base typography
-│   ├── layout.css          # app shell, page structure, grid
-│   └── components.css      # cards, buttons, badges, tables, AI elements
+│   ├── main.css        # entry point — imports the four below, in order
+│   ├── variables.css   # design tokens
+│   ├── reset.css       # normalisation + base elements
+│   ├── layout.css      # application shell, grids, structure
+│   └── components.css  # reusable components
 └── assets/
-    ├── icons/              # shared inline SVG icons
-    └── images/             # shared images and illustrations
+    ├── icons/          # shared inline SVG
+    └── images/
 ```
 
-## Design language
+## Typography
 
-### Colour
+| Face | Token | Used for |
+|------|-------|----------|
+| Source Serif 4 | `--font-display` | **Major titles only** — `h1`–`h3`, page and brand |
+| Barlow | `--font-ui` | Everything operational: nav, tables, forms, buttons, KPI labels |
+| IBM Plex Mono | `--font-mono` | Identifiers, numerals, uppercase micro-labels |
 
-| Role | Token | Value |
-|------|-------|-------|
-| Canvas | `--color-bg-canvas` | `#F8FAFC` |
-| Surface | `--color-bg-surface` | `#FFFFFF` |
-| Sunken surface | `--color-bg-surface-sunken` | `#F5F7FA` |
-| Primary text | `--color-text-primary` | `#0F172A` |
-| Secondary text | `--color-text-secondary` | `#475569` |
-| Subtle border | `--color-border-subtle` | `#EEF2F7` |
-| **Primary action** | `--color-action-primary` | `#2563EB` |
-| **AI accent** | `--color-ai-accent` | `#6366F1` |
-| AI wash / border / ink | `--color-ai-*` | `#F5F3FF` / `#DDD6FE` / `#4338CA` |
+Serif never appears in dense operational content. Base UI size is **13.5px** —
+dense but readable. Numeric columns use `tabular-nums` so figures stay aligned.
 
-Status colours: success emerald, warning amber, danger red, info blue, neutral
-slate, review violet — each with a matching `-fg` and `-bg` token.
+Fonts are linked from Google Fonts in the shipped pages. **Self-host into
+`assets/fonts/` for offline and Docker deployments** — the stacks fall back to
+Georgia and the system sans/mono faces, so the UI stays usable either way.
 
-**Blue means action. Indigo/violet means AI.** These two never swap roles.
+## Colour tokens
 
-### Typography
+Authored in OKLCH for perceptually even ramps. Feature code uses the semantic
+layer only — never the `--grey-*` / `--indigo-*` primitives.
 
-`Inter` for UI, `IBM Plex Mono` for identifiers and codes. Scale runs from
-`--fs-micro` (11px) through `--fs-display-xl` (52px); body default is 14px.
-Numeric columns use `font-variant-numeric: tabular-nums` so figures align.
+| Token | Role |
+|-------|------|
+| `--color-background` | Application canvas |
+| `--color-surface` | Cards, panels, tables |
+| `--color-surface-muted` | Sunken wells |
+| `--color-surface-band` | Section and table header bands |
+| `--color-text-primary` / `-secondary` / `-muted` / `-label` | Text hierarchy |
+| `--color-border` / `--color-border-strong` / `--color-border-control` | Hairline / panel / control outlines |
+| `--color-accent` / `--color-accent-soft` | The single quiet indigo action colour |
+| `--color-success` / `--color-success-soft` | Operational status |
+| `--color-warning` / `--color-warning-soft` | Operational status |
+| `--color-danger` / `--color-danger-soft` | Operational status |
+| `--color-ai` / `--color-ai-soft` | AI / advisory surfaces |
 
-### Spacing, radius, elevation
+Each status also has a `--color-*-mark` for dots, meters and rules.
 
-- **Spacing:** 4px base scale — `--space-1` (4px) … `--space-24` (96px).
-- **Radius:** `--radius-sm` 4px, `md` 7px (controls), `lg` 10px, `xl` 12px (cards), `full` pill.
-- **Shadows:** `--shadow-xs` on resting cards, `sm`/`md` on hover and popovers,
-  `lg` for modals. Elevation is subtle — borders carry most of the separation.
+**One quiet indigo carries action and focus.** Green, amber and red communicate
+operational status only — never decoration.
 
-## Reusable classes
+## Other tokens
+
+- **Spacing** `--space-1` (3px) … `--space-10` (48px), `--gutter` (24px)
+- **Radius** `--radius-sm/md/lg` (all `0`), `--radius-dot` (50%), `--radius-pill`
+- **Type** `--size-display-1..4`, `--size-ui*`, `--size-data*`, `--size-label*`
+- **Controls** `--control-height` (30px), `--row-height` (40px), `--row-pad-*`
+- **Layout** `--sidenav-width` (232px), `--header-height` (52px), `--content-max`, `--prose-max`
+- **Borders** `--border-hair`, `--border-strong`, `--focus-ring`
+
+## Layout
+
+```
+.app > .app-header
+       .app-body > .app-sidenav
+                   .app-main > .page
+```
 
 | Class | Purpose |
 |-------|---------|
-| `.card` | White surface container. `--flush` for edge-to-edge tables, `--interactive` for clickable cards |
-| `.stat-card` | Dashboard metric: `__label`, `__value`, `__meta` |
-| `.btn-primary` | Main action — blue |
-| `.btn-secondary` | Secondary action — white with border |
-| `.btn-ghost` / `.btn-danger` / `.btn-ai` | Low-emphasis / destructive / AI-triggering |
-| `.badge-success` | Positive state (rostered, administered, discharged) |
-| `.badge-warning` | Attention needed (understaffed, due soon) |
-| `.badge-danger` | Critical (unstaffed, overdue, missed dose) |
-| `.badge-info` / `.badge-neutral` / `.badge-review` | Informational / default / awaiting review |
-| `.table-container` + `.table` | Scrollable data table with sticky-capable header |
-| `.ai-card` | AI recommendation panel |
-| `.ai-badge`, `.ai-suggestion`, `.ai-score`, `.ai-disclaimer` | AI sub-components |
-| `.field`, `.input`, `.select`, `.textarea` | Form controls |
-| `.notice`, `.empty-state`, `.avatar`, `.divider` | Supporting pieces |
+| `.app-header` | Dark global header: brand, primary nav, role, user |
+| `.app-sidenav` | Feature navigation rail |
+| `.page`, `.page-header` | Content container and page title block |
+| `.toolbar` | Filters/actions above a data region |
+| `.stat-row` | KPI row with hairline grid |
+| `.layout-split` | Operational content + advisory rail |
+| `.layout-detail` | Primary/secondary reading split |
+| `.grid--2/3/4`, `.stack`, `.row` | General structure |
 
-Layout: `.app-shell`, `.app-sidebar`, `.app-topbar`, `.page`, `.page-header`,
-`.grid--2/3/4/auto/sidebar`, `.stack`, `.row`.
+None of these are Staff & Shift specific.
 
-## How student features import these styles
+## Components
 
-Each Flask module serves the shared directory as static files, then links
-`main.css` — the single import that pulls in all four stylesheets in order.
+**Navigation** — `.nav-link`, `.sidenav-link`, `.user-chip`, `.avatar`, `.role-select`
 
-**1. Expose the shared folder from your Flask app:**
+**Buttons** — `.btn-primary`, `.btn-secondary`, `.btn-ghost`, `.btn-danger`,
+`.btn-compact`, `.btn-lg`, `.btn-block`
 
-```python
-app = Flask(__name__, static_folder="static")
-```
+**Status** — `.status` + `.status__dot` (`--success/--warning/--danger/--info/--pending`),
+and `.badge-success` / `-warning` / `-danger` / `-info` / `-neutral` / `-pending`
 
-Mount `shared/frontend` at `/static/shared` (a symlink, a Docker volume, or a
-`COPY` step in your Dockerfile — whichever suits your service).
+**Operational** — `.panel` (+ `__header/__body/__footer`), `.section-header`,
+`.stat` (+ `__label/__value/__meta`), `.table-wrap` + `.table`, `.meter`,
+`.alert` (`--success/--warning/--danger/--info`), `.empty`, `.filter`,
+`.input` / `.select` / `.textarea`, `.field`, `.segmented`
 
-**2. Link it from your template:**
+**AI / advisory** — `.ai-panel`, `.ai-label`, `.recommendation`, `.ai-basis`,
+`.confidence`, `.approval`, `.ai-disclaimer`
 
-```html
-<link rel="stylesheet" href="/static/shared/css/main.css">
-```
+`.card` and `.stat-card` are retained as aliases of `.panel` / `.stat` for
+continuity with earlier work; new code should prefer `.panel` and `.stat`.
 
-**3. Use the shared classes — do not restyle them:**
+### The AI contract
 
-```html
-<div class="card">
-  <div class="card__header">
-    <h2 class="card__title">Today's Roster</h2>
-    <div class="card__actions">
-      <button class="btn-secondary btn-sm">Export</button>
-      <button class="btn-primary btn-sm">Add Shift</button>
-    </div>
-  </div>
-  <div class="table-container">
-    <table class="table">
-      <thead>
-        <tr><th>Staff</th><th>Role</th><th>Status</th></tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Amara Okafor</td>
-          <td class="table__cell--muted">Registered Nurse</td>
-          <td><span class="badge-success">Confirmed</span></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-```
+**AI proposes; a human decides.** Every AI surface must:
 
-**AI recommendation panel:**
+1. carry an `.ai-label` so its origin is unambiguous,
+2. state its basis with `.ai-basis` rather than asserting authority,
+3. end in an explicit human decision (`.ai-decision` / `.approval`).
 
-```html
-<section class="ai-card">
-  <div class="ai-card__header">
-    <span class="ai-badge">AI Suggested</span>
-  </div>
-  <button class="ai-suggestion">
-    <div class="ai-suggestion__main">
-      <div class="ai-suggestion__title">Chloe Bennett</div>
-      <div class="ai-suggestion__reason">Available · Role matches · No clash</div>
-    </div>
-    <span class="ai-score">92%</span>
-  </button>
-  <p class="ai-disclaimer">Recommendations require human review before rostering.</p>
-</section>
-```
+AI shares the indigo family — it is marked by tint and label, never by
+decorative styling, and never visually dominates operational content.
 
-### Module-specific styles
+## How to apply this to your feature
 
-Keep them in your own module and build on the tokens — never hard-code a colour:
-
-```css
-/* student-N/frontend/css/feature.css */
-.roster-slot--gap { border-left: 3px solid var(--color-status-danger-fg); }
-```
-
-Load order is always shared first, module second:
+**1. Serve the shared directory as static files** from your Flask app — a
+symlink, a Docker volume, or a `COPY` step. Then link the single entry point:
 
 ```html
 <link rel="stylesheet" href="/static/shared/css/main.css">
 <link rel="stylesheet" href="/static/css/feature.css">
 ```
 
+Shared always loads first; your feature CSS second.
+
+**2. Use the shell** so every module looks the same:
+
+```html
+<div class="app">
+  <header class="app-header">…</header>
+  <div class="app-body">
+    <nav class="app-sidenav" aria-label="Sections">…</nav>
+    <main class="app-main" id="main">
+      <div class="page">
+        <div class="page-header">
+          <div>
+            <span class="page-header__eyebrow">Your Module</span>
+            <h1 class="page-header__title">Screen name</h1>
+          </div>
+          <div class="page-header__actions">
+            <button class="btn-primary">Primary action</button>
+          </div>
+        </div>
+        <!-- content -->
+      </div>
+    </main>
+  </div>
+</div>
+```
+
+**3. Compose from shared components** — a KPI row and a table:
+
+```html
+<div class="stat-row">
+  <div class="stat">
+    <span class="stat__label">Occupied beds</span>
+    <span class="stat__value" data-numeric>128</span>
+    <span class="stat__meta">
+      <span class="status status--warning"><span class="status__dot"></span>Near capacity</span>
+    </span>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table class="table table--zebra">
+    <thead><tr><th scope="col">Ward</th><th scope="col">Status</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="table__name">Ward 4B</td>
+        <td><span class="badge-danger">At capacity</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+```
+
+**4. Keep feature CSS minimal.** Only styles that no other module could reuse
+belong locally, and they must build on tokens:
+
+```css
+/* student-N/frontend/css/feature.css */
+.bed-cell { display: flex; gap: var(--space-3); }
+```
+
+See `student-5/frontend/` for a worked reference implementation.
+
 ## Rules
 
-1. **Consume tokens, not raw values.** No hex codes in feature CSS.
+1. **Consume tokens, never hex codes.** No raw colour in feature CSS.
 2. **One primary action per view.** Everything else is secondary or ghost.
-3. **Primary buttons are blue, never black.**
-4. **Indigo/violet is reserved for AI.** Never use it for ordinary actions.
-5. **Label AI regions once.** One `.ai-badge` per panel — not per row.
-6. **Icons carry no background.** No coloured tiles or circles behind them.
-7. **Never rely on colour alone** for status — always include a text label.
-8. **Do not edit shared files for one module's needs.** Raise it with the team.
+3. **Indigo is the only accent.** Green/amber/red mean operational status.
+4. **Never colour alone** — always pair a dot or badge with text.
+5. **Label AI once per region**, and always end in a human decision.
+6. **Do not edit shared files for one module.** Raise it with the team.
+7. **No new radii, shadows, or gradients.** The system is flat and square.
 
 ## Accessibility
 
-All text/background pairs in the token set meet **WCAG 2.1 AA (4.5:1)**. Three
-values were darkened from the mockup to reach that bar:
+Every text pairing in the semantic layer meets **WCAG 2.1 AA (4.5:1)**. Values
+were darkened from the raw design where needed:
 
-| Token | Mockup | Adjusted | Reason |
-|-------|--------|----------|--------|
-| `--color-action-primary` | `#3B82F6` | `#2563EB` | White on blue-500 was 3.68:1 |
-| `--color-text-tertiary` | `#94A3B8` | `#64748B` | slate-400 on white was 2.56:1 |
-| `--color-status-warning-fg` | `#B45309` | `#92400E` | Was 4.45:1 on the amber wash |
+| Token | Ratio | Note |
+|-------|-------|------|
+| `--color-text-secondary` on surface | 12.9:1 | Body |
+| `--color-text-muted` on surface | 7.0:1 | Supporting |
+| `--color-text-label` on surface | 5.9:1 | Darkened; the design's label grey was 4.2:1 |
+| `--color-success` on `-soft` | 6.1:1 | Darkened from 4.2:1 |
+| `--color-warning` on `-soft` | 6.2:1 | Darkened from 2.8:1 |
+| `--color-danger` on `-soft` | 6.3:1 | |
+| `--color-accent` on surface | 6.0:1 | Links |
+| white on `--color-accent` | 6.1:1 | Primary button |
+| `--color-border-control` on surface | 3.2:1 | Meets 3:1 for control boundaries |
 
-Focus states are never removed (`:focus-visible` outline plus
-`--color-focus-ring`), and `prefers-reduced-motion` is respected.
+Also: visible `:focus-visible` on everything, a `.skip-link` first tab stop,
+`prefers-reduced-motion` respected, semantic buttons vs links, `scope` on table
+headers, and 30px minimum control height.
 
 ## Browser support
 
-Modern evergreen browsers. Uses CSS custom properties, grid, and flexbox — all
-baseline-supported and requiring no build step, consistent with the ASD stack
-(HTML5 / CSS3 / HTMX, no frontend framework).
+Modern evergreen browsers. Uses CSS custom properties, grid, flexbox and
+**OKLCH colour** (baseline since 2023). No build step and no frontend
+framework — consistent with the ASD stack.

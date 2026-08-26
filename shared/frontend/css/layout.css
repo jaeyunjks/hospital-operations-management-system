@@ -1,230 +1,286 @@
 /* ==========================================================================
-   Hospital Operations Management System — Layout
+   HOMS — Layout
    --------------------------------------------------------------------------
-   Application shell, page structure, and grid utilities shared by every
-   hospital module. Depends on variables.css.
+   Application shell and structural layout shared by all five feature
+   microservices. Nothing here is specific to any one module.
+
+   Shell:  .app  >  .app-header
+                    .app-body  >  .app-sidenav
+                                  .app-main  >  .page
    ========================================================================== */
 
-/* ------------------------------------------------------------- app shell */
-.app-shell {
-  display: grid;
-  grid-template-columns: var(--container-sidebar) 1fr;
+/* ==========================================================================
+   Application shell
+   ========================================================================== */
+.app {
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
 }
 
-.app-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  padding: var(--space-5) var(--space-4);
-  background: var(--color-bg-inverse);
-  color: var(--color-text-inverse);
-  border-right: 1px solid var(--color-border-inverse);
-}
-
-.app-sidebar__brand {
+/* ------------------------------------------------------- global header */
+.app-header {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: 0 var(--space-2);
-  font-size: var(--fs-heading-sm);
-  font-weight: var(--fw-bold);
-  letter-spacing: var(--ls-tight);
+  gap: var(--space-5);
+  height: var(--header-height);
+  padding: 0 var(--gutter);
+  background: var(--color-surface-inverse);
   color: var(--color-text-inverse);
+  border-bottom: 1px solid var(--grey-15);
+  flex-shrink: 0;
 }
 
-.app-sidebar__section {
+.app-header__brand {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.app-sidebar__label {
-  padding: 0 var(--space-2);
-  margin-bottom: var(--space-1);
-  font-size: var(--fs-micro);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-wide);
-  text-transform: uppercase;
-  color: var(--color-text-inverse-secondary);
-}
-
-.app-nav-item {
-  display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--fs-body-sm);
-  font-weight: var(--fw-medium);
-  color: var(--color-text-inverse-secondary);
-  border-radius: var(--radius-md);
-  transition: background var(--duration-fast) var(--ease-standard),
-              color var(--duration-fast) var(--ease-standard);
-}
-
-.app-nav-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--color-text-inverse);
-  text-decoration: none;
-}
-
-.app-nav-item[aria-current="page"],
-.app-nav-item.is-active {
-  background: rgba(255, 255, 255, 0.10);
+  font-family: var(--font-display);
+  font-size: var(--size-ui-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-display);
   color: var(--color-text-inverse);
 }
 
-.app-main {
+.app-header__brand:hover { text-decoration: none; }
+
+.app-header__context {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--grey-7);
+}
+
+.app-header__nav {
   display: flex;
-  flex-direction: column;
-  min-width: 0;   /* lets wide tables scroll instead of stretching the grid */
+  align-items: center;
+  gap: var(--space-1);
+  height: 100%;
 }
 
-/* ---------------------------------------------------------------- topbar */
-.app-topbar {
+.app-header__actions {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  min-height: var(--container-topbar);
-  padding: 0 var(--space-6);
-  background: var(--color-bg-surface);
-  border-bottom: 1px solid var(--color-border-default);
-}
-
-.app-topbar__title {
-  font-size: var(--fs-heading-sm);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-tight);
-}
-
-.app-topbar__actions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
   margin-left: auto;
 }
 
-/* ------------------------------------------------------------------ page */
-.page {
+/* ---------------------------------------------------------------- body */
+.app-body {
+  display: flex;
   flex: 1;
-  width: 100%;
-  max-width: var(--container-max);
-  padding: var(--space-6);
-  margin: 0 auto;
+  min-height: 0;
 }
+
+/* ------------------------------------------------ feature navigation rail */
+.app-sidenav {
+  width: var(--sidenav-width);
+  flex-shrink: 0;
+  padding: var(--space-6) 0;
+  background: var(--color-surface);
+  border-right: var(--border-strong);
+  overflow-y: auto;
+}
+
+.app-sidenav__group { margin-bottom: var(--space-7); }
+
+.app-sidenav__label {
+  padding: 0 var(--gutter) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+/* ---------------------------------------------------------------- main */
+.app-main {
+  flex: 1;
+  min-width: 0;             /* lets wide tables scroll, not stretch */
+  overflow-x: hidden;
+}
+
+/* ==========================================================================
+   Page
+   ========================================================================== */
+.page {
+  max-width: var(--content-max);
+  padding: var(--space-7) var(--gutter) var(--space-10);
+}
+
+.page--prose { max-width: var(--prose-max); }
 
 .page-header {
   display: flex;
-  flex-wrap: wrap;
   align-items: flex-start;
-  gap: var(--space-4);
-  margin-bottom: var(--space-6);
+  gap: var(--space-5);
+  padding-bottom: var(--space-5);
+  margin-bottom: var(--space-7);
+  border-bottom: var(--border-strong);
+}
+
+.page-header__eyebrow {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
 }
 
 .page-header__title {
-  margin: 0;
-  font-size: var(--fs-display-sm);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-tighter);
+  font-family: var(--font-display);
+  font-size: var(--size-display-2);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-display);
+  letter-spacing: var(--track-display);
+  color: var(--color-text-primary);
 }
 
-.page-header__subtitle {
-  margin-top: var(--space-1);
-  font-size: var(--fs-body-md);
-  color: var(--color-text-secondary);
+.page-header__description {
+  margin-top: var(--space-3);
+  max-width: var(--prose-max);
+  font-size: var(--size-ui-md);
+  color: var(--color-text-muted);
 }
 
 .page-header__actions {
   display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ==========================================================================
+   Toolbar — filters and actions above a data region
+   ========================================================================== */
+.toolbar {
+  display: flex;
   flex-wrap: wrap;
   align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface);
+  border: var(--border-strong);
+  border-bottom: none;
+}
+
+.toolbar + .table-wrap { border-top: none; }
+
+.toolbar__group {
+  display: flex;
+  align-items: center;
   gap: var(--space-2);
-  margin-left: auto;
 }
 
-.page-section {
-  margin-bottom: var(--space-8);
-}
+.toolbar__end { margin-left: auto; }
 
-.page-section__title {
-  margin-bottom: var(--space-4);
-  font-size: var(--fs-heading-md);
-  font-weight: var(--fw-semibold);
-  letter-spacing: var(--ls-tight);
-}
-
-/* ------------------------------------------------------------------ grid */
+/* ==========================================================================
+   Structural grids
+   ========================================================================== */
 .grid {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--gutter);
 }
 
 .grid--2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .grid--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .grid--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
-/* Auto-fitting grid for stat rows and card decks. */
-.grid--auto {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+/* KPI / stat row — equal columns that collapse gracefully. */
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  border: var(--border-strong);
+  background: var(--color-border-strong);   /* hairlines show through gaps */
+  gap: 1px;
+  margin-bottom: var(--space-7);
 }
 
-/* Main content beside a supporting rail (e.g. roster + AI panel). */
-.grid--sidebar {
+/* Two-column operational layout: primary work area + advisory rail. */
+.layout-split {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--gutter);
   align-items: start;
 }
 
-/* ----------------------------------------------------------------- stack */
-.stack {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
+.layout-split--wide-rail { grid-template-columns: minmax(0, 1fr) 380px; }
+
+/* Primary/secondary reading split (e.g. detail + metadata). */
+.layout-detail {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--gutter);
+  align-items: start;
 }
 
-.stack--sm { gap: var(--space-2); }
-.stack--lg { gap: var(--space-6); }
+/* ==========================================================================
+   Flow helpers
+   ========================================================================== */
+.stack { display: flex; flex-direction: column; gap: var(--space-5); }
+.stack--sm { gap: var(--space-3); }
+.stack--lg { gap: var(--space-7); }
 
-/* ------------------------------------------------------------------ row */
-.row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-}
-
+.row { display: flex; align-items: center; gap: var(--space-3); }
 .row--wrap { flex-wrap: wrap; }
 .row--between { justify-content: space-between; }
-.row--end { justify-content: flex-end; }
 .row--top { align-items: flex-start; }
 
 .spacer { margin-left: auto; }
 
-/* ------------------------------------------------------------ responsive */
-@media (max-width: 1100px) {
+.section { margin-bottom: var(--space-8); }
+
+/* ==========================================================================
+   Responsive
+   Desktop workstations are the primary target. Tablet is supported;
+   mobile stays functional rather than optimised.
+   ========================================================================== */
+@media (max-width: 1280px) {
+  .layout-split,
+  .layout-split--wide-rail { grid-template-columns: minmax(0, 1fr) 300px; }
   .grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .grid--sidebar { grid-template-columns: minmax(0, 1fr); }
 }
 
-@media (max-width: 900px) {
-  .app-shell { grid-template-columns: 1fr; }
-
-  .app-sidebar {
-    flex-direction: row;
-    align-items: center;
-    gap: var(--space-4);
-    overflow-x: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--color-border-inverse);
-  }
-
-  .app-sidebar__section { flex-direction: row; }
-  .app-sidebar__label { display: none; }
+@media (max-width: 1024px) {
+  .app-sidenav { width: 200px; }
+  .layout-split,
+  .layout-split--wide-rail,
+  .layout-detail { grid-template-columns: minmax(0, 1fr); }
   .grid--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-@media (max-width: 640px) {
-  .page { padding: var(--space-4); }
-  .grid--2,
-  .grid--3,
-  .grid--4 { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 820px) {
+  .app-body { flex-direction: column; }
+
+  .app-sidenav {
+    width: 100%;
+    padding: var(--space-3) 0;
+    border-right: none;
+    border-bottom: var(--border-strong);
+  }
+
+  .app-sidenav__group {
+    display: flex;
+    gap: var(--space-1);
+    margin-bottom: 0;
+    overflow-x: auto;
+  }
+
+  .app-sidenav__label { display: none; }
+
+  .page { padding: var(--space-5) var(--space-5) var(--space-8); }
+  .page-header { flex-wrap: wrap; }
   .page-header__actions { margin-left: 0; }
+  .grid--2, .grid--3, .grid--4 { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 620px) {
+  .app-header { gap: var(--space-3); padding: 0 var(--space-5); }
+  .app-header__context { display: none; }
 }

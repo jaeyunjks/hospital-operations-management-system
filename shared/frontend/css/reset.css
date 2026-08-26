@@ -1,15 +1,12 @@
 /* ==========================================================================
-   Hospital Operations Management System — Reset & Base
+   HOMS — Reset & Base Elements
    --------------------------------------------------------------------------
-   Normalises browser defaults and sets the base typography for every module.
-   Depends on variables.css.
+   Browser normalisation and base element styling. Depends on variables.css.
    ========================================================================== */
 
 *,
 *::before,
-*::after {
-  box-sizing: border-box;
-}
+*::after { box-sizing: border-box; }
 
 html {
   -webkit-text-size-adjust: 100%;
@@ -19,61 +16,73 @@ html {
 body,
 h1, h2, h3, h4, h5, h6,
 p, figure, blockquote, dl, dd,
-fieldset, legend, ul, ol {
-  margin: 0;
-  padding: 0;
-}
+fieldset, legend, ul, ol { margin: 0; padding: 0; }
 
 ul[role="list"],
-ol[role="list"] {
-  list-style: none;
-}
+ol[role="list"] { list-style: none; }
 
 body {
   min-height: 100vh;
-  font-family: var(--font-sans);
-  font-size: var(--fs-body-md);
-  line-height: var(--lh-normal);
-  color: var(--color-text-primary);
-  background-color: var(--color-bg-canvas);
+  font-family: var(--font-ui);
+  font-size: var(--size-ui);
+  line-height: var(--leading-ui);
+  color: var(--color-text-secondary);
+  background-color: var(--color-background);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* -------------------------------------------------------------- headings */
-h1, h2, h3, h4, h5, h6 {
-  font-weight: var(--fw-semibold);
-  line-height: var(--lh-tight);
-  letter-spacing: var(--ls-tight);
+/* --------------------------------------------------------------------------
+   Headings — serif display, reserved for major page and section titles.
+   Dense operational content (tables, forms, KPI labels) stays sans; use
+   .section-title / .field__label for those instead of a heading tag.
+   -------------------------------------------------------------------------- */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-display);
+  letter-spacing: var(--track-display);
   color: var(--color-text-primary);
-  text-wrap: balance;
 }
 
-h1 { font-size: var(--fs-display-sm); }
-h2 { font-size: var(--fs-heading-lg); }
-h3 { font-size: var(--fs-heading-md); }
-h4 { font-size: var(--fs-heading-sm); }
-h5 { font-size: var(--fs-body-lg); }
-h6 { font-size: var(--fs-body-md); }
+h1 { font-size: var(--size-display-2); }
+h2 { font-size: var(--size-display-3); }
+h3 { font-size: var(--size-display-4); }
 
-p { text-wrap: pretty; }
+/* h4–h6 are structural, not display: keep them in the UI face. */
+h4, h5, h6 {
+  font-family: var(--font-ui);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-ui-tight);
+  color: var(--color-text-primary);
+}
 
-/* ----------------------------------------------------------------- links */
+h4 { font-size: var(--size-ui-lg); }
+h5 { font-size: var(--size-ui-md); }
+h6 { font-size: var(--size-ui); }
+
+p { max-width: var(--prose-max); }
+
+small { font-size: var(--size-ui-xs); }
+
+code, kbd, samp, pre {
+  font-family: var(--font-mono);
+  font-size: var(--size-data);
+}
+
+/* ------------------------------------------------------------------ links */
 a {
-  color: var(--color-text-link);
+  color: var(--color-link);
   text-decoration: none;
 }
 
 a:hover {
-  color: var(--color-text-link-hover);
+  color: var(--color-link-hover);
   text-decoration: underline;
 }
 
-/* ------------------------------------------------------------ form fields */
-input,
-button,
-textarea,
-select {
+/* ------------------------------------------------------------------ forms */
+input, button, textarea, select {
   font: inherit;
   color: inherit;
 }
@@ -84,12 +93,13 @@ button {
   cursor: pointer;
 }
 
-/* ----------------------------------------------------------------- media */
-img,
-picture,
-svg,
-video,
-canvas {
+/* Numeric inputs and fields align on the mono face. */
+input[type="number"],
+input[type="date"],
+input[type="time"] { font-family: var(--font-mono); }
+
+/* ------------------------------------------------------------------ media */
+img, picture, svg, video, canvas {
   display: block;
   max-width: 100%;
 }
@@ -100,32 +110,28 @@ svg {
   flex-shrink: 0;
 }
 
-/* ---------------------------------------------------------------- tables */
+/* ----------------------------------------------------------------- tables */
 table {
   border-collapse: collapse;
   border-spacing: 0;
 }
 
-/* -------------------------------------------------------------- numerals
-   Tabular figures keep counts and times aligned in rosters and tables. */
+/* --------------------------------------------------------------- numerals
+   Tabular figures so counts, times and coverage percentages align in
+   columns and do not jitter as values update. */
 [data-numeric],
-td[data-numeric],
-.stat-card__value {
-  font-variant-numeric: tabular-nums;
-}
+td[data-numeric] { font-variant-numeric: tabular-nums; }
 
-/* ----------------------------------------------------------------- focus
-   Never remove focus styling: keyboard users rely on it. */
+/* ------------------------------------------------------------------ focus
+   Focus is always visible. Staff work these screens by keyboard. */
 :focus-visible {
-  outline: 2px solid var(--color-border-focus);
-  outline-offset: 2px;
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
 }
 
-:focus:not(:focus-visible) {
-  outline: none;
-}
+:focus:not(:focus-visible) { outline: none; }
 
-/* ------------------------------------------------------- screen reader */
+/* -------------------------------------------------------- screen reader */
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -138,14 +144,33 @@ td[data-numeric],
   border: 0;
 }
 
-/* ------------------------------------------------------ reduced motion */
+/* Skip link — first tab stop on every page. */
+.skip-link {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 100;
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-surface);
+  border: var(--border-strong);
+  color: var(--color-text-primary);
+  transform: translateY(-120%);
+}
+
+.skip-link:focus { transform: translateY(0); }
+
+/* ------------------------------------------------------- reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ---------------------------------------------------------------- print */
+@media print {
+  body { background: #fff; }
+  .app-sidenav, .app-header__actions, .no-print { display: none !important; }
 }
