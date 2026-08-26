@@ -31,12 +31,16 @@
       </a>
 
       <nav class="topnav__links" aria-label="Staff and shift sections">
-        <a class="topnav__link" href="/" aria-current="page">Workforce overview</a>
+        {#- Implemented sections are real links; the rest stay plain text so
+            they are neither focusable nor appear actionable. `active` is set
+            by each route. -#}
+        <a class="topnav__link" href="/"
+           {% if active == 'workforce' %}aria-current="page"{% endif %}>Workforce overview</a>
 
-        {#- Unimplemented sections are plain text, not links or buttons: they
-            must not be focusable or appear actionable. aria-disabled marks
-            the state for assistive technology. -#}
-        {% for section in ["Staff directory", "Shift planner", "AI recommendations", "Reports"] %}
+        <a class="topnav__link" href="/staff"
+           {% if active == 'staff' %}aria-current="page"{% endif %}>Staff directory</a>
+
+        {% for section in ["Shift planner", "AI recommendations", "Reports"] %}
         <span class="topnav__link--pending" aria-disabled="true">
           {{ section }}<span class="topnav__soon">Soon</span>
         </span>

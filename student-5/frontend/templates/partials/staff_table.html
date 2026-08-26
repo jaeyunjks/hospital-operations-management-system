@@ -1,0 +1,65 @@
+{#- Rendered ONLY by GET /partials/staff-table, swapped into the persistent
+    #staff-results wrapper via hx-swap="innerHTML". Carries no hx-* attributes
+    of its own. -#}
+{% if error %}
+<div class="panel__body">
+  <div class="alert alert--danger" role="alert">
+    <div>
+      <p class="alert__title">Staff records unavailable</p>
+      <p class="alert__body">{{ error }}</p>
+    </div>
+  </div>
+</div>
+
+{% elif staff|length == 0 %}
+<div class="panel__body">
+  <div class="empty">
+    {% if filtered %}
+    <p class="empty__title">No staff match these filters</p>
+    <p class="empty__body">Adjust the search term or clear a filter to widen the results.</p>
+    {% else %}
+    <p class="empty__title">No staff records</p>
+    <p class="empty__body">Staff added to the roster will appear here.</p>
+    {% endif %}
+  </div>
+</div>
+
+{% else %}
+<div class="table-wrap">
+  <table class="table table--zebra">
+    <caption class="visually-hidden">
+      Staff records held by the Staff &amp; Shift service
+    </caption>
+    <thead>
+      <tr>
+        <th scope="col">Staff member</th>
+        <th scope="col">Department</th>
+        <th scope="col">Availability</th>
+        <th scope="col">Employment</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for person in staff %}
+      {% set avail = 'success' if person.availability_status == 'Available'
+                else 'danger' if person.availability_status == 'Unavailable'
+                else 'neutral' %}
+      <tr>
+        <td>
+          <span class="demand-dept">{{ person.name }}</span>
+          <span class="demand-role">
+            {{ person.role }}{% if person.specialisation %} · {{ person.specialisation }}{% endif %}
+          </span>
+        </td>
+        <td class="table__muted">{{ person.department }}</td>
+        <td><span class="badge-{{ avail }}">{{ person.availability_status }}</span></td>
+        <td class="table__muted">{{ person.employment_status }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="panel__footer">
+  <span class="u-label">{{ staff|length }} record{{ '' if staff|length == 1 else 's' }}</span>
+</div>
+{% endif %}

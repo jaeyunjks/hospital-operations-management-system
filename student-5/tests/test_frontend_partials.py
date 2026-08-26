@@ -232,3 +232,88 @@ def test_health_reports_ok_when_backend_up(frontend_client, fe_api_client, monke
 
     assert response.status_code == 200
     assert response.get_json()["status"] == "ok"
+
+
+# --------------------------------------------------------- staff directory
+STAFF_FIXTURE = [
+    {"staff_id": 1, "name": "Amara Okafor", "role": "Registered Nurse",
+     "department": "Emergency", "specialisation": "Triage",
+     "availability_status": "Available", "employment_status": "Full-Time"},
+    {"staff_id": 2, "name": "Mei Lin Tan", "role": "Doctor",
+     "department": "Surgery", "specialisation": None,
+     "availability_status": "On Leave", "employment_status": "Full-Time"},
+]
+
+
+def test_staff_directory_shell_renders(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **kw: {"count": 2, "staff": STAFF_FIXTURE})
+    response = frontend_client.get("/staff")
+    body = response.data.decode()
+    assert response.status_code == 200
+    assert "Staff directory" in body
+    assert "staff-results" in body
+    # Filter options are derived from real records, not hard-coded.
+    assert "Emergency" in body and "Surgery" in body
+
+
+def test_staff_directory_shell_survives_backend_failure(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_staff", _raise_unavailable)
+    response = frontend_client.get("/staff")
+    assert response.status_code == 200
+    assert "Staff directory" in response.data.decode()
+
+
+def test_staff_table_renders_records(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **kw: {"count": 2, "staff": STAFF_FIXTURE})
+    body = frontend_client.get("/partials/staff-table").data.decode()
+    assert "Amara Okafor" in body and "Mei Lin Tan" in body
+    assert "badge-success" in body   # Available
+    assert "badge-neutral" in body   # On Leave
+    assert "undefined" not in body and "None" not in body
+
+
+def test_staff_table_uses_search_endpoint_when_query_given(frontend_client, fe_api_client, monkeypatch):
+    called = {}
+
+    def fake_search(**kwargs):
+        called.update(kwargs)
+        return {"count": 1, "staff": STAFF_FIXTURE[:1]}
+
+    monkeypatch.setattr(fe_api_client, "search_staff", fake_search)
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **kw: (_ for _ in ()).throw(AssertionError("should not be called")))
+
+    body = frontend_client.get("/partials/staff-table?q=nurse").data.decode()
+    assert called["query"] == "nurse"
+    assert "Amara Okafor" in body
+
+
+def test_staff_table_blank_query_uses_list_endpoint(frontend_client, fe_api_client, monkeypatch):
+    """A blank q must not reach /api/staff/search, which rejects it."""
+    monkeypatch.setattr(fe_api_client, "search_staff",
+                        lambda **kw: (_ for _ in ()).throw(AssertionError("should not be called")))
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **kw: {"count": 2, "staff": STAFF_FIXTURE})
+    response = frontend_client.get("/partials/staff-table?q=%20%20")
+    assert response.status_code == 200
+
+
+def test_staff_table_no_results_state(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "search_staff", lambda **kw: {"count": 0, "staff": []})
+    body = frontend_client.get("/partials/staff-table?q=zzz").data.decode()
+    assert "No staff match these filters" in body
+
+
+def test_staff_table_empty_dataset_state(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_staff", lambda **kw: {"count": 0, "staff": []})
+    body = frontend_client.get("/partials/staff-table").data.decode()
+    assert "No staff records" in body
+
+
+def test_staff_table_backend_unavailable(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_staff", _raise_unavailable)
+    response = frontend_client.get("/partials/staff-table")
+    assert response.status_code == 200
+    assert "Staff records unavailable" in response.data.decode()

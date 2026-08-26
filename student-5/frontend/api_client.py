@@ -86,11 +86,28 @@ def get_coverage(shift_date: Optional[str] = None,
 
 
 def list_staff(availability_status: Optional[str] = None,
-                department: Optional[str] = None) -> Dict[str, Any]:
+                department: Optional[str] = None,
+                role: Optional[str] = None) -> Dict[str, Any]:
     """GET /api/staff — staff records, optionally filtered."""
     return _request("GET", "/api/staff",
                      params={"availability_status": availability_status,
-                             "department": department})
+                             "department": department,
+                             "role": role})
+
+
+def search_staff(query: Optional[str] = None,
+                  department: Optional[str] = None,
+                  role: Optional[str] = None,
+                  availability_status: Optional[str] = None) -> Dict[str, Any]:
+    """GET /api/staff/search — free-text search plus the same filters.
+
+    The backend rejects a blank `q`, so callers must omit it rather than
+    send an empty string.
+    """
+    return _request("GET", "/api/staff/search",
+                     params={"q": query, "department": department,
+                             "role": role,
+                             "availability_status": availability_status})
 
 
 def get_coverage_summary(shift_date: Optional[str] = None,

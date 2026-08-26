@@ -102,8 +102,55 @@ def create_app() -> Flask:
         """
         return render_template(
             "workforce_overview.html", today=_today(), today_long=_today_long(),
+            active="workforce",
             kpis=None, shifts=None, top_gap=None, summary=None, error=None,
         )
+
+    # --------------------------------------------------------- staff directory
+    @app.get("/staff")
+    def staff_directory():
+        """Staff Directory shell. Filter options are derived from the real
+        staff records the service returns — never a hard-coded list."""
+        try:
+            records = api_client.list_staff()["staff"]
+            departments = sorted({r["department"] for r in records if r.get("department")})
+            roles = sorted({r["role"] for r in records if r.get("role")})
+        except (BackendUnavailableError, BackendError):
+            # The shell still renders; the table partial reports the failure.
+            departments, roles = [], []
+
+        return render_template(
+            "staff_directory.html", today=_today(), active="staff",
+            departments=departments, roles=roles,
+            staff=None, error=None,
+        )
+
+    @app.get("/partials/staff-table")
+    def staff_table_partial():
+        query = (request.args.get("q") or "").strip()
+        department = request.args.get("department") or None
+        role = request.args.get("role") or None
+        availability = request.args.get("availability_status") or None
+        filtered = bool(query or department or role or availability)
+
+        try:
+            # /api/staff/search rejects a blank q, so only use it when the
+            # user actually typed something; otherwise the plain list
+            # endpoint already applies the same three filters.
+            if query:
+                data = api_client.search_staff(
+                    query=query, department=department, role=role,
+                    availability_status=availability)
+            else:
+                data = api_client.list_staff(
+                    availability_status=availability, department=department,
+                    role=role)
+        except (BackendUnavailableError, BackendError) as error:
+            return render_template("partials/staff_table.html",
+                                    staff=None, filtered=filtered, error=str(error))
+
+        return render_template("partials/staff_table.html",
+                                staff=data["staff"], filtered=filtered, error=None)
 
     # ---------------------------------------------------------------- partials
     @app.get("/partials/kpis")

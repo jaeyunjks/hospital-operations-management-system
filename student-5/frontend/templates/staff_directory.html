@@ -1,0 +1,77 @@
+{% extends "layout.html" %}
+{% block title %}Staff directory{% endblock %}
+{% block content %}
+
+  <div class="page-header">
+    <div>
+      <span class="page-header__eyebrow">Staff &amp; Shift Management</span>
+      <h1 class="page-header__title">Staff directory</h1>
+      <p class="page-header__description">
+        Staff reference records held by the Staff &amp; Shift service.
+        Employee data originates from the external HR system and is read-only in HOMS.
+      </p>
+    </div>
+  </div>
+
+  <section class="panel" aria-labelledby="directory-title">
+    <div class="panel__header">
+      <div>
+        <h2 class="panel__title" id="directory-title">Staff records</h2>
+        <p class="panel__meta">Search and filter the current roster</p>
+      </div>
+    </div>
+
+    {#- One form drives search and all three filters. HTMX submits it on input
+        (debounced) and on change, replacing only the results region. The form
+        itself is never swapped, so nothing can re-arm its own trigger. -#}
+    <form class="toolbar" role="search"
+          hx-get="/partials/staff-table"
+          hx-target="#staff-results"
+          hx-swap="innerHTML"
+          hx-trigger="input changed delay:300ms from:#staff-search, change from:#dept-filter, change from:#role-filter, change from:#avail-filter, submit"
+          hx-indicator="#loading-indicator"
+          onsubmit="return false">
+
+      <div class="toolbar__group filter">
+        <label class="filter__label" for="staff-search">Search</label>
+        <input class="input input--search" id="staff-search" name="q" type="search"
+               placeholder="Name, role, department, specialisation"
+               autocomplete="off">
+      </div>
+
+      <div class="toolbar__group filter">
+        <label class="filter__label" for="dept-filter">Department</label>
+        <select class="select" id="dept-filter" name="department">
+          <option value="">All</option>
+          {% for d in departments %}<option value="{{ d }}">{{ d }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="toolbar__group filter">
+        <label class="filter__label" for="role-filter">Role</label>
+        <select class="select" id="role-filter" name="role">
+          <option value="">All</option>
+          {% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="toolbar__group filter">
+        <label class="filter__label" for="avail-filter">Availability</label>
+        <select class="select" id="avail-filter" name="availability_status">
+          <option value="">All</option>
+          <option value="Available">Available</option>
+          <option value="Unavailable">Unavailable</option>
+          <option value="On Leave">On Leave</option>
+        </select>
+      </div>
+    </form>
+
+    {#- "load" fires once here and the response contains no hx-* attributes,
+        so a swap cannot re-trigger itself. -#}
+    <div id="staff-results" hx-get="/partials/staff-table" hx-trigger="load"
+         hx-swap="innerHTML" hx-indicator="#loading-indicator">
+      <div class="panel__body"><p class="u-muted">Loading staff records…</p></div>
+    </div>
+  </section>
+
+{% endblock %}
