@@ -196,8 +196,14 @@
 
 .syncstrip__body {
   font-size: var(--size-ui-xs);
+  line-height: var(--leading-ui-tight);
   color: var(--color-text-muted);
   min-width: 0;
+}
+
+.syncstrip__lead {
+  color: var(--color-text-secondary);
+  font-weight: var(--weight-medium);
 }
 
 /* -------------------------------------------------------------- content */
@@ -228,8 +234,7 @@
 .kpi {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  gap: var(--space-5);
+  gap: var(--space-3);
   min-width: 0;
   padding: var(--space-5);
   border: var(--border-strong);
@@ -247,7 +252,7 @@
 
 .kpi__value {
   font-family: var(--font-mono);
-  font-size: var(--size-display-4);
+  font-size: var(--size-display-3);
   font-weight: var(--weight-semibold);
   line-height: 1.05;
   letter-spacing: var(--track-display);
@@ -259,6 +264,8 @@
 .kpi__value--danger { color: var(--color-danger); }
 
 .kpi__sub {
+  margin-top: auto;
+  padding-top: var(--space-3);
   font-size: var(--size-ui-xs);
   line-height: var(--leading-ui-tight);
   color: var(--color-text-muted);
@@ -316,6 +323,9 @@
   font-variant-numeric: tabular-nums;
   color: var(--color-text-data);
   white-space: nowrap;
+  /* Fixed box so the meters align in a column regardless of digit count. */
+  min-width: 4.25em;
+  text-align: right;
 }
 
 .coverage-cell .meter {
