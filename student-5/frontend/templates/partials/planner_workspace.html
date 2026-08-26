@@ -155,6 +155,31 @@
         <div><h2 id="week-grid-heading">{{ selected_department or 'Department' }} — week grid</h2><p>Required vs assigned per real shift time. Select a shift to manage its roster.</p></div>
         <div class="coverage-legend" aria-label="Coverage legend"><span class="legend-covered">Covered</span><span class="legend-short-one">Short 1</span><span class="legend-short-many">Short 2+</span></div>
       </div>
+      {% macro render_week_row(row, fallback_label='') %}
+      <div class="week-grid__label">
+        <strong>{{ row.label if row else fallback_label }}</strong>
+        <span class="u-mono">{{ row.start_time ~ '–' ~ row.end_time if row else 'No scheduled time' }}</span>
+      </div>
+      {% for day in week_dates %}
+      {% set cell = row.cells[loop.index0] if row else none %}
+      <div class="week-grid__cell{{ ' week-grid__cell--empty' if not cell or not cell.shifts else ' week-grid__cell--' ~ cell.state.tone }}">
+        {% if cell and cell.shifts %}
+          {% for shift in cell.shifts %}
+          <button class="grid-shift" type="button"
+                  aria-label="Manage {{ shift.department }} {{ shift.start_time }} shift on {{ shift.shift_date }}, {{ shift.assigned_staff_count }} of {{ shift.required_staff_count }} assigned"
+                  hx-get="/partials/planner" hx-include="#planner-state"
+                  hx-vals='{"selected_date":"{{ shift.shift_date }}","selected_shift_id":"{{ shift.shift_id }}"}'>
+            <strong>{{ shift.assigned_staff_count }}/{{ shift.required_staff_count }}</strong>
+            <span>{{ shift.planning_state.label }}</span>
+            {% if cell.shifts|length > 1 %}<small>{{ shift.required_role }}</small>{% endif %}
+          </button>
+          {% endfor %}
+        {% else %}
+        <span class="no-shift-mark">—</span><small>No shift</small>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% endmacro %}
       <div class="week-grid-scroll" tabindex="0" aria-label="Scrollable week grid">
         <div class="week-grid">
           <div class="week-grid__corner"></div>
@@ -165,29 +190,20 @@
             <span>{{ day.strftime('%a') }}</span><strong>{{ day.strftime('%-d') }}</strong>
           </button>
           {% endfor %}
-          {% for row in grid_rows %}
-          <div class="week-grid__label"><strong>{{ row.label }}</strong><span class="u-mono">{{ row.start_time }}–{{ row.end_time }}</span></div>
-          {% for cell in row.cells %}
-          <div class="week-grid__cell{{ ' week-grid__cell--empty' if not cell.shifts else ' week-grid__cell--' ~ cell.state.tone }}">
-            {% if cell.shifts %}
-              {% for shift in cell.shifts %}
-              <button class="grid-shift" type="button"
-                      aria-label="Manage {{ shift.department }} {{ shift.start_time }} shift on {{ shift.shift_date }}, {{ shift.assigned_staff_count }} of {{ shift.required_staff_count }} assigned"
-                      hx-get="/partials/planner" hx-include="#planner-state"
-                      hx-vals='{"selected_date":"{{ shift.shift_date }}","selected_shift_id":"{{ shift.shift_id }}"}'>
-                <strong>{{ shift.assigned_staff_count }}/{{ shift.required_staff_count }}</strong>
-                <span>{{ shift.planning_state.label }}</span>
-                {% if cell.shifts|length > 1 %}<small>{{ shift.required_role }}</small>{% endif %}
-              </button>
-              {% endfor %}
-            {% else %}
-            <span class="no-shift-mark">—</span><small>No shift</small>
+          {% set required_bands = ['Morning', 'Evening', 'Night'] %}
+          {% set ordered_bands = ['Morning', 'Afternoon', 'Evening', 'Night'] %}
+          {% for band in ordered_bands %}
+            {% set matches = grid_rows | selectattr('label', 'equalto', band) | list %}
+            {% if matches %}
+              {% for row in matches %}{{ render_week_row(row) }}{% endfor %}
+            {% elif band in required_bands %}
+              {{ render_week_row(none, band) }}
             {% endif %}
-          </div>
           {% endfor %}
-          {% else %}
+          {% for row in grid_rows if row.label not in ordered_bands %}{{ render_week_row(row) }}{% endfor %}
+          {% if not grid_rows %}
           <div class="week-grid__empty">No shifts scheduled for {{ selected_department or 'the selected department' }} this week.</div>
-          {% endfor %}
+          {% endif %}
         </div>
       </div>
     </section>

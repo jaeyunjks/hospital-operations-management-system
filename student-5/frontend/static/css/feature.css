@@ -1112,6 +1112,23 @@
   gap: var(--space-5);
 }
 
+/* Keep a long management roster from defining the desktop grid row height.
+   The rail stays available beside the planner and scrolls independently once
+   its real content is taller than the viewport. */
+.planner-rail {
+  position: sticky;
+  top: var(--space-5);
+  align-self: start;
+  max-height: calc(100vh - var(--space-8));
+  max-height: calc(100dvh - var(--space-8));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
+.planner-rail > * { flex-shrink: 0; }
+
 .demand-panel { padding: var(--space-6); }
 
 .demand-panel__heading,
@@ -1557,8 +1574,13 @@
 @media (max-width: 1100px) {
   .planner-layout { grid-template-columns: minmax(0, 1fr); }
   .planner-rail {
+    position: static;
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: none;
+    overflow: visible;
+    overscroll-behavior: auto;
+    scrollbar-gutter: auto;
   }
   .planner-detail-panel { grid-row: span 2; }
 }
