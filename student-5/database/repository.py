@@ -98,7 +98,8 @@ def get_staff(connection: sqlite3.Connection, staff_id: int) -> Optional[Dict[st
 
 def list_staff(connection: sqlite3.Connection, department: Optional[str] = None,
                role: Optional[str] = None,
-               availability_status: Optional[str] = None) -> List[Dict[str, Any]]:
+               availability_status: Optional[str] = None,
+               employment_status: Optional[str] = None) -> List[Dict[str, Any]]:
     clauses, parameters = [], []
     if department:
         clauses.append("department = ?")
@@ -109,6 +110,9 @@ def list_staff(connection: sqlite3.Connection, department: Optional[str] = None,
     if availability_status:
         clauses.append("availability_status = ?")
         parameters.append(availability_status)
+    if employment_status:
+        clauses.append("employment_status = ?")
+        parameters.append(employment_status)
 
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     rows = connection.execute(

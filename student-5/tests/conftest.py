@@ -62,7 +62,8 @@ class StubDatabaseClient:
         return {"status": "ok", "service": "stub"}
 
     # -- staff -----------------------------------------------------------
-    def list_staff(self, department=None, role=None, availability_status=None):
+    def list_staff(self, department=None, role=None, availability_status=None,
+                   employment_status=None):
         records = list(self.staff.values())
         if department:
             records = [r for r in records if r["department"] == department]
@@ -70,6 +71,8 @@ class StubDatabaseClient:
             records = [r for r in records if r["role"] == role]
         if availability_status:
             records = [r for r in records if r["availability_status"] == availability_status]
+        if employment_status:
+            records = [r for r in records if r["employment_status"] == employment_status]
         return sorted(records, key=lambda r: r["name"])
 
     def get_staff(self, staff_id):
@@ -83,8 +86,18 @@ class StubDatabaseClient:
         return record
 
     def list_shifts_for_staff(self, staff_id):
-        return [self.shifts[a["shift_id"]] for a in self.assignments.values()
-                if a["staff_id"] == staff_id]
+        """Mirrors the repository join: shift fields plus assignment state."""
+        rows = []
+        for a in self.assignments.values():
+            if a["staff_id"] != staff_id:
+                continue
+            shift = self.shifts.get(a["shift_id"])
+            if not shift:
+                continue
+            rows.append({**shift,
+                         "assignment_id": a["assignment_id"],
+                         "assignment_status": a["assignment_status"]})
+        return rows
 
     # -- shifts ----------------------------------------------------------
     def list_shifts(self, department=None, shift_date=None, shift_status=None):

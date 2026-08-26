@@ -1,0 +1,195 @@
+{#- Drawer contents. Rendered by GET /partials/staff/<id> and by the
+    availability POST, swapped into #staff-drawer via innerHTML. Carries no
+    hx-trigger, so it never requests anything on its own.
+
+    Every value below comes from the real staff / shift_assignment / shift
+    records. Sections are omitted entirely when the underlying data is absent
+    rather than being filled with placeholder content. -#}
+
+<div class="drawer__header">
+  <span class="u-label" id="drawer-heading">Staff detail</span>
+  <button class="drawer__close" type="button" data-drawer-close
+          aria-label="Close staff detail">&times;</button>
+</div>
+
+{% if not_found is defined and not_found %}
+<div class="drawer__body">
+  <div class="empty">
+    <p class="empty__title">Staff member not found</p>
+    <p class="empty__body">This record no longer exists. Refresh the directory to see the current roster.</p>
+  </div>
+</div>
+
+{% elif error %}
+<div class="drawer__body">
+  <div class="alert alert--danger" role="alert">
+    <div>
+      <p class="alert__title">Staff record unavailable</p>
+      <p class="alert__body">{{ error }}</p>
+    </div>
+  </div>
+</div>
+
+{% else %}
+{% set avail = 'success' if person.availability_status == 'Available'
+          else 'danger' if person.availability_status == 'Unavailable'
+          else 'neutral' %}
+
+<div class="drawer__identity">
+  <span class="staff-avatar staff-avatar--lg" aria-hidden="true">{{ initials }}</span>
+  <div class="drawer__identity-text">
+    <h2 class="drawer__name">{{ person.name }}</h2>
+    <p class="drawer__role">
+      {{ person.role }}{% if person.specialisation %} · {{ person.specialisation }}{% endif %}
+    </p>
+    <p class="drawer__id u-mono">{{ display_id }}</p>
+  </div>
+</div>
+
+<div class="drawer__chips">
+  <span class="badge-{{ avail }}">{{ person.availability_status }}</span>
+  <span class="badge-neutral">{{ person.employment_status }}</span>
+</div>
+
+<div class="drawer__body stack">
+
+  {% if notice %}
+  <div class="alert alert--{{ notice.kind }}"
+       role="{{ 'alert' if notice.kind == 'danger' else 'status' }}">
+    <div><p class="alert__body">{{ notice.text }}</p></div>
+  </div>
+  {% endif %}
+
+  {# ---------------------------------------------- current assignment #}
+  <section class="drawer__section">
+    <h3 class="u-label">Current assignment</h3>
+    {% if shifts_error %}
+    <p class="drawer__muted">Assignment data is unavailable. {{ shifts_error }}</p>
+    {% elif current_assignment %}
+    <div class="assignment-card">
+      <p class="assignment-card__title">
+        {{ current_assignment.department }} · {{ current_assignment.start_time }}–{{ current_assignment.end_time }}
+      </p>
+      <p class="drawer__muted">{{ current_assignment.shift_date }}</p>
+      <div class="row row--wrap" style="margin-top: var(--space-3);">
+        <span class="badge-info">{{ current_assignment.assignment_status }}</span>
+        <span class="badge-neutral">{{ current_assignment.shift_status }}</span>
+      </div>
+    </div>
+    {% else %}
+    <div class="assignment-card assignment-card--empty">
+      <p class="assignment-card__title">No active assignment</p>
+      <p class="drawer__muted">
+        Not rostered to a shift in progress at this time.
+      </p>
+    </div>
+    {% endif %}
+  </section>
+
+  {# ------------------------------------------------- upcoming shifts #}
+  <section class="drawer__section">
+    <div class="row row--between">
+      <h3 class="u-label">Upcoming shifts</h3>
+      <span class="u-label">Next 7 days</span>
+    </div>
+    {% if shifts_error %}
+    <p class="drawer__muted">Shift data is unavailable.</p>
+    {% elif upcoming_shifts %}
+    <ul role="list" class="shift-list">
+      {% for shift in upcoming_shifts %}
+      <li class="shift-item">
+        <span class="shift-item__date u-mono">{{ shift.shift_date }}</span>
+        <span class="shift-item__main">
+          <span class="shift-item__dept">{{ shift.department }}</span>
+          <span class="shift-item__time u-mono">{{ shift.start_time }}–{{ shift.end_time }}</span>
+        </span>
+        <span class="badge-neutral">{{ shift.assignment_status }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="drawer__muted">No assigned shifts in the next seven days.</p>
+    {% endif %}
+  </section>
+
+  {# --------------------------------------------- availability control #}
+  <section class="drawer__section">
+    <h3 class="u-label">Availability · owned by HOMS</h3>
+    <form class="availability-form"
+          hx-post="/partials/staff/{{ person.staff_id }}/availability"
+          hx-target="#staff-drawer" hx-swap="innerHTML"
+          hx-indicator="#loading-indicator">
+      <div class="filter">
+        <label class="filter__label" for="availability-{{ person.staff_id }}">
+          Operational availability
+        </label>
+        <select class="select" id="availability-{{ person.staff_id }}"
+                name="availability_status">
+          {% for status in statuses %}
+          <option value="{{ status }}"
+            {% if status == person.availability_status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button class="btn-primary btn-compact" type="submit">Save</button>
+      <p class="drawer__muted availability-form__note">
+        Availability is scheduling state. Employee reference data stays read-only.
+      </p>
+    </form>
+  </section>
+
+  {# ------------------------------------------------ reference details #}
+  <section class="drawer__section">
+    <h3 class="u-label">Reference details</h3>
+    <dl class="detail-grid">
+      <div class="detail-grid__item">
+        <dt class="detail-grid__label">Department</dt>
+        <dd class="detail-grid__value">{{ person.department }}</dd>
+      </div>
+      <div class="detail-grid__item">
+        <dt class="detail-grid__label">Role</dt>
+        <dd class="detail-grid__value">{{ person.role }}</dd>
+      </div>
+      {% if person.specialisation %}
+      <div class="detail-grid__item">
+        <dt class="detail-grid__label">Specialisation</dt>
+        <dd class="detail-grid__value">{{ person.specialisation }}</dd>
+      </div>
+      {% endif %}
+      <div class="detail-grid__item">
+        <dt class="detail-grid__label">Employment</dt>
+        <dd class="detail-grid__value">{{ person.employment_status }}</dd>
+      </div>
+      {% if last_updated %}
+      <div class="detail-grid__item">
+        <dt class="detail-grid__label">Last updated</dt>
+        <dd class="detail-grid__value u-mono">{{ last_updated }}</dd>
+      </div>
+      {% endif %}
+    </dl>
+  </section>
+
+  {% if person.notes %}
+  <section class="drawer__section">
+    <h3 class="u-label">Operational notes</h3>
+    <p class="detail-notes">{{ person.notes }}</p>
+  </section>
+  {% endif %}
+
+  {# ------------------------------------------------- ownership boundary #}
+  <section class="drawer__boundary">
+    <h3 class="u-label">Not held in HOMS</h3>
+    <p class="drawer__muted">
+      Payroll, salary, leave balances and detailed HR records remain owned by
+      the external HR system and are not managed in HOMS.
+    </p>
+  </section>
+
+  {# Shift Planner is not implemented: rendered as inert text, never a
+     focusable control that would do nothing. #}
+  <p class="drawer__pending" aria-disabled="true">
+    View in shift planner<span class="topnav__soon">Soon</span>
+  </p>
+
+</div>
+{% endif %}

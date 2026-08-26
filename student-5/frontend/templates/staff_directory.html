@@ -24,11 +24,11 @@
     {#- One form drives search and all three filters. HTMX submits it on input
         (debounced) and on change, replacing only the results region. The form
         itself is never swapped, so nothing can re-arm its own trigger. -#}
-    <form class="toolbar" role="search"
+    <form class="toolbar" role="search" id="staff-filters"
           hx-get="/partials/staff-table"
           hx-target="#staff-results"
           hx-swap="innerHTML"
-          hx-trigger="input changed delay:300ms from:#staff-search, change from:#dept-filter, change from:#role-filter, change from:#avail-filter, submit"
+          hx-trigger="input changed delay:300ms from:#staff-search, change from:#dept-filter, change from:#role-filter, change from:#avail-filter, change from:#employ-filter, submit"
           hx-indicator="#loading-indicator"
           onsubmit="return false">
 
@@ -64,14 +64,84 @@
           <option value="On Leave">On Leave</option>
         </select>
       </div>
+
+      <div class="toolbar__group filter">
+        <label class="filter__label" for="employ-filter">Employment</label>
+        <select class="select" id="employ-filter" name="employment_status">
+          <option value="">All</option>
+          {% for e in employments %}<option value="{{ e }}">{{ e }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div class="toolbar__end">
+        {#- Resets the form then fires one request through the same handler. -#}
+        <button class="btn-ghost btn-compact" type="reset"
+                hx-on:click="setTimeout(() => htmx.trigger(this.form, 'submit'), 0)">
+          Clear filters
+        </button>
+      </div>
     </form>
 
     {#- "load" fires once here and the response contains no hx-* attributes,
         so a swap cannot re-trigger itself. -#}
-    <div id="staff-results" hx-get="/partials/staff-table" hx-trigger="load"
+    {#- "load" fires once. "staff-updated" is emitted by the server (HX-Trigger)
+        after a successful availability change, so the row badge stays in step
+        with the drawer. hx-include keeps the active filters applied across
+        that refresh. The response carries no hx-* attributes, so neither
+        trigger can re-arm itself. -#}
+    <div id="staff-results" hx-get="/partials/staff-table"
+         hx-trigger="load, staff-updated from:body"
+         hx-include="#staff-filters"
          hx-swap="innerHTML" hx-indicator="#loading-indicator">
       <div class="panel__body"><p class="u-muted">Loading staff records…</p></div>
     </div>
   </section>
+
+  {#- Right-side detail drawer. Hidden until a row's "View" button loads it.
+      The container holds no hx-trigger of its own, so it can never request
+      anything by itself. Closing simply re-hides it — no request, no reload. -#}
+  <div id="staff-drawer-root" class="drawer-root" hidden>
+    <div class="drawer-overlay" data-drawer-close aria-hidden="true"></div>
+    <aside class="drawer" role="dialog" aria-modal="true"
+           aria-labelledby="drawer-heading" tabindex="-1">
+      <div id="staff-drawer"></div>
+    </aside>
+  </div>
+
+  <script>
+    /* Drawer open/close only. All data still comes from the server via HTMX;
+       this adds no client-side business logic. */
+    (function () {
+      var root = document.getElementById('staff-drawer-root');
+      var panel = root.querySelector('.drawer');
+      var lastTrigger = null;
+
+      document.body.addEventListener('click', function (event) {
+        var opener = event.target.closest('[hx-target="#staff-drawer"]');
+        if (opener) { lastTrigger = opener; return; }
+        if (event.target.closest('[data-drawer-close]')) { close(); }
+      });
+
+      /* Reveal the drawer and move focus into it once its content has been
+         swapped in. Both happen here so they cannot race: unhiding from the
+         button's own after-request fires after this handler, which would
+         leave focus behind. Availability saves re-swap the same target while
+         the drawer is already open, which is harmless. */
+      document.body.addEventListener('htmx:afterSwap', function (event) {
+        if (event.target.id !== 'staff-drawer') { return; }
+        root.hidden = false;
+        panel.focus();
+      });
+
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && !root.hidden) { close(); }
+      });
+
+      function close() {
+        root.hidden = true;
+        if (lastTrigger && document.body.contains(lastTrigger)) { lastTrigger.focus(); }
+      }
+    })();
+  </script>
 
 {% endblock %}

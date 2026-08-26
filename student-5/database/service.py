@@ -70,6 +70,7 @@ def create_app() -> Flask:
                 department=request.args.get("department"),
                 role=request.args.get("role"),
                 availability_status=request.args.get("availability_status"),
+                employment_status=request.args.get("employment_status"),
             ))
 
     @app.get("/staff/<int:staff_id>")

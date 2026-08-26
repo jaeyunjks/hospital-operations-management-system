@@ -15,6 +15,8 @@ DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 AVAILABILITY_STATUSES = ("Available", "Unavailable", "On Leave")
+# Mirrors the CHECK constraint on staff.employment_status.
+EMPLOYMENT_STATUSES = ("Full-Time", "Part-Time", "Casual", "Contract")
 SHIFT_STATUSES = ("Planned", "Open", "Filled", "Completed", "Cancelled")
 ASSIGNMENT_STATUSES = ("Assigned", "Confirmed", "Declined", "Cancelled", "Completed")
 

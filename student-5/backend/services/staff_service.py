@@ -6,17 +6,38 @@ from typing import Any, Dict, List, Optional
 
 from database_client import database_client
 from errors import ValidationError
-from validation import AVAILABILITY_STATUSES, validate_choice
+from validation import (AVAILABILITY_STATUSES, EMPLOYMENT_STATUSES,
+                        validate_choice)
 
 
 def list_staff(department: Optional[str] = None, role: Optional[str] = None,
-               availability_status: Optional[str] = None) -> List[Dict[str, Any]]:
+               availability_status: Optional[str] = None,
+               employment_status: Optional[str] = None) -> List[Dict[str, Any]]:
     """Return staff records, optionally filtered."""
     if availability_status:
         validate_choice(availability_status, AVAILABILITY_STATUSES, "availability_status")
+    if employment_status:
+        validate_choice(employment_status, EMPLOYMENT_STATUSES, "employment_status")
     return database_client.list_staff(
-        department=department, role=role, availability_status=availability_status
+        department=department, role=role,
+        availability_status=availability_status,
+        employment_status=employment_status,
     )
+
+
+def get_staff(staff_id: int) -> Dict[str, Any]:
+    """Return one staff record, or raise NotFoundError."""
+    return database_client.get_staff(staff_id)
+
+
+def list_staff_shifts(staff_id: int) -> List[Dict[str, Any]]:
+    """Return the shifts this staff member is assigned to.
+
+    Exposes the existing STAFF 1:M SHIFT_ASSIGNMENT M:1 SHIFT relationship;
+    the repository and database service already provided this query.
+    """
+    database_client.get_staff(staff_id)   # raises NotFoundError when absent
+    return database_client.list_shifts_for_staff(staff_id)
 
 
 def update_availability(staff_id: int, availability_status: Any) -> Dict[str, Any]:
@@ -27,7 +48,8 @@ def update_availability(staff_id: int, availability_status: Any) -> Dict[str, An
 
 def search_staff(query: Optional[str] = None, department: Optional[str] = None,
                  role: Optional[str] = None,
-                 availability_status: Optional[str] = None) -> List[Dict[str, Any]]:
+                 availability_status: Optional[str] = None,
+                 employment_status: Optional[str] = None) -> List[Dict[str, Any]]:
     """Search staff by free-text term across name, role, department, specialisation.
 
     Structured filters are applied by the database service; the free-text match
@@ -37,7 +59,8 @@ def search_staff(query: Optional[str] = None, department: Optional[str] = None,
         raise ValidationError("Search term 'q' must not be blank.")
 
     records = list_staff(department=department, role=role,
-                         availability_status=availability_status)
+                         availability_status=availability_status,
+                         employment_status=employment_status)
 
     if not query:
         return records

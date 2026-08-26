@@ -56,6 +56,25 @@ Attributes:
 - assignment_status
 - approved_by
 - approved_at
+- created_at
+- updated_at
+
+#### Known discrepancy: `assigned_at`
+
+The project registration schema lists `assigned_at` on this table. It is **not
+implemented**. `created_at` records when the row was written and `approved_at`
+records Staff Manager approval, but neither is the same business event as *when
+the staff member was allocated to the shift* — an allocation can be recorded
+before, and independently of, approval.
+
+Status: **confirmed gap, deliberately deferred.** No consumer needs it yet
+(the Staff Directory does not read assignment data), so adding a column, seed
+values, repository/service/API plumbing and tests now would be churn on an
+untested path. It should be corrected as the first task of the Shift Planner
+iteration, where assignment timestamps are actually surfaced.
+
+`approved_by` / `approved_at` are retained — they support the existing Staff
+Manager approval workflow and are not substitutes for `assigned_at`.
 
 
 ## Relationships

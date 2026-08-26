@@ -18,8 +18,22 @@ def list_staff():
         department=request.args.get("department"),
         role=request.args.get("role"),
         availability_status=request.args.get("availability_status"),
+        employment_status=request.args.get("employment_status"),
     )
     return jsonify({"count": len(records), "staff": records})
+
+
+@staff_blueprint.get("/<int:staff_id>")
+def get_staff(staff_id: int):
+    """GET /api/staff/<id> — retrieve one staff record."""
+    return jsonify({"staff": staff_service.get_staff(staff_id)})
+
+
+@staff_blueprint.get("/<int:staff_id>/shifts")
+def list_staff_shifts(staff_id: int):
+    """GET /api/staff/<id>/shifts — shifts this staff member is assigned to."""
+    records = staff_service.list_staff_shifts(staff_id)
+    return jsonify({"staff_id": staff_id, "count": len(records), "shifts": records})
 
 
 @staff_blueprint.get("/search")
@@ -30,6 +44,7 @@ def search_staff():
         department=request.args.get("department"),
         role=request.args.get("role"),
         availability_status=request.args.get("availability_status"),
+        employment_status=request.args.get("employment_status"),
     )
     return jsonify({
         "query": request.args.get("q"),

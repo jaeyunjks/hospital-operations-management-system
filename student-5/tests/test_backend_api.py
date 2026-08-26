@@ -272,3 +272,32 @@ class TestAiReadyEndpoints:
         response = client.post("/api/shifts/coverage-summary",
                                json={"shift_date": "tomorrow"})
         assert response.status_code == 400
+
+
+# ------------------------------------------------- staff detail & filters
+class TestStaffDetailAndEmploymentFilter:
+    def test_get_staff_by_id(self, client):
+        response = client.get("/api/staff/1")
+        assert response.status_code == 200
+        assert response.get_json()["staff"]["name"] == "Amara Okafor"
+
+    def test_get_unknown_staff(self, client):
+        assert client.get("/api/staff/999").status_code == 404
+
+    def test_search_path_not_shadowed_by_id_route(self, client):
+        """/api/staff/search must still resolve as the search endpoint."""
+        assert client.get("/api/staff/search?q=amara").status_code == 200
+
+    def test_employment_status_filter(self, client):
+        body = client.get("/api/staff?employment_status=Full-Time").get_json()
+        assert body["count"] == 3
+        assert all(s["employment_status"] == "Full-Time" for s in body["staff"])
+
+    def test_employment_status_rejects_invalid_value(self, client):
+        response = client.get("/api/staff?employment_status=Bogus")
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "validation_error"
+
+    def test_search_combines_with_employment_filter(self, client):
+        body = client.get("/api/staff/search?q=a&employment_status=Full-Time").get_json()
+        assert all(s["employment_status"] == "Full-Time" for s in body["staff"])

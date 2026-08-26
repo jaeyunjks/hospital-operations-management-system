@@ -85,11 +85,13 @@ class DatabaseClient:
 
     # ----------------------------------------------------------------- staff
     def list_staff(self, department: Optional[str] = None, role: Optional[str] = None,
-                   availability_status: Optional[str] = None) -> List[Dict[str, Any]]:
+                   availability_status: Optional[str] = None,
+                   employment_status: Optional[str] = None) -> List[Dict[str, Any]]:
         return self._request("GET", "/staff", params={
             "department": department,
             "role": role,
             "availability_status": availability_status,
+            "employment_status": employment_status,
         })
 
     def get_staff(self, staff_id: int) -> Dict[str, Any]:

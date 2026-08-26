@@ -303,7 +303,7 @@ def test_staff_table_blank_query_uses_list_endpoint(frontend_client, fe_api_clie
 def test_staff_table_no_results_state(frontend_client, fe_api_client, monkeypatch):
     monkeypatch.setattr(fe_api_client, "search_staff", lambda **kw: {"count": 0, "staff": []})
     body = frontend_client.get("/partials/staff-table?q=zzz").data.decode()
-    assert "No staff match these filters" in body
+    assert "No staff match the current search and filters" in body
 
 
 def test_staff_table_empty_dataset_state(frontend_client, fe_api_client, monkeypatch):
@@ -317,3 +317,217 @@ def test_staff_table_backend_unavailable(frontend_client, fe_api_client, monkeyp
     response = frontend_client.get("/partials/staff-table")
     assert response.status_code == 200
     assert "Staff records unavailable" in response.data.decode()
+
+
+# ------------------------------------------- staff detail & availability
+def test_staff_table_employment_filter_uses_list_endpoint(frontend_client, fe_api_client, monkeypatch):
+    called = {}
+
+    def fake_list(**kwargs):
+        called.update(kwargs)
+        return {"count": 1, "staff": STAFF_FIXTURE[:1]}
+
+    monkeypatch.setattr(fe_api_client, "list_staff", fake_list)
+    frontend_client.get("/partials/staff-table?employment_status=Full-Time")
+    assert called["employment_status"] == "Full-Time"
+
+
+def test_staff_table_combines_all_filters_with_search(frontend_client, fe_api_client, monkeypatch):
+    called = {}
+
+    def fake_search(**kwargs):
+        called.update(kwargs)
+        return {"count": 0, "staff": []}
+
+    monkeypatch.setattr(fe_api_client, "search_staff", fake_search)
+    frontend_client.get("/partials/staff-table"
+                        "?q=nurse&department=Emergency&role=Doctor"
+                        "&availability_status=Available&employment_status=Casual")
+    assert called == {"query": "nurse", "department": "Emergency", "role": "Doctor",
+                      "availability_status": "Available", "employment_status": "Casual"}
+
+
+def test_staff_detail_renders_real_fields(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_staff",
+                        lambda sid: {"staff": STAFF_FIXTURE[0]})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert "Amara Okafor" in body
+    assert "Triage" in body            # specialisation exists -> shown
+    # Staff ID now sits in the drawer header as the display identifier.
+    assert "S-001" in body
+
+
+def test_staff_detail_omits_absent_specialisation(frontend_client, fe_api_client, monkeypatch):
+    """A null specialisation must be omitted, never fabricated or shown as None."""
+    monkeypatch.setattr(fe_api_client, "get_staff",
+                        lambda sid: {"staff": STAFF_FIXTURE[1]})
+    body = frontend_client.get("/partials/staff/2").data.decode()
+    assert "Specialisation" not in body
+    assert "None" not in body
+
+
+def test_staff_detail_backend_unavailable(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_staff", _raise_unavailable)
+    response = frontend_client.get("/partials/staff/1")
+    assert response.status_code == 200
+    assert "Staff record unavailable" in response.data.decode()
+
+
+def test_availability_update_success(frontend_client, fe_api_client, monkeypatch):
+    updated = {**STAFF_FIXTURE[0], "availability_status": "On Leave"}
+    monkeypatch.setattr(fe_api_client, "update_availability",
+                        lambda sid, status: {"staff": updated})
+    response = frontend_client.post("/partials/staff/1/availability",
+                                    data={"availability_status": "On Leave"})
+    assert response.status_code == 200
+    assert "Availability updated to On Leave." in response.data.decode()
+
+
+def test_availability_update_rejects_invalid_status(frontend_client, fe_api_client, monkeypatch):
+    """An invalid value must never reach the backend."""
+    monkeypatch.setattr(fe_api_client, "get_staff",
+                        lambda sid: {"staff": STAFF_FIXTURE[0]})
+    monkeypatch.setattr(fe_api_client, "update_availability",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not be called")))
+    response = frontend_client.post("/partials/staff/1/availability",
+                                    data={"availability_status": "Bogus"})
+    assert response.status_code == 400
+    assert "Select a valid availability status." in response.data.decode()
+
+
+def test_availability_update_failure_does_not_claim_success(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "update_availability", _raise_unavailable)
+    monkeypatch.setattr(fe_api_client, "get_staff",
+                        lambda sid: {"staff": STAFF_FIXTURE[0]})
+    body = frontend_client.post("/partials/staff/1/availability",
+                                data={"availability_status": "On Leave"}).data.decode()
+    assert "Availability was not updated." in body
+    assert "Availability updated to" not in body
+
+
+# ------------------------------------------------ drawer (iteration 3)
+def _shift(**kw):
+    base = {"shift_id": 1, "department": "Emergency", "shift_date": "2026-08-27",
+            "start_time": "07:00", "end_time": "15:00", "shift_status": "Planned",
+            "assignment_id": 1, "assignment_status": "Assigned"}
+    base.update(kw)
+    return base
+
+
+def test_drawer_shows_deterministic_display_id(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert "S-001" in body
+    # The mockup's HR-style identifiers must never appear.
+    assert "EMP-" not in body
+
+
+def test_drawer_omits_absent_specialisation_and_notes(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[1]})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    body = frontend_client.get("/partials/staff/2").data.decode()
+    assert "Specialisation" not in body
+    assert "Operational notes" not in body
+    assert "None" not in body
+
+
+def test_drawer_contains_no_fabricated_mockup_fields(frontend_client, fe_api_client, monkeypatch):
+    """Guards against reintroducing mockup-only concepts the schema lacks."""
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    body = frontend_client.get("/partials/staff/1").data.decode().lower()
+    for forbidden in ("qualification", "bank contract", "band 5", "band 6",
+                      "weekly availability", "confidence", "suitability"):
+        assert forbidden not in body, forbidden
+
+
+def test_drawer_renders_upcoming_shifts(frontend_client, fe_api_client, monkeypatch):
+    import datetime
+    soon = (datetime.date.today() + datetime.timedelta(days=2)).isoformat()
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts",
+                        lambda sid: {"shifts": [_shift(shift_date=soon)]})
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert soon in body
+    assert "Emergency" in body
+
+
+def test_drawer_excludes_cancelled_assignments(frontend_client, fe_api_client, monkeypatch):
+    import datetime
+    soon = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts",
+                        lambda sid: {"shifts": [_shift(shift_date=soon,
+                                                        assignment_status="Cancelled")]})
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert "No assigned shifts in the next seven days." in body
+
+
+def test_drawer_no_active_assignment_state(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert "No active assignment" in body
+
+
+def test_drawer_survives_shift_lookup_failure(frontend_client, fe_api_client, monkeypatch):
+    """A shift-service failure must not take the whole drawer down."""
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", _raise_unavailable)
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert "Amara Okafor" in body                 # record still rendered
+    assert "Assignment data is unavailable" in body
+
+
+def test_drawer_staff_not_found(frontend_client, fe_api_client, monkeypatch):
+    import api_client as ac
+
+    def raise_nf(sid):
+        raise ac.NotFoundError("Staff 999 not found.")
+
+    monkeypatch.setattr(fe_api_client, "get_staff", raise_nf)
+    response = frontend_client.get("/partials/staff/999")
+    assert response.status_code == 404
+    assert "Staff member not found" in response.data.decode()
+
+
+def test_availability_update_emits_table_refresh_trigger(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    monkeypatch.setattr(fe_api_client, "update_availability",
+                        lambda sid, s: {"staff": STAFF_FIXTURE[0]})
+    response = frontend_client.post("/partials/staff/1/availability",
+                                    data={"availability_status": "On Leave"})
+    assert response.headers.get("HX-Trigger") == "staff-updated"
+
+
+def test_failed_availability_update_emits_no_refresh_trigger(frontend_client, fe_api_client, monkeypatch):
+    """A failed save must not signal the table that anything changed."""
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    monkeypatch.setattr(fe_api_client, "update_availability", _raise_unavailable)
+    response = frontend_client.post("/partials/staff/1/availability",
+                                    data={"availability_status": "On Leave"})
+    assert "HX-Trigger" not in response.headers
+    assert "Availability was not updated." in response.data.decode()
+
+
+def test_availability_rejects_roster_state_values(frontend_client, fe_api_client, monkeypatch):
+    """'On shift'/'Off duty' are roster concepts, not availability values."""
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    for bad in ("On shift", "Off duty"):
+        response = frontend_client.post("/partials/staff/1/availability",
+                                        data={"availability_status": bad})
+        assert response.status_code == 400
+
+
+def test_staff_table_shows_display_id_and_initials(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **kw: {"count": 2, "staff": STAFF_FIXTURE})
+    body = frontend_client.get("/partials/staff-table").data.decode()
+    assert "S-001" in body
+    assert ">AO<" in body      # initials from the real name
+    assert "Specialisation" in body

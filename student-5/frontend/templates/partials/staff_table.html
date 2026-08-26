@@ -1,6 +1,6 @@
 {#- Rendered ONLY by GET /partials/staff-table, swapped into the persistent
-    #staff-results wrapper via hx-swap="innerHTML". Carries no hx-* attributes
-    of its own. -#}
+    #staff-results wrapper via hx-swap="innerHTML". Carries no hx-trigger of
+    its own. -#}
 {% if error %}
 <div class="panel__body">
   <div class="alert alert--danger" role="alert">
@@ -15,7 +15,7 @@
 <div class="panel__body">
   <div class="empty">
     {% if filtered %}
-    <p class="empty__title">No staff match these filters</p>
+    <p class="empty__title">No staff match the current search and filters</p>
     <p class="empty__body">Adjust the search term or clear a filter to widen the results.</p>
     {% else %}
     <p class="empty__title">No staff records</p>
@@ -26,16 +26,19 @@
 
 {% else %}
 <div class="table-wrap">
-  <table class="table table--zebra">
+  <table class="table table--zebra staff-table">
     <caption class="visually-hidden">
       Staff records held by the Staff &amp; Shift service
     </caption>
     <thead>
       <tr>
+        <th scope="col">Staff ID</th>
         <th scope="col">Staff member</th>
         <th scope="col">Department</th>
+        <th scope="col">Specialisation</th>
         <th scope="col">Availability</th>
         <th scope="col">Employment</th>
+        <th scope="col">Action</th>
       </tr>
     </thead>
     <tbody>
@@ -43,16 +46,31 @@
       {% set avail = 'success' if person.availability_status == 'Available'
                 else 'danger' if person.availability_status == 'Unavailable'
                 else 'neutral' %}
-      <tr>
+      <tr id="staff-row-{{ person.staff_id }}">
+        <td class="staff-table__id u-mono">{{ display_id(person.staff_id) }}</td>
         <td>
-          <span class="demand-dept">{{ person.name }}</span>
-          <span class="demand-role">
-            {{ person.role }}{% if person.specialisation %} · {{ person.specialisation }}{% endif %}
-          </span>
+          <div class="staff-identity">
+            <span class="staff-avatar" aria-hidden="true">{{ initials(person.name) }}</span>
+            <span class="staff-identity__text">
+              <span class="staff-identity__name">{{ person.name }}</span>
+              <span class="staff-identity__role">{{ person.role }}</span>
+            </span>
+          </div>
         </td>
         <td class="table__muted">{{ person.department }}</td>
+        <td class="table__muted">
+          {%- if person.specialisation %}{{ person.specialisation }}{% else %}—{% endif -%}
+        </td>
         <td><span class="badge-{{ avail }}">{{ person.availability_status }}</span></td>
         <td class="table__muted">{{ person.employment_status }}</td>
+        <td class="table__actions">
+          <button class="btn-secondary btn-compact" type="button"
+                  hx-get="/partials/staff/{{ person.staff_id }}"
+                  hx-target="#staff-drawer" hx-swap="innerHTML"
+                  hx-indicator="#loading-indicator">
+            View<span class="visually-hidden"> details for {{ person.name }}</span>
+          </button>
+        </td>
       </tr>
       {% endfor %}
     </tbody>

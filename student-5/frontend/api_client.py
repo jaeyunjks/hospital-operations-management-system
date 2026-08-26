@@ -34,6 +34,15 @@ class BackendError(Exception):
     """The backend/API microservice responded, but with an error or bad body."""
 
 
+class NotFoundError(BackendError):
+    """The requested record does not exist (HTTP 404).
+
+    A subclass of BackendError so existing `except BackendError` handlers keep
+    catching it; callers that want a distinct "not found" state check for it
+    explicitly first.
+    """
+
+
 def _request(method: str, path: str, params: Optional[Dict[str, Any]] = None,
              payload: Optional[Dict[str, Any]] = None) -> Any:
     url = f"{API_BASE_URL}{path}"
@@ -61,6 +70,8 @@ def _request(method: str, path: str, params: Optional[Dict[str, Any]] = None,
             detail = json.loads(error.read().decode("utf-8")).get("message", error.reason)
         except Exception:
             detail = str(error.reason)
+        if error.code == 404:
+            raise NotFoundError(detail) from error
         raise BackendError(f"Staff & Shift service returned {error.code}: {detail}") from error
 
     except urllib.error.URLError as error:
@@ -87,18 +98,41 @@ def get_coverage(shift_date: Optional[str] = None,
 
 def list_staff(availability_status: Optional[str] = None,
                 department: Optional[str] = None,
-                role: Optional[str] = None) -> Dict[str, Any]:
+                role: Optional[str] = None,
+                employment_status: Optional[str] = None) -> Dict[str, Any]:
     """GET /api/staff — staff records, optionally filtered."""
     return _request("GET", "/api/staff",
                      params={"availability_status": availability_status,
                              "department": department,
-                             "role": role})
+                             "role": role,
+                             "employment_status": employment_status})
+
+
+def get_staff(staff_id: int) -> Dict[str, Any]:
+    """GET /api/staff/<id> — one staff record."""
+    return _request("GET", f"/api/staff/{staff_id}")
+
+
+def list_staff_shifts(staff_id: int) -> Dict[str, Any]:
+    """GET /api/staff/<id>/shifts — shifts this staff member is assigned to."""
+    return _request("GET", f"/api/staff/{staff_id}/shifts")
+
+
+def update_availability(staff_id: int, availability_status: str) -> Dict[str, Any]:
+    """PUT /api/staff/<id>/availability — set operational availability.
+
+    Availability is scheduling state owned by HOMS. Employee reference
+    attributes (name, department, employment status) stay read-only here.
+    """
+    return _request("PUT", f"/api/staff/{staff_id}/availability",
+                     payload={"availability_status": availability_status})
 
 
 def search_staff(query: Optional[str] = None,
                   department: Optional[str] = None,
                   role: Optional[str] = None,
-                  availability_status: Optional[str] = None) -> Dict[str, Any]:
+                  availability_status: Optional[str] = None,
+                  employment_status: Optional[str] = None) -> Dict[str, Any]:
     """GET /api/staff/search — free-text search plus the same filters.
 
     The backend rejects a blank `q`, so callers must omit it rather than
@@ -107,7 +141,14 @@ def search_staff(query: Optional[str] = None,
     return _request("GET", "/api/staff/search",
                      params={"q": query, "department": department,
                              "role": role,
-                             "availability_status": availability_status})
+                             "availability_status": availability_status,
+                             "employment_status": employment_status})
+
+
+#: Values accepted by PUT /api/staff/<id>/availability, mirroring the
+#: CHECK constraint on staff.availability_status.
+AVAILABILITY_STATUSES = ("Available", "Unavailable", "On Leave")
+EMPLOYMENT_STATUSES = ("Full-Time", "Part-Time", "Casual", "Contract")
 
 
 def get_coverage_summary(shift_date: Optional[str] = None,
