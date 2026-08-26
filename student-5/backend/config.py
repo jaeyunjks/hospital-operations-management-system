@@ -11,14 +11,14 @@ class Config:
     #: Base URL of the database microservice. The backend reaches its data
     #: only through this address — it never opens the SQLite file itself.
     DATABASE_SERVICE_URL = os.environ.get(
-        "DATABASE_SERVICE_URL", "http://127.0.0.1:5051"
+        "DATABASE_SERVICE_URL", "http://127.0.0.1:6500"
     )
 
     #: Seconds to wait on a database service call before giving up.
     DATABASE_SERVICE_TIMEOUT = float(os.environ.get("DATABASE_SERVICE_TIMEOUT", "5"))
 
     #: Port this backend listens on.
-    PORT = int(os.environ.get("BACKEND_PORT", "5050"))
+    PORT = int(os.environ.get("BACKEND_PORT", "5500"))
 
     #: Reserved for Release 0 AI-Mode. No LLM call is made while this is false.
     AI_ENABLED = os.environ.get("AI_ENABLED", "false").lower() == "true"

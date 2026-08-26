@@ -101,10 +101,10 @@ the SQLite file, so the data service must be running:
 cd student-5/database && python3 service.py
 ```
 
-Serves on port 5051 (override with `DATABASE_SERVICE_PORT`). Check it with:
+Serves on port 6500 (override with `DATABASE_SERVICE_PORT`). Check it with:
 
 ```bash
-curl -s http://127.0.0.1:5051/health
+curl -s http://127.0.0.1:6500/health
 ```
 
 ## Notes

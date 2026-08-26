@@ -1,0 +1,97 @@
+{% extends "layout.html" %}
+{% block title %}Workforce overview{% endblock %}
+{% block content %}
+
+  <div class="page-header">
+    <div>
+      <span class="page-header__eyebrow">Staff &amp; Shift Management</span>
+      <h1 class="page-header__title">Workforce overview</h1>
+      <p class="page-header__description">
+        Staffing coverage and operational demand for {{ today }}.
+      </p>
+    </div>
+    <div class="page-header__actions">
+      <span id="loading-indicator" class="htmx-indicator u-label">Updating…</span>
+      <button class="btn-secondary" type="button"
+              hx-on:click="htmx.trigger(document.body, 'refresh-workforce')">
+        Refresh
+      </button>
+    </div>
+  </div>
+
+  <section class="section" aria-labelledby="coverage-title">
+    <div class="section-header">
+      <h2 class="section-header__title" id="coverage-title">Staffing coverage</h2>
+      <span class="section-header__meta">{{ today }}</span>
+    </div>
+
+    <!-- "load" fires exactly once for this element and is never
+         re-armed: the AJAX response (partials/kpis.html) replaces this
+         div's HTML but sets hx-trigger to "refresh-workforce from:body"
+         only, so the swap cannot re-trigger itself into a request loop. -->
+    <div id="kpi-row" hx-get="/partials/kpis" hx-trigger="load"
+         hx-swap="outerHTML" hx-indicator="#loading-indicator">
+      <p class="u-muted">Loading coverage…</p>
+    </div>
+  </section>
+
+  <div class="layout-split">
+
+    <section class="section" aria-labelledby="demand-title">
+      <div class="panel">
+        <div class="panel__header">
+          <h2 class="panel__title" id="demand-title">Operational demand</h2>
+          <span class="panel__meta">Today</span>
+        </div>
+        <div class="panel__body">
+          <!-- This div is never replaced (hx-swap="innerHTML" only
+               swaps its children), so its own hx-trigger keeps working for
+               the lifetime of the page: "load" fires once, "refresh-workforce"
+               fires on every Refresh click. The partial response itself
+               carries no hx-* attributes, so nothing here can re-trigger. -->
+          <div id="demand-panel" hx-get="/partials/demand"
+               hx-trigger="load, refresh-workforce from:body"
+               hx-swap="innerHTML" hx-indicator="#loading-indicator">
+            <p class="u-muted">Loading operational demand…</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="stack">
+      <section class="ai-panel" aria-labelledby="ai-title">
+        <div class="ai-panel__header">
+          <span class="ai-label"><span class="ai-label__dot"></span>Workforce AI</span>
+          <h2 class="ai-panel__title" id="ai-title">Suggests · you decide</h2>
+        </div>
+        <div class="ai-panel__body stack stack--sm">
+          <p class="ai-disclaimer">
+            AI-assisted staffing recommendations are not implemented on this
+            screen yet. They will be available on the AI Recommendations
+            screen in a later task.
+          </p>
+          <button class="btn-secondary btn-block" type="button"
+                  disabled aria-disabled="true">
+            Analyse staffing gaps (coming soon)
+          </button>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="summary-title">
+        <div class="panel__header">
+          <h2 class="panel__title" id="summary-title">Operational summary</h2>
+          <span class="panel__meta">Rule-based</span>
+        </div>
+        <div class="panel__body">
+          <div id="summary-panel" hx-get="/partials/summary"
+               hx-trigger="load, refresh-workforce from:body"
+               hx-swap="innerHTML" hx-indicator="#loading-indicator">
+            <p class="u-muted">Loading operational summary…</p>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+  </div>
+
+{% endblock %}

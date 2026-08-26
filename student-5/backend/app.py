@@ -9,8 +9,8 @@ The backend holds the application logic and validation. It never opens the
 SQLite file: all data access crosses the HTTP boundary in ``database_client``.
 
 Usage:
-    python3 app.py                       # serves on port 5050
-    BACKEND_PORT=6000 python3 app.py
+    python3 app.py                       # serves on port 5500
+    BACKEND_PORT=5501 python3 app.py
 """
 
 from __future__ import annotations

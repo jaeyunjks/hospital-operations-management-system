@@ -12,10 +12,10 @@ Implements prompt artefact `S5-BE-001`
 HTMX Frontend
      |  REST
      v
-Backend/API Microservice   <- this service (port 5050)
+Backend/API Microservice   <- this service (port 5500)
      |  REST
      v
-Database Microservice      <- student-5/database/service.py (port 5051)
+Database Microservice      <- student-5/database/service.py (port 6500)
      |
      v
 SQLite
@@ -132,15 +132,15 @@ cd student-5/backend && python3 app.py
 Confirm both are up:
 
 ```bash
-curl -s http://127.0.0.1:5050/health
+curl -s http://127.0.0.1:5500/health
 ```
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `BACKEND_PORT` | `5050` | Port this service listens on |
-| `DATABASE_SERVICE_URL` | `http://127.0.0.1:5051` | Database microservice base URL |
+| `BACKEND_PORT` | `5500` | Port this service listens on |
+| `DATABASE_SERVICE_URL` | `http://127.0.0.1:6500` | Database microservice base URL |
 | `DATABASE_SERVICE_TIMEOUT` | `5` | Seconds before a database call times out |
 | `AI_ENABLED` | `false` | Reserved for AI-Mode; no LLM call while false |
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Reserved for AI integration |
@@ -170,19 +170,19 @@ process or SQLite file is required.
 ## Example requests
 
 ```bash
-curl -s "http://127.0.0.1:5050/api/staff?department=Emergency"
+curl -s "http://127.0.0.1:5500/api/staff?department=Emergency"
 ```
 
 ```bash
-curl -s -X POST http://127.0.0.1:5050/api/shifts -H 'Content-Type: application/json' -d '{"department":"Emergency","shift_date":"2026-09-01","start_time":"07:00","end_time":"15:00","required_role":"Registered Nurse","required_staff_count":2}'
+curl -s -X POST http://127.0.0.1:5500/api/shifts -H 'Content-Type: application/json' -d '{"department":"Emergency","shift_date":"2026-09-01","start_time":"07:00","end_time":"15:00","required_role":"Registered Nurse","required_staff_count":2}'
 ```
 
 ```bash
-curl -s -X POST http://127.0.0.1:5050/api/shifts/1/assign -H 'Content-Type: application/json' -d '{"staff_id":1}'
+curl -s -X POST http://127.0.0.1:5500/api/shifts/1/assign -H 'Content-Type: application/json' -d '{"staff_id":1}'
 ```
 
 ```bash
-curl -s http://127.0.0.1:5050/api/shifts/coverage
+curl -s http://127.0.0.1:5500/api/shifts/coverage
 ```
 
 ## Scope

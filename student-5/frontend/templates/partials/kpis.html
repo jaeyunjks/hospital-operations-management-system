@@ -1,0 +1,63 @@
+{# Rendered ONLY by GET /partials/kpis. hx-swap="outerHTML" on the caller
+   replaces the whole placeholder with this div, so this root element must
+   carry its own hx-get/hx-swap for future refreshes — but hx-trigger must
+   NOT include "load": this response is itself the result of a load, and
+   re-arming "load" on a freshly-inserted element would fire immediately,
+   creating an infinite self-refresh loop (see workforce_overview.html). #}
+{% if error %}
+<div id="kpi-row" hx-get="/partials/kpis" hx-trigger="refresh-workforce from:body"
+     hx-swap="outerHTML" hx-indicator="#loading-indicator">
+  <div class="alert alert--danger" role="alert">
+    <div>
+      <p class="alert__title">Workforce data unavailable</p>
+      <p class="alert__body">{{ error }}</p>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<div id="kpi-row" class="stat-row" hx-get="/partials/kpis" hx-trigger="refresh-workforce from:body"
+     hx-swap="outerHTML" hx-indicator="#loading-indicator">
+
+  <div class="stat">
+    <span class="stat__label">Coverage today</span>
+    <span class="stat__value{% if kpis.coverage_pct is not none and kpis.coverage_pct < 100 %} stat__value--warning{% endif %}" data-numeric>
+      {{ (kpis.coverage_pct ~ '%') if kpis.coverage_pct is not none else '—' }}
+    </span>
+    <span class="stat__meta">
+      {% if kpis.coverage_pct is none %}No shifts scheduled today{% else %}Assigned vs required headcount{% endif %}
+    </span>
+  </div>
+
+  <div class="stat">
+    <span class="stat__label">Unfilled positions</span>
+    <span class="stat__value{% if kpis.gap > 0 %} stat__value--danger{% endif %}" data-numeric>{{ kpis.gap }}</span>
+    <span class="stat__meta">
+      {% if kpis.gap > 0 %}
+      <span class="status status--danger"><span class="status__dot"></span>Action required</span>
+      {% else %}
+      <span class="status status--success"><span class="status__dot"></span>None today</span>
+      {% endif %}
+    </span>
+  </div>
+
+  <div class="stat">
+    <span class="stat__label">Total roster</span>
+    <span class="stat__value" data-numeric>{{ kpis.roster_total }}</span>
+    <span class="stat__meta">All staff on record</span>
+  </div>
+
+  <div class="stat">
+    <span class="stat__label">Available now</span>
+    <span class="stat__value" data-numeric>{{ kpis.available_count }}</span>
+    <span class="stat__meta">By availability status</span>
+  </div>
+
+  <div class="stat">
+    <span class="stat__label">Shifts today</span>
+    <span class="stat__value" data-numeric>{{ kpis.shifts_today }}</span>
+    <span class="stat__meta">Scheduled for {{ today }}</span>
+  </div>
+
+</div>
+{% endif %}

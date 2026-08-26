@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Staff &amp; Shift Management{% endblock %} — HOMS</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+
+  <!-- Shared HOMS design system, served by this service at /shared/. -->
+  <link rel="stylesheet" href="/shared/css/main.css">
+  <!-- Feature-local styles only. -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/feature.css') }}">
+
+  <!-- HTMX: primary interaction mechanism for this page (see README). -->
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <div class="app">
+    <header class="app-header">
+      <a class="app-header__brand" href="/">
+        HOMS
+        <span class="app-header__context">Staff &amp; Shift</span>
+      </a>
+
+      <nav class="app-header__nav" aria-label="Primary">
+        <a class="nav-link" href="/" aria-current="page">Workforce overview</a>
+      </nav>
+
+      <div class="app-header__actions">
+        <span class="status status--success">
+          <span class="status__dot"></span>
+          <span>Service running</span>
+        </span>
+
+        <label class="visually-hidden" for="role-select">Active role</label>
+        <select class="role-select" id="role-select">
+          <option>Nurse Unit Manager</option>
+          <option>Operations Manager</option>
+          <option>Read-only</option>
+        </select>
+
+        <div class="user-chip">
+          <span class="avatar avatar--inverse" aria-hidden="true">NW</span>
+          <span class="user-chip__identity">
+            <span class="user-chip__name">N. Whitfield</span>
+            <span class="user-chip__role">Nurse Unit Manager</span>
+          </span>
+        </div>
+      </div>
+    </header>
+
+    <div class="app-body">
+      <nav class="app-sidenav" aria-label="Staff and shift sections">
+        <div class="app-sidenav__group">
+          <p class="app-sidenav__label">Workforce</p>
+          <a class="sidenav-link" href="/" aria-current="page">Workforce overview</a>
+          <span class="sidenav-link" aria-disabled="true">
+            Staff directory <span class="u-label">Soon</span>
+          </span>
+          <span class="sidenav-link" aria-disabled="true">
+            Shift planner <span class="u-label">Soon</span>
+          </span>
+        </div>
+        <div class="app-sidenav__group">
+          <p class="app-sidenav__label">Advisory</p>
+          <span class="sidenav-link" aria-disabled="true">
+            AI recommendations <span class="u-label">Soon</span>
+          </span>
+        </div>
+        <div class="app-sidenav__group">
+          <p class="app-sidenav__label">Analysis</p>
+          <span class="sidenav-link" aria-disabled="true">
+            Reports <span class="u-label">Soon</span>
+          </span>
+        </div>
+      </nav>
+
+      <main class="app-main" id="main">
+        <div class="page">
+          {% block content %}{% endblock %}
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

@@ -13,8 +13,8 @@ persistence, integrity errors, and row shaping. Application rules (coverage
 calculation, staff suggestion, request validation) belong to the backend.
 
 Usage:
-    python3 service.py                 # serves on port 5051
-    DATABASE_SERVICE_PORT=6001 python3 service.py
+    python3 service.py                 # serves on port 6500
+    DATABASE_SERVICE_PORT=6501 python3 service.py
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import db           # noqa: E402
 import repository   # noqa: E402
 
-DEFAULT_PORT = 5051
+DEFAULT_PORT = 6500
 
 
 def create_app() -> Flask:
