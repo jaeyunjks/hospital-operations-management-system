@@ -93,6 +93,237 @@ def _coverage(assigned: int, required: int):
             "difference": difference}
 
 
+def _planning_coverage(assigned: int, required: int):
+    """Return the planner's compact status from assignment arithmetic."""
+    if required <= 0:
+        return {"label": "No demand", "tone": "neutral", "gap": 0}
+    gap = max(required - assigned, 0)
+    if gap == 0:
+        return {"label": "Covered", "tone": "covered", "gap": 0}
+    if gap == 1:
+        return {"label": "Short 1", "tone": "short-one", "gap": 1}
+    return {"label": "Short 2+", "tone": "short-many", "gap": gap}
+
+
+def _time_minutes(value: str) -> int:
+    """Convert the stored HH:MM time to minutes after midnight."""
+    try:
+        hour, minute = (int(part) for part in value.split(":"))
+        if not 0 <= hour <= 23 or not 0 <= minute <= 59:
+            raise ValueError
+        return hour * 60 + minute
+    except (AttributeError, TypeError, ValueError):
+        return 0
+
+
+def _shift_period(start_time: str) -> str:
+    """Presentation-only period label; exact stored times stay visible."""
+    minute = _time_minutes(start_time)
+    if minute < 5 * 60:
+        return "Night"
+    if minute < 12 * 60:
+        return "Morning"
+    if minute < 17 * 60:
+        return "Afternoon"
+    if minute < 22 * 60:
+        return "Evening"
+    return "Night"
+
+
+def _week_start_for(value: str) -> datetime.date:
+    """Return the Monday containing an ISO date, falling back to today."""
+    try:
+        day = datetime.datetime.strptime(value, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        day = datetime.date.today()
+    return day - datetime.timedelta(days=day.weekday())
+
+
+def _aggregate_shifts(rows):
+    required = sum(int(row.get("required_staff_count", 0)) for row in rows)
+    assigned = sum(int(row.get("assigned_staff_count", 0)) for row in rows)
+    return {
+        "shift_count": len(rows),
+        "required": required,
+        "assigned": assigned,
+        "gap": max(required - assigned, 0),
+        "coverage_pct": round(assigned / required * 100) if required else None,
+        "state": _planning_coverage(assigned, required),
+    }
+
+
+def _build_planner_model(shifts, coverage_rows, week_start_value, selected_date_value,
+                         selected_department=None, required_role=None,
+                         shift_status=None, view="week", now=None):
+    """Build planner projections from real API rows without persisting them."""
+    week_start = _week_start_for(week_start_value or selected_date_value)
+    week_dates = [week_start + datetime.timedelta(days=offset) for offset in range(7)]
+    week_end = week_dates[-1]
+
+    try:
+        selected_date = datetime.datetime.strptime(selected_date_value, "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        selected_date = datetime.date.today()
+    if selected_date < week_start or selected_date > week_end:
+        selected_date = week_start
+
+    coverage_by_id = {int(row["shift_id"]): row for row in coverage_rows
+                      if row.get("shift_id") is not None}
+    records = []
+    for source in shifts:
+        if required_role and source.get("required_role") != required_role:
+            continue
+        if shift_status and source.get("shift_status") != shift_status:
+            continue
+        row = dict(source)
+        counts = coverage_by_id.get(int(row["shift_id"]), {})
+        row["assigned_staff_count"] = int(counts.get("assigned_staff_count", 0))
+        row["required_staff_count"] = int(row.get("required_staff_count", 0))
+        row["planning_state"] = _planning_coverage(
+            row["assigned_staff_count"], row["required_staff_count"])
+        row["period"] = _shift_period(row.get("start_time", ""))
+        records.append(row)
+
+    records.sort(key=lambda row: (
+        row.get("shift_date", ""), row.get("start_time", ""),
+        row.get("department", ""), row.get("shift_id", 0)))
+    departments = sorted({row.get("department") for row in records
+                          if row.get("department")})
+    selected_iso = selected_date.isoformat()
+    date_departments = sorted({row["department"] for row in records
+                               if row.get("shift_date") == selected_iso})
+    if selected_department not in departments:
+        selected_department = (date_departments or departments or [""])[0]
+
+    department_tabs = []
+    for department in departments:
+        department_rows = [row for row in records
+                           if row.get("department") == department
+                           and row.get("shift_date") == selected_iso]
+        department_tabs.append({
+            "name": department,
+            "gap": _aggregate_shifts(department_rows)["gap"],
+        })
+
+    daily_rows = [row for row in records
+                  if row.get("department") == selected_department
+                  and row.get("shift_date") == selected_iso]
+    daily = _aggregate_shifts(daily_rows)
+
+    distribution = []
+    time_keys = sorted({(row.get("start_time", ""), row.get("end_time", ""))
+                        for row in daily_rows}, key=lambda value: _time_minutes(value[0]))
+    for start_time, end_time in time_keys:
+        grouped = [row for row in daily_rows
+                   if row.get("start_time") == start_time and row.get("end_time") == end_time]
+        distribution.append({
+            "label": _shift_period(start_time),
+            "start_time": start_time,
+            "end_time": end_time,
+            "shifts": grouped,
+            **_aggregate_shifts(grouped),
+        })
+
+    week_rows = [row for row in records
+                 if row.get("department") == selected_department
+                 and week_start.isoformat() <= row.get("shift_date", "") <= week_end.isoformat()]
+    grid_keys = sorted({(row.get("start_time", ""), row.get("end_time", ""))
+                        for row in week_rows}, key=lambda value: _time_minutes(value[0]))
+    grid_rows = []
+    for start_time, end_time in grid_keys:
+        cells = []
+        for day in week_dates:
+            cell_rows = [row for row in week_rows
+                         if row.get("shift_date") == day.isoformat()
+                         and row.get("start_time") == start_time
+                         and row.get("end_time") == end_time]
+            cells.append({"date": day, "shifts": cell_rows,
+                          **_aggregate_shifts(cell_rows)})
+        grid_rows.append({
+            "label": _shift_period(start_time),
+            "start_time": start_time,
+            "end_time": end_time,
+            "cells": cells,
+        })
+
+    previous_iso = (selected_date - datetime.timedelta(days=1)).isoformat()
+    timeline_segments = []
+    for row in records:
+        start = _time_minutes(row.get("start_time", ""))
+        end = _time_minutes(row.get("end_time", ""))
+        overnight = end <= start
+        segment_start = duration = None
+        if row.get("shift_date") == selected_iso:
+            segment_start = start
+            duration = (1440 - start) if overnight else (end - start)
+        elif row.get("shift_date") == previous_iso and overnight:
+            segment_start = 0
+            duration = end
+        if duration is None or duration <= 0:
+            continue
+        timeline_segments.append({
+            **row,
+            "segment_start": segment_start,
+            "segment_duration": duration,
+            "left_pct": round(segment_start / 1440 * 100, 4),
+            "width_pct": round(duration / 1440 * 100, 4),
+            "continues_from_previous": row.get("shift_date") == previous_iso,
+            "continues_next": row.get("shift_date") == selected_iso and overnight,
+        })
+
+    timeline_rows = []
+    timeline_departments = sorted({row["department"] for row in timeline_segments})
+    for department in timeline_departments:
+        department_segments = [row for row in timeline_segments
+                               if row.get("department") == department]
+        department_segments.sort(key=lambda row: (row["segment_start"], row["shift_id"]))
+        timeline_rows.append({
+            "department": department,
+            "segments": department_segments,
+            **_aggregate_shifts(department_segments),
+        })
+
+    week_summary = _aggregate_shifts(week_rows)
+    all_today = [row for row in records if row.get("shift_date") == selected_iso]
+    unfilled = _aggregate_shifts(all_today)["gap"]
+    gap_departments = len({row["department"] for row in all_today
+                           if row["planning_state"]["gap"] > 0})
+
+    current = now or datetime.datetime.now()
+    now_marker = None
+    if selected_date == current.date():
+        minutes = current.hour * 60 + current.minute
+        now_marker = {"label": current.strftime("%H:%M"),
+                      "left_pct": round(minutes / 1440 * 100, 4)}
+
+    return {
+        "week_start": week_start,
+        "week_end": week_end,
+        "week_dates": week_dates,
+        "selected_date": selected_date,
+        "selected_department": selected_department,
+        "departments": department_tabs,
+        "daily": daily,
+        "daily_rows": daily_rows,
+        "distribution": distribution,
+        "grid_rows": grid_rows,
+        "timeline_rows": timeline_rows,
+        "week_summary": week_summary,
+        "unfilled": unfilled,
+        "gap_departments": gap_departments,
+        "now_marker": now_marker,
+        "today_iso": current.date().isoformat(),
+        "today_week_start": _week_start_for(current.date().isoformat()).isoformat(),
+        "week_start_for_previous_day": _week_start_for(
+            (selected_date - datetime.timedelta(days=1)).isoformat()).isoformat(),
+        "week_start_for_next_day": _week_start_for(
+            (selected_date + datetime.timedelta(days=1)).isoformat()).isoformat(),
+        "view": view if view in ("week", "timeline") else "week",
+        "required_role": required_role or "",
+        "shift_status": shift_status or "",
+    }
+
+
 def _format_timestamp(value):
     """Render a stored 'YYYY-MM-DD HH:MM:SS' timestamp for people.
 
@@ -171,6 +402,7 @@ def create_app() -> Flask:
     app.jinja_env.globals["shift_display_id"] = _shift_display_id
     app.jinja_env.globals["initials"] = _initials
     app.jinja_env.globals["date_long"] = _date_long
+    app.jinja_env.globals["timedelta"] = datetime.timedelta
 
     # ---------------------------------------------------------- shared assets
     @app.get("/shared/<path:filename>")
@@ -241,13 +473,7 @@ def create_app() -> Flask:
     # ------------------------------------------------------------ shift planner
     @app.get("/shifts")
     def shift_planner():
-        """Render the planner shell and real filter choices.
-
-        The operational list itself is loaded by one HTMX request so a backend
-        failure remains scoped to that region. The all-shifts request here is
-        used only to derive filter options; date-scoped data is never filtered
-        in browser JavaScript.
-        """
+        """Render the persistent planner shell; HTMX fills its workspace."""
         selected_date = request.args.get("date") or _today()
         if not _valid_iso_date(selected_date):
             selected_date = _today()
@@ -266,8 +492,56 @@ def create_app() -> Flask:
             "shift_planner.html", today=_today(), active="shifts",
             selected_date=selected_date, departments=departments, roles=roles,
             statuses=api_client.SHIFT_STATUSES,
+            week_start=_week_start_for(selected_date).isoformat(),
             service_available=service_available,
         )
+
+    @app.get("/partials/planner")
+    def planner_workspace_partial():
+        """Render the week grid or day timeline from existing API records."""
+        selected_date = request.args.get("selected_date") or _today()
+        week_start = request.args.get("week_start") or selected_date
+        department = request.args.get("department") or None
+        required_role = request.args.get("required_role") or None
+        shift_status = request.args.get("shift_status") or None
+        view = request.args.get("view") or "week"
+        selected_shift_id = request.args.get("selected_shift_id") or None
+
+        try:
+            # One complete server-side dataset keeps filter option values and
+            # cross-department timeline context stable. Role/status filtering
+            # is still performed in this Flask service, never in the browser.
+            shift_data = api_client.list_shifts()
+            coverage_data = api_client.get_coverage()
+        except (BackendUnavailableError, BackendError) as error:
+            return render_template("partials/planner_workspace.html", error=str(error))
+
+        all_records = shift_data.get("shifts", [])
+        roles = sorted({row.get("required_role") for row in all_records
+                        if row.get("required_role")})
+        model = _build_planner_model(
+            all_records, coverage_data.get("shifts", []), week_start,
+            selected_date, selected_department=department,
+            required_role=required_role, shift_status=shift_status,
+            view=view)
+
+        detail_html = None
+        if selected_shift_id:
+            try:
+                detail_id = int(selected_shift_id)
+            except (TypeError, ValueError):
+                detail_id = None
+            valid_shift_ids = {int(row["shift_id"]) for row in all_records}
+            if detail_id is not None and detail_id in valid_shift_ids:
+                detail_html = _render_shift_detail(detail_id, embedded=True)
+            else:
+                selected_shift_id = ""
+
+        return render_template(
+            "partials/planner_workspace.html", error=None,
+            roles=roles, statuses=api_client.SHIFT_STATUSES,
+            selected_shift_id=selected_shift_id or "", detail_html=detail_html,
+            **model)
 
     @app.get("/partials/shifts")
     def shifts_partial():
@@ -306,15 +580,17 @@ def create_app() -> Flask:
             "partials/shift_list.html", shifts=shifts, error=None,
             filtered=filtered, selected_date=selected_date)
 
-    def _render_shift_detail(shift_id, notice=None):
+    def _render_shift_detail(shift_id, notice=None, embedded=False):
         try:
             shift = api_client.get_shift(shift_id)["shift"]
         except NotFoundError:
             return render_template("partials/shift_detail.html", shift=None,
-                                   not_found=True, error=None, notice=None)
+                                   not_found=True, error=None, notice=None,
+                                   embedded=embedded)
         except (BackendUnavailableError, BackendError) as error:
             return render_template("partials/shift_detail.html", shift=None,
-                                   not_found=False, error=str(error), notice=None)
+                                   not_found=False, error=str(error), notice=None,
+                                   embedded=embedded)
 
         assignments, assignment_error = None, None
         try:
@@ -348,12 +624,12 @@ def create_app() -> Flask:
             error=None, notice=notice, assignments=assignments,
             assignment_error=assignment_error, candidates=candidates,
             candidate_error=candidate_error, coverage=coverage,
-            assigned_count=assigned_count,
+            assigned_count=assigned_count, embedded=embedded,
         )
 
     @app.get("/partials/shifts/<int:shift_id>")
     def shift_detail_partial(shift_id: int):
-        return _render_shift_detail(shift_id)
+        return _render_shift_detail(shift_id, embedded=request.args.get("panel") == "1")
 
     def _shift_form_values(source):
         return {
@@ -442,14 +718,17 @@ def create_app() -> Flask:
 
     @app.post("/partials/shifts/<int:shift_id>/delete")
     def delete_shift_partial(shift_id: int):
+        embedded = request.form.get("panel") == "1"
         try:
             api_client.delete_shift(shift_id)
         except NotFoundError:
             return render_template("partials/shift_detail.html", shift=None,
-                                   not_found=True, error=None, notice=None)
+                                   not_found=True, error=None, notice=None,
+                                   embedded=embedded)
         except (BackendUnavailableError, BackendError) as error:
             return _render_shift_detail(
-                shift_id, notice={"kind": "danger", "text": "Shift was not deleted. " + str(error)})
+                shift_id, notice={"kind": "danger", "text": "Shift was not deleted. " + str(error)},
+                embedded=embedded)
 
         body = render_template("partials/shift_action_result.html",
                                title="Shift deleted",
@@ -466,33 +745,41 @@ def create_app() -> Flask:
 
     @app.post("/partials/shifts/<int:shift_id>/assign")
     def assign_shift_staff_partial(shift_id: int):
+        embedded = request.form.get("panel") == "1"
         staff_id = _staff_id_from_form()
         if staff_id is None:
             return _render_shift_detail(
-                shift_id, notice={"kind": "danger", "text": "Select a valid staff member."})
+                shift_id, notice={"kind": "danger", "text": "Select a valid staff member."},
+                embedded=embedded)
         try:
             api_client.assign_staff(shift_id, staff_id)
         except (BackendUnavailableError, BackendError) as error:
             return _render_shift_detail(
-                shift_id, notice={"kind": "danger", "text": "Staff was not assigned. " + str(error)})
+                shift_id, notice={"kind": "danger", "text": "Staff was not assigned. " + str(error)},
+                embedded=embedded)
         response = make_response(_render_shift_detail(
-            shift_id, notice={"kind": "success", "text": "Staff assigned to shift."}))
+            shift_id, notice={"kind": "success", "text": "Staff assigned to shift."},
+            embedded=embedded))
         response.headers["HX-Trigger"] = "shifts-updated"
         return response
 
     @app.post("/partials/shifts/<int:shift_id>/unassign")
     def unassign_shift_staff_partial(shift_id: int):
+        embedded = request.form.get("panel") == "1"
         staff_id = _staff_id_from_form()
         if staff_id is None:
             return _render_shift_detail(
-                shift_id, notice={"kind": "danger", "text": "Select a valid staff member."})
+                shift_id, notice={"kind": "danger", "text": "Select a valid staff member."},
+                embedded=embedded)
         try:
             api_client.unassign_staff(shift_id, staff_id)
         except (BackendUnavailableError, BackendError) as error:
             return _render_shift_detail(
-                shift_id, notice={"kind": "danger", "text": "Staff was not unassigned. " + str(error)})
+                shift_id, notice={"kind": "danger", "text": "Staff was not unassigned. " + str(error)},
+                embedded=embedded)
         response = make_response(_render_shift_detail(
-            shift_id, notice={"kind": "success", "text": "Staff unassigned from shift."}))
+            shift_id, notice={"kind": "success", "text": "Staff unassigned from shift."},
+            embedded=embedded))
         response.headers["HX-Trigger"] = "shifts-updated"
         return response
 

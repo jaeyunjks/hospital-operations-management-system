@@ -378,6 +378,10 @@ def test_availability_update_success(frontend_client, fe_api_client, monkeypatch
     updated = {**STAFF_FIXTURE[0], "availability_status": "On Leave"}
     monkeypatch.setattr(fe_api_client, "update_availability",
                         lambda sid, status: {"staff": updated})
+    # A successful mutation is followed by the normal real record reload.
+    # Stub both API boundaries so this unit test never leaks to localhost.
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": updated})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
     response = frontend_client.post("/partials/staff/1/availability",
                                     data={"availability_status": "On Leave"})
     assert response.status_code == 200
@@ -571,7 +575,8 @@ def test_shift_planner_shell_and_navigation(frontend_client, fe_api_client, monk
     body = frontend_client.get("/shifts?date=2026-08-27").data.decode()
     assert "Shift planner" in body
     assert 'aria-current="page">Shift planner' in body
-    assert "Emergency" in body and "Registered Nurse" in body
+    assert 'id="planner-workspace"' in body
+    assert 'name="week_start" value="2026-08-24"' in body
     assert 'hx-trigger="load, shifts-updated from:body"' in body
 
 
@@ -844,3 +849,200 @@ def test_unassign_staff_success_refreshes_coverage(
     assert calls == [(11, 1)]
     assert response.headers["HX-Trigger"] == "shifts-updated"
     assert "Staff unassigned from shift." in response.data.decode()
+
+
+# ------------------------------------------ shift planner iteration 2
+WEEK_SHIFTS = [
+    {
+        "shift_id": 20, "department": "Emergency", "shift_date": "2026-08-24",
+        "start_time": "19:00", "end_time": "07:00",
+        "required_role": "Registered Nurse", "required_staff_count": 3,
+        "shift_status": "Planned", "notes": "Overnight coverage.",
+    },
+    {
+        "shift_id": 21, "department": "Emergency", "shift_date": "2026-08-26",
+        "start_time": "07:00", "end_time": "15:00",
+        "required_role": "Registered Nurse", "required_staff_count": 3,
+        "shift_status": "Open", "notes": None,
+    },
+    {
+        "shift_id": 22, "department": "Emergency", "shift_date": "2026-08-26",
+        "start_time": "07:00", "end_time": "15:00",
+        "required_role": "Doctor", "required_staff_count": 1,
+        "shift_status": "Open", "notes": None,
+    },
+    {
+        "shift_id": 23, "department": "ICU", "shift_date": "2026-08-26",
+        "start_time": "08:00", "end_time": "16:00",
+        "required_role": "Registered Nurse", "required_staff_count": 2,
+        "shift_status": "Filled", "notes": None,
+    },
+]
+
+WEEK_COVERAGE = {
+    "summary": {"total_shifts": 4, "total_shortfall": 4},
+    "shifts": [
+        {"shift_id": 20, "assigned_staff_count": 1},
+        {"shift_id": 21, "assigned_staff_count": 2},
+        {"shift_id": 22, "assigned_staff_count": 0},
+        {"shift_id": 23, "assigned_staff_count": 2},
+    ],
+}
+
+
+def _stub_week_planner(monkeypatch, fe_api_client):
+    monkeypatch.setattr(
+        fe_api_client, "list_shifts",
+        lambda **kwargs: {"count": len(WEEK_SHIFTS), "shifts": WEEK_SHIFTS})
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kwargs: WEEK_COVERAGE)
+
+
+def test_week_planner_aggregates_daily_demand_and_real_department_gaps(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+    body = frontend_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=Emergency").data.decode()
+
+    assert "Week of 24 August – 30 August 2026" in body
+    assert "Emergency — week grid" in body
+    assert "<dt>Required today</dt><dd>4</dd>" in body
+    assert "<dt>Assigned</dt><dd>2</dd>" in body
+    assert "<dt>Coverage</dt><dd>50%</dd>" in body
+    assert "<dt>Staffing gap</dt><dd>2</dd>" in body
+    assert 'aria-label="2 unfilled"' in body
+    assert "No shift" in body
+
+
+def test_week_grid_preserves_multiple_real_shifts_in_one_cell(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+    body = frontend_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=Emergency").data.decode()
+
+    assert '"selected_shift_id":"21"' in body
+    assert '"selected_shift_id":"22"' in body
+    assert "2/3" in body
+    assert "0/1" in body
+    assert "Registered Nurse" in body and "Doctor" in body
+
+
+def test_planner_role_and_status_filters_are_server_derived(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+    body = frontend_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=Emergency&required_role=Doctor&shift_status=Open").data.decode()
+
+    assert "<dt>Required today</dt><dd>1</dd>" in body
+    assert "<dt>Assigned</dt><dd>0</dd>" in body
+    assert "Short 1" in body
+    assert '<option value="Doctor" selected>' in body
+    assert '<option value="Open" selected>' in body
+
+
+def test_day_timeline_renders_real_positions_and_overnight_tail(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+    body = frontend_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-25"
+        "&department=Emergency&view=timeline").data.decode()
+
+    assert "Tuesday 25 August — day timeline" in body
+    assert 'width:29.1667%' in body
+    assert "Emergency 19:00 to 07:00" in body
+    assert 'class="view-toggle__button is-active"' in body
+    assert 'aria-pressed="true"' in body
+    assert '>Day timeline</button>' in body
+    assert 'class="planner-layout" hx-target="#planner-workspace"' in body
+    assert "All departments, 24-hour view" in body
+
+
+def test_planner_model_handles_overnight_and_current_marker():
+    frontend_module = _load_frontend_app_module()
+    model = frontend_module._build_planner_model(
+        WEEK_SHIFTS, WEEK_COVERAGE["shifts"], "2026-08-24", "2026-08-25",
+        selected_department="Emergency", view="timeline",
+        now=frontend_module.datetime.datetime(2026, 8, 25, 14, 32))
+
+    emergency = next(row for row in model["timeline_rows"]
+                     if row["department"] == "Emergency")
+    segment = emergency["segments"][0]
+    assert segment["continues_from_previous"] is True
+    assert segment["segment_start"] == 0
+    assert segment["segment_duration"] == 420
+    assert model["now_marker"] == {"label": "14:32", "left_pct": 60.5556}
+
+
+def test_week_summary_uses_real_shift_position_and_assignment_totals(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+    body = frontend_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=Emergency").data.decode()
+
+    assert "Week summary · Emergency" in body
+    assert "<dt>Shifts</dt><dd>3</dd>" in body
+    assert "<dt>Positions</dt><dd>7</dd>" in body
+    assert "<dt>Filled</dt><dd>3</dd>" in body
+    assert "<dt>Coverage</dt><dd>43%</dd>" in body
+
+
+def test_planner_starts_with_an_empty_shift_selection(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+    body = frontend_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=Emergency").data.decode()
+
+    assert "Select a shift" in body
+    assert "Choose a real shift in the grid or timeline" in body
+
+
+def test_planner_real_shift_selection_reuses_management_panel(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+    selected = WEEK_SHIFTS[1]
+    monkeypatch.setattr(fe_api_client, "get_shift", lambda sid: {"shift": selected})
+    monkeypatch.setattr(
+        fe_api_client, "list_shift_assignments",
+        lambda sid: {"count": 1, "assignments": [{
+            "staff_id": 1, "name": "Amara Okafor", "role": "Registered Nurse",
+            "department": "Emergency", "assignment_status": "Assigned",
+        }]})
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **kwargs: {"count": 0, "staff": []})
+
+    body = frontend_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=Emergency&selected_shift_id=21").data.decode()
+    assert "Shift detail" in body
+    assert "Amara Okafor" in body
+    assert 'name="panel" value="1"' in body
+    assert 'hx-target="#planner-detail"' in body
+
+
+def test_planner_backend_and_database_failures_are_isolated(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_shifts", _raise_unavailable)
+    unavailable = frontend_client.get("/partials/planner").data.decode()
+    assert "Shift planner unavailable" in unavailable
+    assert UNAVAILABLE_MESSAGE_HTML in unavailable
+
+    import api_client
+    monkeypatch.setattr(
+        fe_api_client, "list_shifts",
+        lambda **kwargs: (_ for _ in ()).throw(
+            api_client.BackendError(
+                "Staff & Shift service returned 503: Database service unreachable")))
+    database = frontend_client.get("/partials/planner").data.decode()
+    assert "Database service unreachable" in database
+
+
+def test_planner_returned_fragment_cannot_self_trigger():
+    template = (
+        FRONTEND_DIR / "templates" / "partials" / "planner_workspace.html"
+    ).read_text()
+    assert 'hx-trigger="load' not in template
+    assert "fetch(" not in template

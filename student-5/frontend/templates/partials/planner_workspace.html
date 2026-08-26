@@ -1,0 +1,251 @@
+{# Returned inside persistent #planner-workspace. This fragment is trigger-free. #}
+{% if error %}
+<section class="panel planner-error">
+  <div class="alert alert--danger" role="alert">
+    <div>
+      <p class="alert__title">Shift planner unavailable</p>
+      <p class="alert__body">{{ error }}</p>
+    </div>
+  </div>
+</section>
+{% else %}
+{% set selected_iso = selected_date.isoformat() %}
+{% set week_start_iso = week_start.isoformat() %}
+
+<form id="planner-state" class="planner-state" aria-label="Shift planner controls"
+      autocomplete="off"
+      hx-get="/partials/planner" hx-target="#planner-workspace"
+      hx-swap="innerHTML" hx-indicator="#loading-indicator">
+  <input type="hidden" name="week_start" value="{{ week_start_iso }}">
+  <input type="hidden" name="selected_date" value="{{ selected_iso }}">
+  <input type="hidden" name="department" value="{{ selected_department }}">
+  <input type="hidden" name="view" value="{{ view }}">
+  <input type="hidden" name="selected_shift_id" value="{{ selected_shift_id }}">
+
+  <div class="planner-commandbar">
+    <div class="planner-week-heading">
+      <span class="u-label">Planning period</span>
+      <h2>Week of {{ week_start.strftime('%-d %B') }} – {{ week_end.strftime('%-d %B %Y') }}</h2>
+      <div class="week-nav" aria-label="Week navigation">
+        <button class="btn-ghost btn-compact" type="button"
+                hx-get="/partials/planner" hx-include="#planner-state"
+                hx-vals='{"week_start":"{{ (week_start - timedelta(days=7)).isoformat() }}","selected_date":"{{ (selected_date - timedelta(days=7)).isoformat() }}","selected_shift_id":""}'>
+          Previous week
+        </button>
+        <button class="btn-ghost btn-compact" type="button"
+                hx-get="/partials/planner" hx-include="#planner-state"
+                hx-vals='{"week_start":"{{ today_week_start }}","selected_date":"{{ today_iso }}","selected_shift_id":""}'>
+          This week
+        </button>
+        <button class="btn-ghost btn-compact" type="button"
+                hx-get="/partials/planner" hx-include="#planner-state"
+                hx-vals='{"week_start":"{{ (week_start + timedelta(days=7)).isoformat() }}","selected_date":"{{ (selected_date + timedelta(days=7)).isoformat() }}","selected_shift_id":""}'>
+          Next week
+        </button>
+      </div>
+    </div>
+    <div class="planner-commandbar__actions">
+      <div class="view-toggle" role="group" aria-label="Planner view">
+        <button class="view-toggle__button{{ ' is-active' if view == 'week' else '' }}"
+                type="button" aria-pressed="{{ 'true' if view == 'week' else 'false' }}"
+                hx-get="/partials/planner" hx-include="#planner-state"
+                hx-vals='{"view":"week","selected_shift_id":""}'>Week grid</button>
+        <button class="view-toggle__button{{ ' is-active' if view == 'timeline' else '' }}"
+                type="button" aria-pressed="{{ 'true' if view == 'timeline' else 'false' }}"
+                hx-get="/partials/planner" hx-include="#planner-state"
+                hx-vals='{"view":"timeline","selected_shift_id":""}'>Day timeline</button>
+      </div>
+      <button class="btn-primary" type="button" data-shift-drawer-open
+              hx-get="/partials/shifts/new?shift_date={{ selected_iso }}"
+              hx-target="#shift-drawer" hx-swap="innerHTML"
+              hx-indicator="#loading-indicator">Create shift</button>
+    </div>
+  </div>
+
+  <section class="department-strip" aria-labelledby="department-heading">
+    <div class="department-strip__head">
+      <h2 class="u-label" id="department-heading">Department</h2>
+      <p>
+        {% if unfilled %}{{ unfilled }} unfilled position{{ '' if unfilled == 1 else 's' }} across {{ gap_departments }} department{{ '' if gap_departments == 1 else 's' }} on {{ selected_date.strftime('%-d %b') }}{% else %}No unfilled positions on {{ selected_date.strftime('%-d %b') }}{% endif %}
+      </p>
+    </div>
+    {% if departments %}
+    <div class="department-tabs" role="list" aria-label="Departments">
+      {% for item in departments %}
+      <button class="department-tab{{ ' is-active' if item.name == selected_department else '' }}"
+              type="button" role="listitem"
+              aria-pressed="{{ 'true' if item.name == selected_department else 'false' }}"
+              hx-get="/partials/planner" hx-include="#planner-state"
+              hx-vals='{"department":{{ item.name|tojson }},"selected_shift_id":""}'>
+        {{ item.name }}
+        {% if item.gap %}<span class="department-tab__gap" aria-label="{{ item.gap }} unfilled">{{ item.gap }}</span>{% endif %}
+      </button>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="u-muted">No departments match the current filters.</p>
+    {% endif %}
+  </section>
+
+  <div class="planner-secondary-filters">
+    <label class="filter">
+      <span class="filter__label">Required role</span>
+      <select class="select" name="required_role" hx-trigger="change" hx-get="/partials/planner"
+              hx-include="#planner-state" hx-vals='{"selected_shift_id":""}'>
+        <option value="">All roles</option>
+        {% for role in roles %}<option value="{{ role }}"{{ ' selected' if role == required_role else '' }}>{{ role }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="filter">
+      <span class="filter__label">Shift status</span>
+      <select class="select" name="shift_status" hx-trigger="change" hx-get="/partials/planner"
+              hx-include="#planner-state" hx-vals='{"selected_shift_id":""}'>
+        <option value="">All statuses</option>
+        {% for status in statuses %}<option value="{{ status }}"{{ ' selected' if status == shift_status else '' }}>{{ status }}</option>{% endfor %}
+      </select>
+    </label>
+  </div>
+</form>
+
+<div class="planner-layout" hx-target="#planner-workspace" hx-swap="innerHTML">
+  <main class="planner-main">
+    <section class="panel demand-panel" aria-labelledby="daily-demand-heading">
+      <div class="demand-panel__heading">
+        <div>
+          <span class="u-label">Daily workforce demand</span>
+          <h2 id="daily-demand-heading">{{ selected_department or 'No department selected' }}</h2>
+          <p>{{ selected_date.strftime('%A %-d %B %Y') }}</p>
+        </div>
+        <span class="coverage-status coverage-status--{{ daily.state.tone }}">{{ daily.state.label }}</span>
+      </div>
+      <dl class="demand-metrics">
+        <div><dt>Required today</dt><dd>{{ daily.required }}</dd><small>staff, all listed shifts</small></div>
+        <div><dt>Assigned</dt><dd>{{ daily.assigned }}</dd><small>active assignments</small></div>
+        <div><dt>Coverage</dt><dd>{{ daily.coverage_pct ~ '%' if daily.coverage_pct is not none else '—' }}</dd><small>assigned ÷ required</small></div>
+        <div><dt>Staffing gap</dt><dd>{{ daily.gap }}</dd><small>unfilled positions</small></div>
+      </dl>
+
+      <div class="distribution-heading">
+        <h3 class="u-label">Distribution across shifts</h3>
+        <span>Assigned vs required · real shift times</span>
+      </div>
+      {% if distribution %}
+      <div class="distribution-grid">
+        {% for group in distribution %}
+        <article class="distribution-card distribution-card--{{ group.state.tone }}">
+          <div class="distribution-card__top">
+            <strong>{{ group.label }}</strong>
+            <span class="coverage-status coverage-status--{{ group.state.tone }}">{{ group.state.label }}</span>
+          </div>
+          <p class="u-mono">{{ group.start_time }}–{{ group.end_time }}</p>
+          <p class="distribution-card__count"><strong>{{ group.assigned }}</strong><span>/ {{ group.required }}</span></p>
+          <div class="coverage-rule" aria-hidden="true"></div>
+          <small>{{ group.shift_count }} real shift{{ '' if group.shift_count == 1 else 's' }}</small>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty demand-empty"><p class="empty__title">No shifts scheduled for this department and date.</p><p class="empty__body">Choose another department/date or create a shift.</p></div>
+      {% endif %}
+    </section>
+
+    {% if view == 'week' %}
+    <section class="panel planning-board" aria-labelledby="week-grid-heading">
+      <div class="planning-board__header">
+        <div><h2 id="week-grid-heading">{{ selected_department or 'Department' }} — week grid</h2><p>Required vs assigned per real shift time. Select a shift to manage its roster.</p></div>
+        <div class="coverage-legend" aria-label="Coverage legend"><span class="legend-covered">Covered</span><span class="legend-short-one">Short 1</span><span class="legend-short-many">Short 2+</span></div>
+      </div>
+      <div class="week-grid-scroll" tabindex="0" aria-label="Scrollable week grid">
+        <div class="week-grid">
+          <div class="week-grid__corner"></div>
+          {% for day in week_dates %}
+          <button class="week-grid__day{{ ' is-selected' if day == selected_date else '' }}" type="button"
+                  hx-get="/partials/planner" hx-include="#planner-state"
+                  hx-vals='{"selected_date":"{{ day.isoformat() }}","selected_shift_id":""}'>
+            <span>{{ day.strftime('%a') }}</span><strong>{{ day.strftime('%-d') }}</strong>
+          </button>
+          {% endfor %}
+          {% for row in grid_rows %}
+          <div class="week-grid__label"><strong>{{ row.label }}</strong><span class="u-mono">{{ row.start_time }}–{{ row.end_time }}</span></div>
+          {% for cell in row.cells %}
+          <div class="week-grid__cell{{ ' week-grid__cell--empty' if not cell.shifts else ' week-grid__cell--' ~ cell.state.tone }}">
+            {% if cell.shifts %}
+              {% for shift in cell.shifts %}
+              <button class="grid-shift" type="button"
+                      aria-label="Manage {{ shift.department }} {{ shift.start_time }} shift on {{ shift.shift_date }}, {{ shift.assigned_staff_count }} of {{ shift.required_staff_count }} assigned"
+                      hx-get="/partials/planner" hx-include="#planner-state"
+                      hx-vals='{"selected_date":"{{ shift.shift_date }}","selected_shift_id":"{{ shift.shift_id }}"}'>
+                <strong>{{ shift.assigned_staff_count }}/{{ shift.required_staff_count }}</strong>
+                <span>{{ shift.planning_state.label }}</span>
+                {% if cell.shifts|length > 1 %}<small>{{ shift.required_role }}</small>{% endif %}
+              </button>
+              {% endfor %}
+            {% else %}
+            <span class="no-shift-mark">—</span><small>No shift</small>
+            {% endif %}
+          </div>
+          {% endfor %}
+          {% else %}
+          <div class="week-grid__empty">No shifts scheduled for {{ selected_department or 'the selected department' }} this week.</div>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+    {% else %}
+    <section class="panel planning-board timeline-board" aria-labelledby="timeline-heading">
+      <div class="planning-board__header">
+        <div><h2 id="timeline-heading">{{ selected_date.strftime('%A %-d %B') }} — day timeline</h2><p>All departments, 24-hour view. Bars use real start and end times.</p></div>
+        <div class="day-stepper" aria-label="Timeline date">
+          <button class="btn-ghost btn-compact" type="button" hx-get="/partials/planner" hx-include="#planner-state" hx-vals='{"selected_date":"{{ (selected_date - timedelta(days=1)).isoformat() }}","week_start":"{{ week_start_for_previous_day }}","selected_shift_id":""}'>Previous day</button>
+          <button class="btn-ghost btn-compact" type="button" hx-get="/partials/planner" hx-include="#planner-state" hx-vals='{"selected_date":"{{ (selected_date + timedelta(days=1)).isoformat() }}","week_start":"{{ week_start_for_next_day }}","selected_shift_id":""}'>Next day</button>
+        </div>
+      </div>
+      <div class="timeline-scroll" tabindex="0" aria-label="Scrollable 24-hour shift timeline">
+        <div class="timeline">
+          <div class="timeline__axis-label"></div>
+          <div class="timeline__axis">{% for hour in range(0, 24, 2) %}<span style="left:{{ hour / 24 * 100 }}%">{{ '%02d'|format(hour) }}</span>{% endfor %}</div>
+          {% if timeline_rows %}
+          {% for row in timeline_rows %}
+          <div class="timeline__department"><strong>{{ row.department }}</strong><span>{{ row.assigned }} of {{ row.required }} assigned</span></div>
+          <div class="timeline__track">
+            {% if now_marker %}<span class="now-marker" style="left:{{ now_marker.left_pct }}%"><span>Now · {{ now_marker.label }}</span></span>{% endif %}
+            {% for shift in row.segments %}
+            <button class="timeline-shift timeline-shift--{{ shift.planning_state.tone }}" type="button"
+                    style="left:{{ shift.left_pct }}%;width:{{ shift.width_pct }}%"
+                    aria-label="Manage {{ shift.department }} {{ shift.start_time }} to {{ shift.end_time }}, {{ shift.assigned_staff_count }} of {{ shift.required_staff_count }} assigned"
+                    hx-get="/partials/planner" hx-include="#planner-state"
+                    hx-vals='{"selected_shift_id":"{{ shift.shift_id }}"}'>
+              <strong>{{ shift.period }}</strong><span>{{ shift.assigned_staff_count }}/{{ shift.required_staff_count }}</span>
+            </button>
+            {% endfor %}
+          </div>
+          {% endfor %}
+          {% else %}
+          <div class="timeline__empty">No shifts scheduled across departments for this date.</div>
+          {% endif %}
+        </div>
+      </div>
+      <div class="timeline-footer"><div class="coverage-legend"><span class="legend-covered">Covered</span><span class="legend-short-one">Short 1</span><span class="legend-short-many">Short 2+</span></div>{% if now_marker %}<span class="u-mono">Now · {{ now_marker.label }}</span>{% endif %}</div>
+    </section>
+    {% endif %}
+  </main>
+
+  <aside class="planner-rail" aria-label="Workforce planning and shift detail">
+    <section class="panel assist-panel" aria-labelledby="assist-heading">
+      <div class="assist-panel__heading"><span class="u-label">Assist</span><div><h2 id="assist-heading">Workforce planning</h2><p>Release 0 boundary</p></div></div>
+      <div class="assist-panel__body"><span class="u-label">AI recommendations</span><p>AI-assisted workforce planning is not enabled in this Release 0 Shift Planner view.</p><span class="badge-neutral">Coming soon</span></div>
+    </section>
+
+    <section class="panel planner-detail-panel" id="planner-detail" aria-live="polite">
+      {% if detail_html %}{{ detail_html|safe }}{% else %}
+      <div class="select-shift-empty"><h2>Select a shift</h2><p>Choose a real shift in the grid or timeline to view its roster and manage assignments.</p></div>
+      {% endif %}
+    </section>
+
+    <section class="panel week-summary" aria-labelledby="week-summary-heading">
+      <h2 class="u-label" id="week-summary-heading">Week summary · {{ selected_department or 'No department' }}</h2>
+      <dl><div><dt>Shifts</dt><dd>{{ week_summary.shift_count }}</dd></div><div><dt>Positions</dt><dd>{{ week_summary.required }}</dd></div><div><dt>Filled</dt><dd>{{ week_summary.assigned }}</dd></div><div><dt>Coverage</dt><dd>{{ week_summary.coverage_pct ~ '%' if week_summary.coverage_pct is not none else '—' }}</dd></div></dl>
+    </section>
+  </aside>
+</div>
+{% endif %}

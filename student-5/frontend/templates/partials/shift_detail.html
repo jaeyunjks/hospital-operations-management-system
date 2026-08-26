@@ -1,7 +1,10 @@
+{% set detail_target = '#planner-detail' if embedded else '#shift-drawer' %}
 {% if not_found %}
-<div class="drawer__header">
+<div class="drawer__header{{ ' planner-detail__header' if embedded else '' }}">
   <h2 class="u-label" id="shift-drawer-heading">Shift not found</h2>
+  {% if not embedded %}
   <button class="drawer__close" type="button" data-drawer-close aria-label="Close shift detail">×</button>
+  {% endif %}
 </div>
 <div class="drawer__body">
   <div class="alert alert--danger" role="alert">
@@ -9,9 +12,11 @@
   </div>
 </div>
 {% elif error %}
-<div class="drawer__header">
+<div class="drawer__header{{ ' planner-detail__header' if embedded else '' }}">
   <h2 class="u-label" id="shift-drawer-heading">Shift detail unavailable</h2>
+  {% if not embedded %}
   <button class="drawer__close" type="button" data-drawer-close aria-label="Close shift detail">×</button>
+  {% endif %}
 </div>
 <div class="drawer__body">
   <div class="alert alert--danger" role="alert">
@@ -23,9 +28,11 @@
                      else 'danger' if shift.shift_status == 'Cancelled'
                      else 'info' if shift.shift_status == 'Open'
                      else 'neutral' %}
-<div class="drawer__header">
+<div class="drawer__header{{ ' planner-detail__header' if embedded else '' }}">
   <h2 class="u-label" id="shift-drawer-heading">Shift detail</h2>
+  {% if not embedded %}
   <button class="drawer__close" type="button" data-drawer-close aria-label="Close shift detail">×</button>
+  {% endif %}
 </div>
 
 <div class="shift-detail__identity">
@@ -74,10 +81,11 @@
           <span class="u-label">{{ person.assignment_status }}</span>
         </span>
         <form hx-post="/partials/shifts/{{ shift.shift_id }}/unassign"
-              hx-target="#shift-drawer" hx-swap="innerHTML"
+              hx-target="{{ detail_target }}" hx-swap="innerHTML"
               hx-indicator="#loading-indicator"
               hx-confirm="Unassign {{ person.name }} from this shift?">
           <input type="hidden" name="staff_id" value="{{ person.staff_id }}">
+          {% if embedded %}<input type="hidden" name="panel" value="1">{% endif %}
           <button class="btn-danger btn-compact" type="submit">Unassign</button>
         </form>
       </li>
@@ -109,9 +117,10 @@
           {% if person.specialisation %}<span>{{ person.specialisation }}</span>{% endif %}
         </span>
         <form hx-post="/partials/shifts/{{ shift.shift_id }}/assign"
-              hx-target="#shift-drawer" hx-swap="innerHTML"
+              hx-target="{{ detail_target }}" hx-swap="innerHTML"
               hx-indicator="#loading-indicator">
           <input type="hidden" name="staff_id" value="{{ person.staff_id }}">
+          {% if embedded %}<input type="hidden" name="panel" value="1">{% endif %}
           <button class="btn-primary btn-compact" type="submit">Assign</button>
         </form>
       </li>
@@ -126,13 +135,15 @@
     <h3 class="u-label" id="shift-actions-heading">Shift actions</h3>
     <div class="drawer-actions">
       <button class="btn-secondary" type="button"
+              data-shift-drawer-open
               hx-get="/partials/shifts/{{ shift.shift_id }}/edit"
               hx-target="#shift-drawer" hx-swap="innerHTML"
               hx-indicator="#loading-indicator">Edit shift</button>
       <form hx-post="/partials/shifts/{{ shift.shift_id }}/delete"
-            hx-target="#shift-drawer" hx-swap="innerHTML"
+            hx-target="{{ detail_target }}" hx-swap="innerHTML"
             hx-indicator="#loading-indicator"
             hx-confirm="Permanently delete {{ shift_display_id(shift.shift_id) }} and its assignment records?">
+        {% if embedded %}<input type="hidden" name="panel" value="1">{% endif %}
         <button class="btn-danger" type="submit">Delete shift</button>
       </form>
     </div>

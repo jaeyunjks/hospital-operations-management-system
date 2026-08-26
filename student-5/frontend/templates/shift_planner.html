@@ -2,92 +2,36 @@
 {% block title %}Shift planner{% endblock %}
 {% block content %}
 
-  <div class="page-header">
+  <div class="page-header planner-page-header">
     <div>
       <span class="page-header__eyebrow">Staff &amp; Shift Management</span>
       <h1 class="page-header__title">Shift planner</h1>
       <p class="page-header__description">
-        Plan shifts, manage staff assignments and monitor operational coverage.
+        Plan shifts, manage staffing assignments and monitor operational coverage.
       </p>
-    </div>
-    <div class="page-header__actions">
-      <button class="btn-primary" type="button" data-shift-drawer-open
-              hx-get="/partials/shifts/new" hx-include="#planner-date"
-              hx-target="#shift-drawer" hx-swap="innerHTML"
-              hx-indicator="#loading-indicator">
-        Create shift
-      </button>
     </div>
   </div>
 
-  <section class="panel" aria-labelledby="daily-plan-title">
-    <div class="panel__header">
-      <div>
-        <h2 class="panel__title" id="daily-plan-title">Daily plan</h2>
-        <p class="panel__meta">Real scheduled shifts and active assignment coverage</p>
-      </div>
-    </div>
-
-    <form class="planner-toolbar" id="shift-filters"
-          hx-get="/partials/shifts" hx-target="#shift-results"
-          hx-swap="innerHTML" hx-trigger="change delay:50ms, submit"
-          hx-indicator="#loading-indicator" onsubmit="return false">
-      <fieldset class="date-nav">
-        <legend class="visually-hidden">Planner date</legend>
-        <button class="btn-secondary btn-compact" type="button" data-date-offset="-1">
-          Previous<span class="visually-hidden"> date</span>
-        </button>
-        <button class="btn-ghost btn-compact" type="button" data-date-today>
-          Today
-        </button>
-        <label class="filter">
-          <span class="filter__label">Selected date</span>
-          <input class="input" id="planner-date" name="shift_date" type="date"
-                 value="{{ selected_date }}" required>
-        </label>
-        <button class="btn-secondary btn-compact" type="button" data-date-offset="1">
-          Next<span class="visually-hidden"> date</span>
-        </button>
-      </fieldset>
-
-      <div class="planner-filters">
-        <label class="filter">
-          <span class="filter__label">Department</span>
-          <select class="select" name="department" id="shift-department-filter">
-            <option value="">All</option>
-            {% for department in departments %}
-            <option value="{{ department }}">{{ department }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="filter">
-          <span class="filter__label">Required role</span>
-          <select class="select" name="required_role" id="shift-role-filter">
-            <option value="">All</option>
-            {% for role in roles %}<option value="{{ role }}">{{ role }}</option>{% endfor %}
-          </select>
-        </label>
-        <label class="filter">
-          <span class="filter__label">Shift status</span>
-          <select class="select" name="shift_status" id="shift-status-filter">
-            <option value="">All</option>
-            {% for status in statuses %}<option value="{{ status }}">{{ status }}</option>{% endfor %}
-          </select>
-        </label>
-        <button class="btn-ghost btn-compact planner-filters__clear" type="button"
-                data-clear-shift-filters>Clear filters</button>
-      </div>
+  {# The persistent wrapper owns the only load trigger. Returned planner
+     fragments never contain a load trigger, so swaps cannot re-arm it. #}
+  <div id="planner-workspace" aria-live="polite"
+       hx-get="/partials/planner"
+       hx-trigger="load, shifts-updated from:body"
+       hx-include="#planner-state" hx-swap="innerHTML"
+       hx-indicator="#loading-indicator">
+    <form id="planner-state" class="planner-state planner-state--initial" autocomplete="off">
+      <input type="hidden" name="week_start" value="{{ week_start }}">
+      <input type="hidden" name="selected_date" value="{{ selected_date }}">
+      <input type="hidden" name="department" value="">
+      <input type="hidden" name="view" value="week">
+      <input type="hidden" name="selected_shift_id" value="">
+      <input type="hidden" name="required_role" value="">
+      <input type="hidden" name="shift_status" value="">
     </form>
-
-    {# This persistent wrapper owns the only load trigger. Returned list
-       fragments contain no hx-trigger, so swaps cannot re-arm a load loop. #}
-    <div id="shift-results" aria-live="polite"
-         hx-get="/partials/shifts" hx-trigger="load, shifts-updated from:body"
-         hx-include="#shift-filters" hx-swap="innerHTML"
-         hx-indicator="#loading-indicator">
-      <div class="panel__body"><p class="u-muted">Loading scheduled shifts…</p></div>
-    </div>
-  </section>
+    <section class="panel planner-loading">
+      <p class="u-muted">Loading the weekly shift plan…</p>
+    </section>
+  </div>
 
   <div id="shift-drawer-root" class="drawer-root" hidden>
     <div class="drawer-overlay" data-drawer-close aria-hidden="true"></div>
@@ -99,38 +43,13 @@
 
   <script>
     (function () {
-      var filters = document.getElementById('shift-filters');
-      var dateInput = document.getElementById('planner-date');
       var root = document.getElementById('shift-drawer-root');
       var panel = root.querySelector('.drawer');
       var lastTrigger = null;
 
-      function emitDate(value) {
-        dateInput.value = value;
-        dateInput.dispatchEvent(new Event('change', { bubbles: true }));
-      }
-
       document.body.addEventListener('click', function (event) {
-        var offset = event.target.closest('[data-date-offset]');
-        if (offset) {
-          var date = new Date(dateInput.value + 'T12:00:00');
-          date.setDate(date.getDate() + Number(offset.dataset.dateOffset));
-          emitDate(date.toISOString().slice(0, 10));
-          return;
-        }
-        if (event.target.closest('[data-date-today]')) {
-          emitDate('{{ today }}');
-          return;
-        }
-        if (event.target.closest('[data-clear-shift-filters]')) {
-          filters.querySelector('[name="department"]').value = '';
-          filters.querySelector('[name="required_role"]').value = '';
-          filters.querySelector('[name="shift_status"]').value = '';
-          filters.dispatchEvent(new Event('change', { bubbles: true }));
-          return;
-        }
         var opener = event.target.closest('[data-shift-drawer-open], [hx-target="#shift-drawer"]');
-        if (opener) { lastTrigger = opener; return; }
+        if (opener) { lastTrigger = opener; }
         if (event.target.closest('[data-drawer-close]')) { closeDrawer(); }
       });
 
