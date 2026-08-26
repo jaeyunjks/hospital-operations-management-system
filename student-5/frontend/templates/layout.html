@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}Staff &amp; Shift Management{% endblock %} — HOMS</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23222938'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='serif' font-size='20' fill='white'%3EH%3C/text%3E%3C/svg%3E">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -40,7 +41,10 @@
         <a class="topnav__link" href="/staff"
            {% if active == 'staff' %}aria-current="page"{% endif %}>Staff directory</a>
 
-        {% for section in ["Shift planner", "AI recommendations", "Reports"] %}
+        <a class="topnav__link" href="/shifts"
+           {% if active == 'shifts' %}aria-current="page"{% endif %}>Shift planner</a>
+
+        {% for section in ["AI recommendations", "Reports"] %}
         <span class="topnav__link--pending" aria-disabled="true">
           {{ section }}<span class="topnav__soon">Soon</span>
         </span>
@@ -67,9 +71,9 @@
       </div>
 
       <div class="contextbar__end">
-        <span class="status status--success">
+        <span class="status {{ 'status--danger' if service_available is sameas false else 'status--success' }}">
           <span class="status__dot"></span>
-          <span>Scheduling service operational</span>
+          <span>{{ 'Scheduling service unavailable' if service_available is sameas false else 'Scheduling service operational' }}</span>
         </span>
         <span class="contextbar__date">{{ today }}</span>
       </div>

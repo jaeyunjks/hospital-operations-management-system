@@ -1,0 +1,62 @@
+{# Returned into the persistent #shift-results wrapper. No hx-trigger here. #}
+{% if error %}
+<div class="panel__body">
+  <div class="alert alert--danger" role="alert">
+    <div>
+      <p class="alert__title">Shift planner unavailable</p>
+      <p class="alert__body">{{ error }}</p>
+    </div>
+  </div>
+</div>
+{% elif shifts|length == 0 %}
+<div class="panel__body">
+  <div class="empty">
+    {% if filtered %}
+    <p class="empty__title">No shifts match the current filters</p>
+    <p class="empty__body">Clear a department, role or status filter to widen the results.</p>
+    {% else %}
+    <p class="empty__title">No shifts scheduled for this date.</p>
+    <p class="empty__body">Choose another date or create a shift for {{ selected_date }}.</p>
+    {% endif %}
+  </div>
+</div>
+{% else %}
+<ol class="planner-list" aria-label="Shifts scheduled for {{ selected_date }}">
+  {% for shift in shifts %}
+  {% set shift_badge = 'success' if shift.shift_status in ('Filled', 'Completed')
+                       else 'danger' if shift.shift_status == 'Cancelled'
+                       else 'info' if shift.shift_status == 'Open'
+                       else 'neutral' %}
+  <li class="planner-shift" id="shift-row-{{ shift.shift_id }}">
+    <div class="planner-shift__time">
+      <span class="u-mono">{{ shift.start_time }}–{{ shift.end_time }}</span>
+      <span class="planner-shift__id u-mono">{{ shift_display_id(shift.shift_id) }}</span>
+    </div>
+    <div class="planner-shift__main">
+      <p class="planner-shift__title">{{ shift.department }}</p>
+      <p class="planner-shift__role">{{ shift.required_role }}</p>
+      {% if shift.notes %}<p class="planner-shift__notes">{{ shift.notes }}</p>{% endif %}
+    </div>
+    <div class="planner-shift__status">
+      <span class="badge-{{ shift_badge }}">{{ shift.shift_status }}</span>
+      <span class="badge-{{ shift.coverage.badge }}">{{ shift.coverage.label }}</span>
+    </div>
+    <div class="planner-shift__coverage">
+      <strong class="u-mono">{{ shift.assigned_staff_count }} / {{ shift.required_staff_count }}</strong>
+      <span>assigned</span>
+    </div>
+    <div class="planner-shift__action">
+      <button class="btn-secondary btn-compact" type="button" data-shift-drawer-open
+              hx-get="/partials/shifts/{{ shift.shift_id }}"
+              hx-target="#shift-drawer" hx-swap="innerHTML"
+              hx-indicator="#loading-indicator">
+        Manage<span class="visually-hidden"> {{ shift.department }} shift at {{ shift.start_time }}</span>
+      </button>
+    </div>
+  </li>
+  {% endfor %}
+</ol>
+<div class="panel__footer">
+  <span class="u-label">{{ shifts|length }} shift{{ '' if shifts|length == 1 else 's' }} · {{ date_long(selected_date) }}</span>
+</div>
+{% endif %}

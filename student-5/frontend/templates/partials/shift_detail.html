@@ -1,0 +1,142 @@
+{% if not_found %}
+<div class="drawer__header">
+  <h2 class="u-label" id="shift-drawer-heading">Shift not found</h2>
+  <button class="drawer__close" type="button" data-drawer-close aria-label="Close shift detail">×</button>
+</div>
+<div class="drawer__body">
+  <div class="alert alert--danger" role="alert">
+    <div><p class="alert__title">Shift not found</p><p class="alert__body">This shift may have been deleted.</p></div>
+  </div>
+</div>
+{% elif error %}
+<div class="drawer__header">
+  <h2 class="u-label" id="shift-drawer-heading">Shift detail unavailable</h2>
+  <button class="drawer__close" type="button" data-drawer-close aria-label="Close shift detail">×</button>
+</div>
+<div class="drawer__body">
+  <div class="alert alert--danger" role="alert">
+    <div><p class="alert__title">Shift detail unavailable</p><p class="alert__body">{{ error }}</p></div>
+  </div>
+</div>
+{% else %}
+{% set shift_badge = 'success' if shift.shift_status in ('Filled', 'Completed')
+                     else 'danger' if shift.shift_status == 'Cancelled'
+                     else 'info' if shift.shift_status == 'Open'
+                     else 'neutral' %}
+<div class="drawer__header">
+  <h2 class="u-label" id="shift-drawer-heading">Shift detail</h2>
+  <button class="drawer__close" type="button" data-drawer-close aria-label="Close shift detail">×</button>
+</div>
+
+<div class="shift-detail__identity">
+  <div>
+    <p class="shift-detail__id u-mono">{{ shift_display_id(shift.shift_id) }}</p>
+    <h3 class="drawer__name">{{ shift.department }}</h3>
+    <p class="drawer__role">{{ shift.required_role }}</p>
+  </div>
+  <span class="badge-{{ shift_badge }}">{{ shift.shift_status }}</span>
+</div>
+
+<div class="drawer__body stack">
+  {% if notice %}
+  <div class="alert alert--{{ notice.kind }}" role="{{ 'alert' if notice.kind == 'danger' else 'status' }}">
+    <div><p class="alert__body">{{ notice.text }}</p></div>
+  </div>
+  {% endif %}
+
+  <section class="drawer__section" aria-labelledby="shift-overview-heading">
+    <h3 class="u-label" id="shift-overview-heading">Shift overview</h3>
+    <p class="shift-detail__date"><time datetime="{{ shift.shift_date }}">{{ date_long(shift.shift_date) }}</time></p>
+    <p class="shift-detail__time u-mono">{{ shift.start_time }}–{{ shift.end_time }}</p>
+    <dl class="shift-metrics">
+      <div><dt>Required</dt><dd>{{ shift.required_staff_count }}</dd></div>
+      <div><dt>Assigned</dt><dd>{{ assigned_count if assigned_count is not none else '—' }}</dd></div>
+      <div><dt>Coverage</dt><dd>{% if coverage %}<span class="badge-{{ coverage.badge }}">{{ coverage.label }}</span>{% else %}Unavailable{% endif %}</dd></div>
+    </dl>
+    {% if shift.notes %}<p class="detail-notes">{{ shift.notes }}</p>{% endif %}
+  </section>
+
+  <section class="drawer__section" aria-labelledby="current-assignments-heading">
+    <div class="row row--between">
+      <h3 class="u-label" id="current-assignments-heading">Current assignments</h3>
+      {% if assignments is not none %}<span class="u-label">{{ assignments|length }} active</span>{% endif %}
+    </div>
+    {% if assignment_error %}
+    <p class="drawer__muted">Assignment data is unavailable. {{ assignment_error }}</p>
+    {% elif assignments %}
+    <ul class="assignment-list" role="list">
+      {% for person in assignments %}
+      <li class="assignment-person">
+        <span class="staff-avatar" aria-hidden="true">{{ initials(person.name) }}</span>
+        <span class="assignment-person__main">
+          <strong>{{ person.name }}</strong>
+          <span>{{ person.role }} · {{ person.department }}</span>
+          <span class="u-label">{{ person.assignment_status }}</span>
+        </span>
+        <form hx-post="/partials/shifts/{{ shift.shift_id }}/unassign"
+              hx-target="#shift-drawer" hx-swap="innerHTML"
+              hx-indicator="#loading-indicator"
+              hx-confirm="Unassign {{ person.name }} from this shift?">
+          <input type="hidden" name="staff_id" value="{{ person.staff_id }}">
+          <button class="btn-danger btn-compact" type="submit">Unassign</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="drawer__muted">No staff are currently assigned to this shift.</p>
+    {% endif %}
+  </section>
+
+  <section class="drawer__section" aria-labelledby="candidate-heading">
+    <div class="row row--between">
+      <h3 class="u-label" id="candidate-heading">Available staff</h3>
+      <span class="u-label">Required role match</span>
+    </div>
+    <p class="drawer__muted">
+      Candidates are filtered by the real required role and “Available” status. This is deterministic filtering, not an AI recommendation.
+    </p>
+    {% if candidate_error %}
+    <p class="drawer__muted">Candidate staff are unavailable. {{ candidate_error }}</p>
+    {% elif candidates %}
+    <ul class="assignment-list" role="list">
+      {% for person in candidates %}
+      <li class="assignment-person">
+        <span class="staff-avatar" aria-hidden="true">{{ initials(person.name) }}</span>
+        <span class="assignment-person__main">
+          <strong>{{ person.name }}</strong>
+          <span>{{ person.role }} · {{ person.department }}</span>
+          {% if person.specialisation %}<span>{{ person.specialisation }}</span>{% endif %}
+        </span>
+        <form hx-post="/partials/shifts/{{ shift.shift_id }}/assign"
+              hx-target="#shift-drawer" hx-swap="innerHTML"
+              hx-indicator="#loading-indicator">
+          <input type="hidden" name="staff_id" value="{{ person.staff_id }}">
+          <button class="btn-primary btn-compact" type="submit">Assign</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="drawer__muted">No unassigned staff match the required role and Available status.</p>
+    {% endif %}
+  </section>
+
+  <section class="drawer__section drawer__boundary" aria-labelledby="shift-actions-heading">
+    <h3 class="u-label" id="shift-actions-heading">Shift actions</h3>
+    <div class="drawer-actions">
+      <button class="btn-secondary" type="button"
+              hx-get="/partials/shifts/{{ shift.shift_id }}/edit"
+              hx-target="#shift-drawer" hx-swap="innerHTML"
+              hx-indicator="#loading-indicator">Edit shift</button>
+      <form hx-post="/partials/shifts/{{ shift.shift_id }}/delete"
+            hx-target="#shift-drawer" hx-swap="innerHTML"
+            hx-indicator="#loading-indicator"
+            hx-confirm="Permanently delete {{ shift_display_id(shift.shift_id) }} and its assignment records?">
+        <button class="btn-danger" type="submit">Delete shift</button>
+      </form>
+    </div>
+    <p class="drawer__muted">Delete uses the existing hard-delete API; it is not cancellation or soft delete.</p>
+  </section>
+</div>
+{% endif %}

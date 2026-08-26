@@ -59,6 +59,40 @@ def _display_id(staff_id: int) -> str:
     return "S-%03d" % staff_id
 
 
+def _shift_display_id(shift_id: int) -> str:
+    """Deterministic presentation ID; API calls still use the integer key."""
+    return "SH-%03d" % shift_id
+
+
+def _valid_iso_date(value: str) -> bool:
+    try:
+        datetime.datetime.strptime(value, "%Y-%m-%d")
+        return True
+    except (TypeError, ValueError):
+        return False
+
+
+def _date_long(value: str) -> str:
+    """Format an ISO date without losing the stored value on bad input."""
+    try:
+        parsed = datetime.datetime.strptime(value, "%Y-%m-%d")
+        return parsed.strftime("%a, %d %b %Y").replace(" 0", " ")
+    except (TypeError, ValueError):
+        return value
+
+
+def _coverage(assigned: int, required: int):
+    """Return display text and badge class from real assignment counts."""
+    difference = assigned - required
+    if difference == 0:
+        return {"label": "Fully staffed", "badge": "success", "difference": 0}
+    if difference < 0:
+        return {"label": f"Gap {abs(difference)}", "badge": "warning",
+                "difference": difference}
+    return {"label": f"Overstaffed by {difference}", "badge": "info",
+            "difference": difference}
+
+
 def _format_timestamp(value):
     """Render a stored 'YYYY-MM-DD HH:MM:SS' timestamp for people.
 
@@ -134,7 +168,9 @@ def create_app() -> Flask:
     # Display helpers shared by the table and the drawer. Presentation only —
     # every API call still uses the real numeric primary key.
     app.jinja_env.globals["display_id"] = _display_id
+    app.jinja_env.globals["shift_display_id"] = _shift_display_id
     app.jinja_env.globals["initials"] = _initials
+    app.jinja_env.globals["date_long"] = _date_long
 
     # ---------------------------------------------------------- shared assets
     @app.get("/shared/<path:filename>")
@@ -201,6 +237,264 @@ def create_app() -> Flask:
             departments=departments, roles=roles, employments=employments,
             staff=None, error=None,
         )
+
+    # ------------------------------------------------------------ shift planner
+    @app.get("/shifts")
+    def shift_planner():
+        """Render the planner shell and real filter choices.
+
+        The operational list itself is loaded by one HTMX request so a backend
+        failure remains scoped to that region. The all-shifts request here is
+        used only to derive filter options; date-scoped data is never filtered
+        in browser JavaScript.
+        """
+        selected_date = request.args.get("date") or _today()
+        if not _valid_iso_date(selected_date):
+            selected_date = _today()
+
+        service_available = True
+        try:
+            records = api_client.list_shifts()["shifts"]
+            departments = sorted({row["department"] for row in records
+                                  if row.get("department")})
+            roles = sorted({row["required_role"] for row in records
+                            if row.get("required_role")})
+        except (BackendUnavailableError, BackendError):
+            departments, roles, service_available = [], [], False
+
+        return render_template(
+            "shift_planner.html", today=_today(), active="shifts",
+            selected_date=selected_date, departments=departments, roles=roles,
+            statuses=api_client.SHIFT_STATUSES,
+            service_available=service_available,
+        )
+
+    @app.get("/partials/shifts")
+    def shifts_partial():
+        selected_date = request.args.get("shift_date") or _today()
+        department = request.args.get("department") or None
+        required_role = request.args.get("required_role") or None
+        shift_status = request.args.get("shift_status") or None
+        filtered = bool(department or required_role or shift_status)
+
+        try:
+            shift_data = api_client.list_shifts(
+                shift_date=selected_date, department=department,
+                shift_status=shift_status)
+            coverage_data = api_client.get_coverage(
+                shift_date=selected_date, department=department,
+                shift_status=shift_status)
+        except (BackendUnavailableError, BackendError) as error:
+            return render_template(
+                "partials/shift_list.html", shifts=None, error=str(error),
+                filtered=filtered, selected_date=selected_date)
+
+        coverage_by_id = {row["shift_id"]: row for row in coverage_data["shifts"]}
+        shifts = []
+        for shift in shift_data["shifts"]:
+            if required_role and shift.get("required_role") != required_role:
+                continue
+            row = dict(shift)
+            counts = coverage_by_id.get(shift["shift_id"], {})
+            assigned = int(counts.get("assigned_staff_count", 0))
+            required = int(shift["required_staff_count"])
+            row["assigned_staff_count"] = assigned
+            row["coverage"] = _coverage(assigned, required)
+            shifts.append(row)
+
+        return render_template(
+            "partials/shift_list.html", shifts=shifts, error=None,
+            filtered=filtered, selected_date=selected_date)
+
+    def _render_shift_detail(shift_id, notice=None):
+        try:
+            shift = api_client.get_shift(shift_id)["shift"]
+        except NotFoundError:
+            return render_template("partials/shift_detail.html", shift=None,
+                                   not_found=True, error=None, notice=None)
+        except (BackendUnavailableError, BackendError) as error:
+            return render_template("partials/shift_detail.html", shift=None,
+                                   not_found=False, error=str(error), notice=None)
+
+        assignments, assignment_error = None, None
+        try:
+            records = api_client.list_shift_assignments(shift_id)["assignments"]
+            assignments = [row for row in records
+                           if row.get("assignment_status") not in _INACTIVE_ASSIGNMENT]
+        except (BackendUnavailableError, BackendError) as error:
+            assignment_error = str(error)
+
+        candidates, candidate_error = [], None
+        if assignments is None:
+            candidate_error = (
+                "Candidate assignment is unavailable until current assignments can be loaded.")
+        else:
+            try:
+                candidate_records = api_client.list_staff(
+                    role=shift["required_role"], availability_status="Available")["staff"]
+                active_ids = {row["staff_id"] for row in assignments}
+                candidates = [row for row in candidate_records
+                              if row["staff_id"] not in active_ids]
+                candidates.sort(key=lambda row: (
+                    row.get("department") != shift["department"], row.get("name", "")))
+            except (BackendUnavailableError, BackendError) as error:
+                candidate_error = str(error)
+
+        assigned_count = len(assignments) if assignments is not None else None
+        coverage = (_coverage(assigned_count, int(shift["required_staff_count"]))
+                    if assigned_count is not None else None)
+        return render_template(
+            "partials/shift_detail.html", shift=shift, not_found=False,
+            error=None, notice=notice, assignments=assignments,
+            assignment_error=assignment_error, candidates=candidates,
+            candidate_error=candidate_error, coverage=coverage,
+            assigned_count=assigned_count,
+        )
+
+    @app.get("/partials/shifts/<int:shift_id>")
+    def shift_detail_partial(shift_id: int):
+        return _render_shift_detail(shift_id)
+
+    def _shift_form_values(source):
+        return {
+            "department": (source.get("department") or "").strip(),
+            "shift_date": (source.get("shift_date") or "").strip(),
+            "start_time": (source.get("start_time") or "").strip(),
+            "end_time": (source.get("end_time") or "").strip(),
+            "required_role": (source.get("required_role") or "").strip(),
+            "required_staff_count": source.get("required_staff_count", 1),
+            "shift_status": (source.get("shift_status") or "Planned").strip(),
+            "notes": (source.get("notes") or "").strip(),
+        }
+
+    def _shift_payload(values):
+        try:
+            count = int(values["required_staff_count"])
+        except (TypeError, ValueError):
+            raise ValueError("Required staff count must be a whole number greater than zero.")
+        if count < 1:
+            raise ValueError("Required staff count must be greater than zero.")
+        return {**values, "required_staff_count": count,
+                "notes": values["notes"] or None}
+
+    def _render_shift_form(values, mode, shift_id=None, error=None):
+        return render_template(
+            "partials/shift_form.html", values=values, mode=mode,
+            shift_id=shift_id, statuses=api_client.SHIFT_STATUSES, error=error)
+
+    @app.get("/partials/shifts/new")
+    def new_shift_partial():
+        selected_date = request.args.get("shift_date") or _today()
+        if not _valid_iso_date(selected_date):
+            selected_date = _today()
+        return _render_shift_form({
+            "department": "", "shift_date": selected_date,
+            "start_time": "07:00", "end_time": "15:00",
+            "required_role": "", "required_staff_count": 1,
+            "shift_status": "Planned", "notes": "",
+        }, "create")
+
+    @app.get("/partials/shifts/<int:shift_id>/edit")
+    def edit_shift_partial(shift_id: int):
+        try:
+            values = _shift_form_values(api_client.get_shift(shift_id)["shift"])
+        except NotFoundError:
+            return render_template("partials/shift_detail.html", shift=None,
+                                   not_found=True, error=None, notice=None)
+        except (BackendUnavailableError, BackendError) as error:
+            return render_template("partials/shift_detail.html", shift=None,
+                                   not_found=False, error=str(error), notice=None)
+        return _render_shift_form(values, "edit", shift_id=shift_id)
+
+    @app.post("/partials/shifts")
+    def create_shift_partial():
+        values = _shift_form_values(request.form)
+        try:
+            payload = _shift_payload(values)
+            created = api_client.create_shift(payload)["shift"]
+        except ValueError as error:
+            return _render_shift_form(values, "create", error=str(error))
+        except (BackendUnavailableError, BackendError) as error:
+            return _render_shift_form(values, "create", error=str(error))
+
+        response = make_response(_render_shift_detail(
+            created["shift_id"], notice={"kind": "success", "text": "Shift created."}))
+        response.headers["HX-Trigger"] = "shifts-updated"
+        return response
+
+    @app.post("/partials/shifts/<int:shift_id>")
+    def update_shift_partial(shift_id: int):
+        values = _shift_form_values(request.form)
+        try:
+            api_client.update_shift(shift_id, _shift_payload(values))
+        except ValueError as error:
+            return _render_shift_form(values, "edit", shift_id=shift_id, error=str(error))
+        except NotFoundError:
+            return render_template("partials/shift_detail.html", shift=None,
+                                   not_found=True, error=None, notice=None)
+        except (BackendUnavailableError, BackendError) as error:
+            return _render_shift_form(values, "edit", shift_id=shift_id, error=str(error))
+
+        response = make_response(_render_shift_detail(
+            shift_id, notice={"kind": "success", "text": "Shift updated."}))
+        response.headers["HX-Trigger"] = "shifts-updated"
+        return response
+
+    @app.post("/partials/shifts/<int:shift_id>/delete")
+    def delete_shift_partial(shift_id: int):
+        try:
+            api_client.delete_shift(shift_id)
+        except NotFoundError:
+            return render_template("partials/shift_detail.html", shift=None,
+                                   not_found=True, error=None, notice=None)
+        except (BackendUnavailableError, BackendError) as error:
+            return _render_shift_detail(
+                shift_id, notice={"kind": "danger", "text": "Shift was not deleted. " + str(error)})
+
+        body = render_template("partials/shift_action_result.html",
+                               title="Shift deleted",
+                               message="The shift and its assignment records were permanently deleted.")
+        response = make_response(body)
+        response.headers["HX-Trigger"] = "shifts-updated"
+        return response
+
+    def _staff_id_from_form():
+        try:
+            return int(request.form.get("staff_id", ""))
+        except (TypeError, ValueError):
+            return None
+
+    @app.post("/partials/shifts/<int:shift_id>/assign")
+    def assign_shift_staff_partial(shift_id: int):
+        staff_id = _staff_id_from_form()
+        if staff_id is None:
+            return _render_shift_detail(
+                shift_id, notice={"kind": "danger", "text": "Select a valid staff member."})
+        try:
+            api_client.assign_staff(shift_id, staff_id)
+        except (BackendUnavailableError, BackendError) as error:
+            return _render_shift_detail(
+                shift_id, notice={"kind": "danger", "text": "Staff was not assigned. " + str(error)})
+        response = make_response(_render_shift_detail(
+            shift_id, notice={"kind": "success", "text": "Staff assigned to shift."}))
+        response.headers["HX-Trigger"] = "shifts-updated"
+        return response
+
+    @app.post("/partials/shifts/<int:shift_id>/unassign")
+    def unassign_shift_staff_partial(shift_id: int):
+        staff_id = _staff_id_from_form()
+        if staff_id is None:
+            return _render_shift_detail(
+                shift_id, notice={"kind": "danger", "text": "Select a valid staff member."})
+        try:
+            api_client.unassign_staff(shift_id, staff_id)
+        except (BackendUnavailableError, BackendError) as error:
+            return _render_shift_detail(
+                shift_id, notice={"kind": "danger", "text": "Staff was not unassigned. " + str(error)})
+        response = make_response(_render_shift_detail(
+            shift_id, notice={"kind": "success", "text": "Staff unassigned from shift."}))
+        response.headers["HX-Trigger"] = "shifts-updated"
+        return response
 
     @app.get("/partials/staff-table")
     def staff_table_partial():

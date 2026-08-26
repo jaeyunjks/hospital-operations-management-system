@@ -531,3 +531,316 @@ def test_staff_table_shows_display_id_and_initials(frontend_client, fe_api_clien
     assert "S-001" in body
     assert ">AO<" in body      # initials from the real name
     assert "Specialisation" in body
+
+
+# ---------------------------------------------------------- shift planner
+SHIFT_FIXTURE = {
+    "shift_id": 11, "department": "Emergency", "shift_date": "2026-08-27",
+    "start_time": "23:00", "end_time": "07:00",
+    "required_role": "Registered Nurse", "required_staff_count": 2,
+    "shift_status": "Planned", "notes": "Night shift.",
+}
+
+COVERAGE_FIXTURE = {
+    "filters": {},
+    "summary": {"total_shifts": 1, "fully_staffed": 0, "understaffed": 1,
+                "unstaffed": 0, "total_shortfall": 1},
+    "shifts": [{
+        "shift_id": 11, "department": "Emergency", "shift_date": "2026-08-27",
+        "start_time": "23:00", "end_time": "07:00",
+        "required_role": "Registered Nurse", "required_staff_count": 2,
+        "assigned_staff_count": 1, "shortfall": 1,
+        "coverage_status": "Understaffed",
+    }],
+}
+
+
+def _stub_shift_detail(monkeypatch, fe_api_client, assignments=None, candidates=None):
+    monkeypatch.setattr(fe_api_client, "get_shift", lambda shift_id: {"shift": SHIFT_FIXTURE})
+    monkeypatch.setattr(
+        fe_api_client, "list_shift_assignments",
+        lambda shift_id: {"count": len(assignments or []), "assignments": assignments or []})
+    monkeypatch.setattr(
+        fe_api_client, "list_staff",
+        lambda **kwargs: {"count": len(candidates or []), "staff": candidates or []})
+
+
+def test_shift_planner_shell_and_navigation(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_shifts",
+                        lambda **kwargs: {"count": 1, "shifts": [SHIFT_FIXTURE]})
+    body = frontend_client.get("/shifts?date=2026-08-27").data.decode()
+    assert "Shift planner" in body
+    assert 'aria-current="page">Shift planner' in body
+    assert "Emergency" in body and "Registered Nurse" in body
+    assert 'hx-trigger="load, shifts-updated from:body"' in body
+
+
+def test_shift_planner_shell_survives_backend_failure(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_shifts", _raise_unavailable)
+    response = frontend_client.get("/shifts")
+    body = response.data.decode()
+    assert response.status_code == 200
+    assert "Shift planner" in body
+    assert "Scheduling service unavailable" in body
+
+
+def test_shift_list_uses_backend_date_department_and_status_filters(
+        frontend_client, fe_api_client, monkeypatch):
+    called = {}
+
+    def fake_list(**kwargs):
+        called.update(kwargs)
+        return {"count": 1, "shifts": [SHIFT_FIXTURE]}
+
+    monkeypatch.setattr(fe_api_client, "list_shifts", fake_list)
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kwargs: COVERAGE_FIXTURE)
+    response = frontend_client.get(
+        "/partials/shifts?shift_date=2026-08-27&department=Emergency&shift_status=Planned")
+    assert response.status_code == 200
+    assert called == {"shift_date": "2026-08-27", "department": "Emergency",
+                      "shift_status": "Planned"}
+    assert "1 / 2" in response.data.decode()
+
+
+def test_shift_list_required_role_filter_is_server_side(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_shifts",
+                        lambda **kwargs: {"count": 1, "shifts": [SHIFT_FIXTURE]})
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kwargs: COVERAGE_FIXTURE)
+    body = frontend_client.get(
+        "/partials/shifts?shift_date=2026-08-27&required_role=Doctor").data.decode()
+    assert "No shifts match the current filters" in body
+    assert "Night shift." not in body
+
+
+def test_shift_list_distinguishes_no_shifts_and_no_filter_matches(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_shifts",
+                        lambda **kwargs: {"count": 0, "shifts": []})
+    monkeypatch.setattr(fe_api_client, "get_coverage",
+                        lambda **kwargs: {"summary": {}, "shifts": []})
+    empty = frontend_client.get("/partials/shifts?shift_date=2030-01-01").data.decode()
+    filtered = frontend_client.get(
+        "/partials/shifts?shift_date=2030-01-01&department=Emergency").data.decode()
+    assert "No shifts scheduled for this date." in empty
+    assert "No shifts match the current filters" in filtered
+
+
+def test_shift_list_coverage_derives_overstaffed_state(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_shifts",
+                        lambda **kwargs: {"count": 1, "shifts": [SHIFT_FIXTURE]})
+    coverage = {**COVERAGE_FIXTURE, "shifts": [
+        {**COVERAGE_FIXTURE["shifts"][0], "assigned_staff_count": 3, "shortfall": 0,
+         "coverage_status": "Overstaffed"}]}
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kwargs: coverage)
+    body = frontend_client.get("/partials/shifts?shift_date=2026-08-27").data.decode()
+    assert "3 / 2" in body
+    assert "Overstaffed by 1" in body
+
+
+def test_shift_list_backend_unavailable_is_isolated(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_shifts", _raise_unavailable)
+    body = frontend_client.get("/partials/shifts").data.decode()
+    assert "Shift planner unavailable" in body
+    assert UNAVAILABLE_MESSAGE_HTML in body
+
+
+def test_shift_list_database_unavailable_message_is_isolated(
+        frontend_client, fe_api_client, monkeypatch):
+    import api_client
+
+    def raise_database_error(**kwargs):
+        raise api_client.BackendError(
+            "Staff & Shift service returned 503: Database service unreachable")
+
+    monkeypatch.setattr(fe_api_client, "list_shifts", raise_database_error)
+    body = frontend_client.get("/partials/shifts").data.decode()
+    assert "Shift planner unavailable" in body
+    assert "Database service unreachable" in body
+
+
+def test_new_shift_form_uses_selected_date(frontend_client):
+    body = frontend_client.get(
+        "/partials/shifts/new?shift_date=2026-08-29").data.decode()
+    assert "Create shift" in body
+    assert 'value="2026-08-29"' in body
+    assert 'min="1"' in body
+
+
+def test_create_shift_success_emits_single_refresh_event(
+        frontend_client, fe_api_client, monkeypatch):
+    submitted = {}
+
+    def fake_create(payload):
+        submitted.update(payload)
+        return {"shift": SHIFT_FIXTURE}
+
+    monkeypatch.setattr(fe_api_client, "create_shift", fake_create)
+    _stub_shift_detail(monkeypatch, fe_api_client)
+    response = frontend_client.post("/partials/shifts", data={
+        "department": "Emergency", "shift_date": "2026-08-27",
+        "start_time": "23:00", "end_time": "07:00",
+        "required_role": "Registered Nurse", "required_staff_count": "2",
+        "shift_status": "Planned", "notes": "Night shift.",
+    })
+    assert response.status_code == 200
+    assert response.headers["HX-Trigger"] == "shifts-updated"
+    assert submitted["required_staff_count"] == 2
+    assert "Shift created." in response.data.decode()
+
+
+def test_create_shift_validation_preserves_values(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(
+        fe_api_client, "create_shift",
+        lambda payload: (_ for _ in ()).throw(AssertionError("must not be called")))
+    body = frontend_client.post("/partials/shifts", data={
+        "department": "Emergency", "shift_date": "2026-08-27",
+        "start_time": "23:00", "end_time": "07:00",
+        "required_role": "Registered Nurse", "required_staff_count": "0",
+        "shift_status": "Planned", "notes": "Keep this note",
+    }).data.decode()
+    assert "greater than zero" in body
+    assert "Keep this note" in body
+
+
+def test_create_shift_surfaces_backend_validation(
+        frontend_client, fe_api_client, monkeypatch):
+    import api_client
+    monkeypatch.setattr(
+        fe_api_client, "create_shift",
+        lambda payload: (_ for _ in ()).throw(
+            api_client.BackendError("start_time and end_time must differ")))
+    body = frontend_client.post("/partials/shifts", data={
+        "department": "Emergency", "shift_date": "2026-08-27",
+        "start_time": "07:00", "end_time": "07:00",
+        "required_role": "Registered Nurse", "required_staff_count": "2",
+        "shift_status": "Planned",
+    }).data.decode()
+    assert "Shift was not saved" in body
+    assert "must differ" in body
+
+
+def test_edit_shift_form_and_update(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_shift", lambda sid: {"shift": SHIFT_FIXTURE})
+    form = frontend_client.get("/partials/shifts/11/edit").data.decode()
+    assert "Edit shift" in form and "Night shift." in form
+
+    updated = {}
+    monkeypatch.setattr(fe_api_client, "update_shift",
+                        lambda sid, payload: updated.update(payload) or {"shift": SHIFT_FIXTURE})
+    _stub_shift_detail(monkeypatch, fe_api_client)
+    response = frontend_client.post("/partials/shifts/11", data={
+        "department": "Emergency", "shift_date": "2026-08-27",
+        "start_time": "22:00", "end_time": "06:00",
+        "required_role": "Registered Nurse", "required_staff_count": "3",
+        "shift_status": "Open", "notes": "Updated",
+    })
+    assert response.headers["HX-Trigger"] == "shifts-updated"
+    assert updated["required_staff_count"] == 3 and updated["shift_status"] == "Open"
+    assert "Shift updated." in response.data.decode()
+
+
+def test_delete_shift_uses_hard_delete_and_refreshes(
+        frontend_client, fe_api_client, monkeypatch):
+    deleted = []
+    monkeypatch.setattr(fe_api_client, "delete_shift",
+                        lambda sid: deleted.append(sid) or {"message": "deleted"})
+    response = frontend_client.post("/partials/shifts/11/delete")
+    assert deleted == [11]
+    assert response.headers["HX-Trigger"] == "shifts-updated"
+    assert "permanently deleted" in response.data.decode()
+
+
+def test_shift_detail_lists_active_assignments_and_candidates(
+        frontend_client, fe_api_client, monkeypatch):
+    assignments = [
+        {"staff_id": 1, "name": "Amara Okafor", "role": "Registered Nurse",
+         "department": "Emergency", "assignment_status": "Assigned"},
+        {"staff_id": 12, "name": "Chloe Bennett", "role": "Registered Nurse",
+         "department": "Intensive Care", "assignment_status": "Cancelled"},
+    ]
+    candidates = [
+        {"staff_id": 1, "name": "Amara Okafor", "role": "Registered Nurse",
+         "department": "Emergency", "availability_status": "Available",
+         "specialisation": "Triage"},
+        {"staff_id": 12, "name": "Chloe Bennett", "role": "Registered Nurse",
+         "department": "Intensive Care", "availability_status": "Available",
+         "specialisation": "Critical Care"},
+    ]
+    _stub_shift_detail(monkeypatch, fe_api_client, assignments, candidates)
+    body = frontend_client.get("/partials/shifts/11").data.decode()
+    assert "Amara Okafor" in body
+    assert "Gap 1" in body
+    assert "Chloe Bennett" in body
+    assert "deterministic filtering, not an AI recommendation" in body
+
+
+def test_shift_detail_not_found_state(frontend_client, fe_api_client, monkeypatch):
+    import api_client
+    monkeypatch.setattr(
+        fe_api_client, "get_shift",
+        lambda sid: (_ for _ in ()).throw(api_client.NotFoundError("missing")))
+    body = frontend_client.get("/partials/shifts/999").data.decode()
+    assert "Shift not found" in body
+
+
+def test_shift_detail_suppresses_candidates_when_assignments_unavailable(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_shift", lambda sid: {"shift": SHIFT_FIXTURE})
+    monkeypatch.setattr(fe_api_client, "list_shift_assignments", _raise_unavailable)
+    monkeypatch.setattr(
+        fe_api_client, "list_staff",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("must not be called")))
+    body = frontend_client.get("/partials/shifts/11").data.decode()
+    assert "Assignment data is unavailable" in body
+    assert "until current assignments can be loaded" in body
+
+
+def test_assign_staff_success_and_duplicate_failure(
+        frontend_client, fe_api_client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(fe_api_client, "assign_staff",
+                        lambda sid, staff_id: calls.append((sid, staff_id)) or {})
+    _stub_shift_detail(monkeypatch, fe_api_client)
+    response = frontend_client.post("/partials/shifts/11/assign", data={"staff_id": "12"})
+    assert calls == [(11, 12)]
+    assert response.headers["HX-Trigger"] == "shifts-updated"
+    assert "Staff assigned to shift." in response.data.decode()
+
+    import api_client
+    monkeypatch.setattr(
+        fe_api_client, "assign_staff",
+        lambda sid, staff_id: (_ for _ in ()).throw(
+            api_client.BackendError("Staff 12 is already assigned to shift 11.")))
+    duplicate = frontend_client.post(
+        "/partials/shifts/11/assign", data={"staff_id": "12"}).data.decode()
+    assert "Staff was not assigned" in duplicate
+    assert "already assigned" in duplicate
+
+
+def test_assign_rejects_invalid_staff_id_without_api_call(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(
+        fe_api_client, "assign_staff",
+        lambda *args: (_ for _ in ()).throw(AssertionError("must not be called")))
+    _stub_shift_detail(monkeypatch, fe_api_client)
+    body = frontend_client.post(
+        "/partials/shifts/11/assign", data={"staff_id": "not-a-number"}).data.decode()
+    assert "Select a valid staff member" in body
+
+
+def test_unassign_staff_success_refreshes_coverage(
+        frontend_client, fe_api_client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(fe_api_client, "unassign_staff",
+                        lambda sid, staff_id: calls.append((sid, staff_id)) or {})
+    _stub_shift_detail(monkeypatch, fe_api_client)
+    response = frontend_client.post(
+        "/partials/shifts/11/unassign", data={"staff_id": "1"})
+    assert calls == [(11, 1)]
+    assert response.headers["HX-Trigger"] == "shifts-updated"
+    assert "Staff unassigned from shift." in response.data.decode()

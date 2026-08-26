@@ -90,10 +90,61 @@ def get_health() -> Dict[str, Any]:
 
 
 def get_coverage(shift_date: Optional[str] = None,
-                  department: Optional[str] = None) -> Dict[str, Any]:
+                  department: Optional[str] = None,
+                  shift_status: Optional[str] = None) -> Dict[str, Any]:
     """GET /api/shifts/coverage — required vs assigned staffing per shift."""
     return _request("GET", "/api/shifts/coverage",
-                     params={"shift_date": shift_date, "department": department})
+                     params={"shift_date": shift_date, "department": department,
+                             "shift_status": shift_status})
+
+
+def list_shifts(department: Optional[str] = None,
+                shift_date: Optional[str] = None,
+                shift_status: Optional[str] = None) -> Dict[str, Any]:
+    """GET /api/shifts — shifts, optionally filtered by the real API."""
+    return _request("GET", "/api/shifts",
+                     params={"department": department, "shift_date": shift_date,
+                             "shift_status": shift_status})
+
+
+def get_shift(shift_id: int) -> Dict[str, Any]:
+    """GET /api/shifts/<id> — one shift."""
+    return _request("GET", f"/api/shifts/{shift_id}")
+
+
+def create_shift(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """POST /api/shifts — create through the backend service boundary."""
+    return _request("POST", "/api/shifts", payload=payload)
+
+
+def update_shift(shift_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """PUT /api/shifts/<id> — apply the backend's validated update contract."""
+    return _request("PUT", f"/api/shifts/{shift_id}", payload=payload)
+
+
+def delete_shift(shift_id: int) -> Dict[str, Any]:
+    """DELETE /api/shifts/<id> — permanently delete a shift."""
+    return _request("DELETE", f"/api/shifts/{shift_id}")
+
+
+def list_shift_assignments(shift_id: int) -> Dict[str, Any]:
+    """GET /api/shifts/<id>/assignments — assignment rows plus staff detail."""
+    return _request("GET", f"/api/shifts/{shift_id}/assignments")
+
+
+def assign_staff(shift_id: int, staff_id: int,
+                 approved_by: Optional[str] = None) -> Dict[str, Any]:
+    """POST /api/shifts/<id>/assign — assign a real numeric staff ID."""
+    payload: Dict[str, Any] = {"staff_id": staff_id}
+    if approved_by:
+        payload["approved_by"] = approved_by
+    return _request("POST", f"/api/shifts/{shift_id}/assign", payload=payload)
+
+
+def unassign_staff(shift_id: int, staff_id: int) -> Dict[str, Any]:
+    """PUT /api/shifts/<id>/unassign — cancel the existing assignment."""
+    return _request("PUT", f"/api/shifts/{shift_id}/unassign",
+                     payload={"staff_id": staff_id})
 
 
 def list_staff(availability_status: Optional[str] = None,
@@ -149,6 +200,7 @@ def search_staff(query: Optional[str] = None,
 #: CHECK constraint on staff.availability_status.
 AVAILABILITY_STATUSES = ("Available", "Unavailable", "On Leave")
 EMPLOYMENT_STATUSES = ("Full-Time", "Part-Time", "Casual", "Contract")
+SHIFT_STATUSES = ("Planned", "Open", "Filled", "Completed", "Cancelled")
 
 
 def get_coverage_summary(shift_date: Optional[str] = None,
