@@ -1,9 +1,8 @@
-{# Rendered ONLY by GET /partials/kpis. hx-swap="outerHTML" on the caller
-   replaces the whole placeholder with this div, so this root element must
-   carry its own hx-get/hx-swap for future refreshes — but hx-trigger must
-   NOT include "load": this response is itself the result of a load, and
-   re-arming "load" on a freshly-inserted element would fire immediately,
-   creating an infinite self-refresh loop (see workforce_overview.html). #}
+{#- Rendered ONLY by GET /partials/kpis. The caller swaps this in via
+    hx-swap="outerHTML", so this root element must carry its own hx-get for
+    later refreshes — but hx-trigger must NEVER include "load": this response
+    IS the result of a load, and re-arming "load" on freshly-inserted content
+    fires immediately, producing an infinite self-refresh loop. -#}
 {% if error %}
 <div id="kpi-row" hx-get="/partials/kpis" hx-trigger="refresh-workforce from:body"
      hx-swap="outerHTML" hx-indicator="#loading-indicator">
@@ -16,23 +15,28 @@
 </div>
 
 {% else %}
-<div id="kpi-row" class="stat-row" hx-get="/partials/kpis" hx-trigger="refresh-workforce from:body"
+<div id="kpi-row" class="kpi-grid" hx-get="/partials/kpis"
+     hx-trigger="refresh-workforce from:body"
      hx-swap="outerHTML" hx-indicator="#loading-indicator">
 
-  <div class="stat">
-    <span class="stat__label">Coverage today</span>
-    <span class="stat__value{% if kpis.coverage_pct is not none and kpis.coverage_pct < 100 %} stat__value--warning{% endif %}" data-numeric>
-      {{ (kpis.coverage_pct ~ '%') if kpis.coverage_pct is not none else '—' }}
-    </span>
-    <span class="stat__meta">
-      {% if kpis.coverage_pct is none %}No shifts scheduled today{% else %}Assigned vs required headcount{% endif %}
+  <div class="kpi">
+    <span class="kpi__label">Coverage today</span>
+    <span class="kpi__value{% if kpis.coverage_pct is not none and kpis.coverage_pct < 100 %} kpi__value--warning{% endif %}"
+          data-numeric>{{ (kpis.coverage_pct ~ '%') if kpis.coverage_pct is not none else '—' }}</span>
+    <span class="kpi__sub">
+      {%- if kpis.coverage_pct is none -%}
+        No shifts scheduled today
+      {%- else -%}
+        Assigned vs required headcount
+      {%- endif -%}
     </span>
   </div>
 
-  <div class="stat">
-    <span class="stat__label">Unfilled positions</span>
-    <span class="stat__value{% if kpis.gap > 0 %} stat__value--danger{% endif %}" data-numeric>{{ kpis.gap }}</span>
-    <span class="stat__meta">
+  <div class="kpi">
+    <span class="kpi__label">Unfilled positions</span>
+    <span class="kpi__value{% if kpis.gap > 0 %} kpi__value--danger{% endif %}"
+          data-numeric>{{ kpis.gap }}</span>
+    <span class="kpi__sub">
       {% if kpis.gap > 0 %}
       <span class="status status--danger"><span class="status__dot"></span>Action required</span>
       {% else %}
@@ -41,22 +45,22 @@
     </span>
   </div>
 
-  <div class="stat">
-    <span class="stat__label">Total roster</span>
-    <span class="stat__value" data-numeric>{{ kpis.roster_total }}</span>
-    <span class="stat__meta">All staff on record</span>
+  <div class="kpi">
+    <span class="kpi__label">Total roster</span>
+    <span class="kpi__value" data-numeric>{{ kpis.roster_total }}</span>
+    <span class="kpi__sub">Staff records held by this service</span>
   </div>
 
-  <div class="stat">
-    <span class="stat__label">Available now</span>
-    <span class="stat__value" data-numeric>{{ kpis.available_count }}</span>
-    <span class="stat__meta">By availability status</span>
+  <div class="kpi">
+    <span class="kpi__label">Available now</span>
+    <span class="kpi__value" data-numeric>{{ kpis.available_count }}</span>
+    <span class="kpi__sub">Marked available in the roster</span>
   </div>
 
-  <div class="stat">
-    <span class="stat__label">Shifts today</span>
-    <span class="stat__value" data-numeric>{{ kpis.shifts_today }}</span>
-    <span class="stat__meta">Scheduled for {{ today }}</span>
+  <div class="kpi">
+    <span class="kpi__label">Shifts today</span>
+    <span class="kpi__value" data-numeric>{{ kpis.shifts_today }}</span>
+    <span class="kpi__sub">Scheduled for {{ today }}</span>
   </div>
 
 </div>

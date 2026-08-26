@@ -1,6 +1,6 @@
-{# Rendered ONLY by GET /partials/summary, swapped into the PERSISTENT
-   #summary-panel div via hx-swap="innerHTML". No hx-* attributes here —
-   see demand.html for why. #}
+{#- Rendered ONLY by GET /partials/summary, swapped into the PERSISTENT
+    #summary-panel wrapper via hx-swap="innerHTML". No hx-* attributes here —
+    see demand.html for why. -#}
 {% if error %}
 <div class="alert alert--danger" role="alert">
   <div>
@@ -10,20 +10,20 @@
 </div>
 
 {% else %}
-<p class="u-strong">{{ summary.headline }}</p>
+<div class="stack stack--sm">
+  <p class="u-strong">{{ summary.headline }}</p>
 
-{% if summary.gaps %}
-<ul role="list" class="stack stack--sm" style="margin-top: var(--space-4);">
-  {% for gap in summary.gaps %}
-  <li class="row row--between">
-    <span>{{ gap.department }} · {{ gap.required_role }}</span>
-    <span class="badge-warning">Short {{ gap.shortfall }}</span>
-  </li>
-  {% endfor %}
-</ul>
-{% endif %}
+  {% if summary.gaps %}
+  <ul role="list" class="stack stack--sm">
+    {% for gap in summary.gaps %}
+    <li class="row row--between">
+      <span>{{ gap.department }} · {{ gap.required_role }}</span>
+      <span class="badge-warning">Short {{ gap.shortfall }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
 
-<p class="u-label" style="margin-top: var(--space-4);">
-  Rule-based summary — not AI-generated
-</p>
+  <p class="u-label">Rule-based summary — not AI-generated</p>
+</div>
 {% endif %}

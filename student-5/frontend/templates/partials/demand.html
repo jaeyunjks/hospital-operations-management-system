@@ -1,8 +1,7 @@
-{# Rendered ONLY by GET /partials/demand, swapped into the PERSISTENT
-   #demand-panel div via hx-swap="innerHTML" (see workforce_overview.html).
-   This fragment carries NO hx-* attributes of its own — the wrapper div
-   already owns "load, refresh-workforce from:body" for its whole lifetime,
-   and never being replaced, it cannot be re-triggered by its own content. #}
+{#- Rendered ONLY by GET /partials/demand, swapped into the PERSISTENT
+    #demand-panel wrapper via hx-swap="innerHTML". This fragment carries NO
+    hx-* attributes: the wrapper already owns its triggers for the page
+    lifetime and, never being replaced, cannot be re-armed by its content. -#}
 {% if error %}
 <div class="alert alert--danger" role="alert">
   <div>
@@ -11,10 +10,17 @@
   </div>
 </div>
 
+{% elif shifts|length == 0 %}
+<div class="empty">
+  <p class="empty__title">No shifts scheduled for {{ today }}</p>
+  <p class="empty__body">Shifts added to today's roster will appear here.</p>
+</div>
+
 {% else %}
 
   {% if top_gap %}
-  <div class="alert alert--{{ 'danger' if top_gap.coverage_status == 'Unstaffed' else 'warning' }}" role="alert">
+  <div class="alert alert--{{ 'danger' if top_gap.coverage_status == 'Unstaffed' else 'warning' }}"
+       role="alert" style="margin-bottom: var(--space-5);">
     <div>
       <p class="alert__title">{{ top_gap.department }} needs attention</p>
       <p class="alert__body">
@@ -23,8 +29,8 @@
       </p>
     </div>
   </div>
-  {% elif shifts|length > 0 %}
-  <div class="alert alert--success" role="status">
+  {% else %}
+  <div class="alert alert--success" role="status" style="margin-bottom: var(--space-5);">
     <div>
       <p class="alert__title">No staffing gaps today</p>
       <p class="alert__body">All scheduled shifts meet their required headcount.</p>
@@ -32,21 +38,19 @@
   </div>
   {% endif %}
 
-  {% if shifts|length == 0 %}
-  <div class="empty">
-    <p class="empty__title">No shifts scheduled for {{ today }}</p>
-    <p class="empty__body">Shifts added to today's roster will appear here.</p>
-  </div>
-
-  {% else %}
   <div class="table-wrap">
     <table class="table table--zebra">
+      <caption class="visually-hidden">
+        Staffing coverage per shift for {{ today }}
+      </caption>
       <thead>
+        {#- Department and required role are stacked in one cell, matching the
+            mockup's hierarchy and keeping the table inside its panel without
+            horizontal scrolling at common desktop widths. -#}
         <tr>
           <th scope="col">Department</th>
-          <th scope="col">Role</th>
-          <th scope="col">Time</th>
-          <th scope="col">Coverage</th>
+          <th scope="col">Shift</th>
+          <th scope="col">Assigned</th>
           <th scope="col">Status</th>
         </tr>
       </thead>
@@ -59,27 +63,24 @@
                     else 'info' if row.coverage_status == 'Overstaffed'
                     else 'warning' %}
         <tr>
-          <td class="table__name">{{ row.department }}</td>
-          <td class="table__muted">{{ row.required_role }}</td>
+          <td>
+            <span class="demand-dept">{{ row.department }}</span>
+            <span class="demand-role">{{ row.required_role }}</span>
+          </td>
           <td><span class="shift-time">{{ row.start_time }}–{{ row.end_time }}</span></td>
           <td>
             <div class="coverage-cell">
-              <span class="coverage-cell__figure">
-                {{ row.assigned_staff_count }} / {{ row.required_staff_count }}
-              </span>
+              <span class="coverage-cell__figure">{{ row.assigned_staff_count }} / {{ row.required_staff_count }}</span>
               <div class="meter meter--{{ variant }}">
                 <div class="meter__fill" style="width:{{ pct | round | int }}%"></div>
               </div>
             </div>
           </td>
-          <td>
-            <span class="badge-{{ variant }}">{{ row.coverage_status }}</span>
-          </td>
+          <td><span class="badge-{{ variant }}">{{ row.coverage_status }}</span></td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  {% endif %}
 
 {% endif %}

@@ -38,7 +38,16 @@ SHARED_FRONTEND_DIR = BASE_DIR.parents[1] / "shared" / "frontend"
 
 
 def _today() -> str:
+    """ISO date — used for API filters and machine-readable display."""
     return datetime.date.today().isoformat()
+
+
+def _today_long() -> str:
+    """Human-readable date for the page header (e.g. "Wed, 26 Aug 2026")."""
+    # %-d is POSIX-only but this service targets Linux/macOS containers;
+    # lstrip keeps it correct without relying on the platform extension.
+    today = datetime.date.today()
+    return today.strftime("%a, %d %b %Y").replace(" 0", " ")
 
 
 def create_app() -> Flask:
@@ -92,7 +101,7 @@ def create_app() -> Flask:
         or Undefined value on first paint.
         """
         return render_template(
-            "workforce_overview.html", today=_today(),
+            "workforce_overview.html", today=_today(), today_long=_today_long(),
             kpis=None, shifts=None, top_gap=None, summary=None, error=None,
         )
 

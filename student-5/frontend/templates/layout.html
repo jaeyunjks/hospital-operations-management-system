@@ -15,78 +15,79 @@
   <!-- Feature-local styles only. -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/feature.css') }}">
 
-  <!-- HTMX: primary interaction mechanism for this page (see README). -->
+  <!-- HTMX: primary interaction mechanism for this page. -->
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to main content</a>
 
-  <div class="app">
-    <header class="app-header">
-      <a class="app-header__brand" href="/">
+  <div class="shell">
+
+    <!-- ==================================================== top navigation -->
+    <header class="topnav">
+      <a class="topnav__brand" href="/">
         HOMS
-        <span class="app-header__context">Staff &amp; Shift</span>
+        <span class="topnav__brand-sub">Hospital Operations</span>
       </a>
 
-      <nav class="app-header__nav" aria-label="Primary">
-        <a class="nav-link" href="/" aria-current="page">Workforce overview</a>
+      <nav class="topnav__links" aria-label="Staff and shift sections">
+        <a class="topnav__link" href="/" aria-current="page">Workforce overview</a>
+
+        {#- Unimplemented sections are plain text, not links or buttons: they
+            must not be focusable or appear actionable. aria-disabled marks
+            the state for assistive technology. -#}
+        {% for section in ["Staff directory", "Shift planner", "AI recommendations", "Reports"] %}
+        <span class="topnav__link--pending" aria-disabled="true">
+          {{ section }}<span class="topnav__soon">Soon</span>
+        </span>
+        {% endfor %}
       </nav>
 
-      <div class="app-header__actions">
-        <span class="status status--success">
-          <span class="status__dot"></span>
-          <span>Service running</span>
-        </span>
-
-        <label class="visually-hidden" for="role-select">Active role</label>
-        <select class="role-select" id="role-select">
-          <option>Nurse Unit Manager</option>
-          <option>Operations Manager</option>
-          <option>Read-only</option>
-        </select>
-
-        <div class="user-chip">
-          <span class="avatar avatar--inverse" aria-hidden="true">NW</span>
-          <span class="user-chip__identity">
-            <span class="user-chip__name">N. Whitfield</span>
-            <span class="user-chip__role">Nurse Unit Manager</span>
-          </span>
-        </div>
+      <div class="topnav__end">
+        <span id="loading-indicator" class="htmx-indicator u-label">Updating…</span>
       </div>
     </header>
 
-    <div class="app-body">
-      <nav class="app-sidenav" aria-label="Staff and shift sections">
-        <div class="app-sidenav__group">
-          <p class="app-sidenav__label">Workforce</p>
-          <a class="sidenav-link" href="/" aria-current="page">Workforce overview</a>
-          <span class="sidenav-link" aria-disabled="true">
-            Staff directory <span class="u-label">Soon</span>
-          </span>
-          <span class="sidenav-link" aria-disabled="true">
-            Shift planner <span class="u-label">Soon</span>
-          </span>
-        </div>
-        <div class="app-sidenav__group">
-          <p class="app-sidenav__label">Advisory</p>
-          <span class="sidenav-link" aria-disabled="true">
-            AI recommendations <span class="u-label">Soon</span>
-          </span>
-        </div>
-        <div class="app-sidenav__group">
-          <p class="app-sidenav__label">Analysis</p>
-          <span class="sidenav-link" aria-disabled="true">
-            Reports <span class="u-label">Soon</span>
-          </span>
-        </div>
-      </nav>
+    <!-- ================================================ role / status bar -->
+    <div class="contextbar">
+      <div class="contextbar__item">
+        <span class="contextbar__label">Role</span>
+        <span class="contextbar__value">Staff Manager</span>
+      </div>
 
-      <main class="app-main" id="main">
-        <div class="page">
-          {% block content %}{% endblock %}
-        </div>
-      </main>
+      <div class="contextbar__item">
+        <span class="contextbar__label">Scope</span>
+        {#- Honest: the service is queried with no department filter, so the
+            scope genuinely is every department this service returns. -#}
+        <span class="contextbar__value">All departments</span>
+      </div>
+
+      <div class="contextbar__end">
+        <span class="status status--success">
+          <span class="status__dot"></span>
+          <span>Scheduling service operational</span>
+        </span>
+        <span class="contextbar__date">{{ today }}</span>
+      </div>
     </div>
+
+    <!-- =================================================== HR-Core strip -->
+    <div class="syncstrip">
+      <span class="syncstrip__label">HR-Core</span>
+      <p class="syncstrip__body">
+        Employee reference data originates from the external HR system and is
+        read-only in HOMS. Live HR integration is not implemented for
+        Release&nbsp;0 — employee reference information is represented locally.
+        No payroll or HR fields are imported.
+      </p>
+    </div>
+
+    <main class="shell__main" id="main">
+      <div class="shell__page">
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+
   </div>
 </body>
 </html>
