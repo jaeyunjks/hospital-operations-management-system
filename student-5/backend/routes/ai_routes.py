@@ -56,6 +56,16 @@ def coverage_summary():
     if shift_date:
         validate_date(shift_date)
 
+    # Narration is OPT-IN, and defaults off. The deterministic summary is
+    # fetched on every Workforce Overview page view; making the model call
+    # implicit would put an LLM round trip behind a landing page nobody asked
+    # to wait for.
+    narrate = payload.get("narrate", False)
+    if not isinstance(narrate, bool):
+        raise ValidationError("'narrate' must be true or false.",
+                              {"field": "narrate", "received": narrate})
+
     return jsonify(ai_service.coverage_summary(
-        department=payload.get("department"), shift_date=shift_date
+        department=payload.get("department"), shift_date=shift_date,
+        narrate=narrate,
     ))

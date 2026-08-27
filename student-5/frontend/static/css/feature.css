@@ -1932,6 +1932,19 @@
   list-style: none;
 }
 
+/* Ranked priorities under an AI narrative. Numbered because the order is the
+   point — the model was asked for most-urgent-first. */
+.summary-priorities {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-5);
+  font-size: var(--size-ui-xs);
+  line-height: var(--leading-ui);
+  color: var(--color-text-muted);
+}
+
 .recommendation__meta {
   font-size: var(--size-ui-xs);
   line-height: var(--leading-ui);

@@ -267,13 +267,55 @@ def test_demand_partial_unavailable(frontend_client, fe_api_client, monkeypatch)
 
 
 # ----------------------------------------------------------------- summary
+def _today_iso():
+    return datetime.date.today().isoformat()
+
+
+HEADLINE = "1 of 1 shift(s) are short by 2 staff member(s) in total."
+GAPS = [{"department": "Radiology", "required_role": "Radiographer",
+         "shortfall": 2}]
+
+
+def _summary_result(mode="rule-based", narrative=None, priorities=None,
+                    fallback_reason="not_requested", note=None):
+    """A coverage-summary response in the shape the backend returns.
+
+    The deterministic fields are present whatever the mode, because the
+    backend returns them whatever the model does.
+    """
+    return {
+        "ai_enabled": mode == "ai",
+        "mode": mode,
+        "note": note or ("Deterministic summary. AI narration was not "
+                         "requested."),
+        "generation": {"source": "ollama" if mode == "ai" else "deterministic",
+                       "model": "llama3", "fallback_reason": fallback_reason},
+        "headline": HEADLINE,
+        "summary": {"total_shifts": 1, "total_shortfall": 2, "coverage_pct": 33},
+        "gaps": GAPS,
+        "narrative": narrative,
+        "priorities": priorities or [],
+        "context": {"task": "summarise_staffing_coverage", "model": "llama3"},
+    }
+
+
+def _stub_summary(monkeypatch, fe_api_client, result=None, error=None):
+    """Stub the API client call and record how it was asked."""
+    calls = []
+
+    def _get(shift_date=None, department=None, narrate=False):
+        calls.append({"shift_date": shift_date, "department": department,
+                      "narrate": narrate})
+        if error is not None:
+            raise error
+        return result if result is not None else _summary_result()
+
+    monkeypatch.setattr(fe_api_client, "get_coverage_summary", _get)
+    return calls
+
+
 def test_summary_partial_renders_headline(frontend_client, fe_api_client, monkeypatch):
-    monkeypatch.setattr(fe_api_client, "get_coverage_summary",
-                        lambda shift_date=None, department=None: {
-                            "headline": "1 of 1 shift(s) are short by 2 staff member(s) in total.",
-                            "gaps": [{"department": "Radiology", "required_role": "Radiographer",
-                                      "shortfall": 2}],
-                        })
+    _stub_summary(monkeypatch, fe_api_client)
 
     response = frontend_client.get("/partials/summary")
     body = response.data.decode()
@@ -3867,3 +3909,363 @@ def test_panel_container_announces_changes(
     body = frontend_client.get("/partials/shifts/11").data.decode()
     assert 'id="drawer-suggestions" aria-live="polite"' in body
     assert 'aria-controls="drawer-suggestions"' in body
+
+
+# ==========================================================================
+# Coverage Summary — AI narration in the Workforce Overview (Phase B)
+# ==========================================================================
+# The panel renders the backend's figures and its stated provenance. It
+# narrates nothing itself, and it never puts a model call in front of a page
+# load. The narration and number validation are proved in
+# test_backend_coverage_summary.py.
+
+AI_NARRATIVE = ("Emergency and Surgery both carry shortages. Surgery has "
+                "nobody assigned at all.")
+AI_PRIORITIES = ["Surgery shift has nobody assigned",
+                 "Emergency night cover still short"]
+
+
+def _ai_summary(**kwargs):
+    return _summary_result(mode="ai", narrative=AI_NARRATIVE,
+                           priorities=AI_PRIORITIES, fallback_reason=None,
+                           note="Narrated by the local model from the "
+                                "roster's own figures.", **kwargs)
+
+
+# ------------------------------------------------------- explicit trigger
+def test_page_load_summary_does_not_request_narration(
+        frontend_client, fe_api_client, monkeypatch):
+    """The overview loads on every visit; an LLM must not sit in front of it."""
+    calls = _stub_summary(monkeypatch, fe_api_client)
+    frontend_client.get("/partials/summary")
+    assert calls == [{"shift_date": _today_iso(), "department": None,
+                      "narrate": False}]
+
+
+def test_summary_offers_an_explicit_generate_action(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_summary(monkeypatch, fe_api_client)
+    body = frontend_client.get("/partials/summary?date=2026-08-24").data.decode()
+    assert "Generate AI summary" in body
+    assert 'hx-get="/partials/summary/ai?date=2026-08-24"' in body
+    assert 'hx-target="#summary-panel"' in body
+
+
+def test_the_ai_route_is_the_only_one_that_requests_narration(
+        frontend_client, fe_api_client, monkeypatch):
+    calls = _stub_summary(monkeypatch, fe_api_client, _ai_summary())
+    frontend_client.get("/partials/summary/ai?date=2026-08-24")
+    assert calls == [{"shift_date": "2026-08-24", "department": None,
+                      "narrate": True}]
+
+
+def test_narration_goes_through_the_api_client_not_the_browser(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_summary(monkeypatch, fe_api_client, _ai_summary())
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert "/api/" not in body
+    assert "coverage-summary" not in body
+
+
+# ------------------------------------------------------------ AI rendering
+def test_ai_narrative_and_priorities_render(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_summary(monkeypatch, fe_api_client, _ai_summary())
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert AI_NARRATIVE in body
+    for priority in AI_PRIORITIES:
+        assert priority in body
+    assert "summary-priorities" in body
+
+
+def test_ai_result_is_labelled_as_ai_assisted(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_summary(monkeypatch, fe_api_client, _ai_summary())
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert "ai-label" in body
+    assert "AI-assisted" in body
+    assert "ai-panel--plain" not in body
+
+
+def test_ai_result_keeps_the_deterministic_figures_alongside(
+        frontend_client, fe_api_client, monkeypatch):
+    """The narrative is commentary; the numbers stay the authoritative answer."""
+    _stub_summary(monkeypatch, fe_api_client, _ai_summary())
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert "short by 2 staff member" in body
+    assert "Radiology" in body
+    assert "Short 2" in body
+
+
+def test_ai_result_drops_the_rule_based_label(
+        frontend_client, fe_api_client, monkeypatch):
+    """That label would now be untrue of the panel it sits under."""
+    _stub_summary(monkeypatch, fe_api_client, _ai_summary())
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert "Rule-based summary" not in body
+
+
+def test_missing_priorities_render_no_empty_list(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_summary(monkeypatch, fe_api_client, _summary_result(
+        mode="ai", narrative=AI_NARRATIVE, priorities=[], fallback_reason=None))
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert AI_NARRATIVE in body
+    assert "summary-priorities" not in body
+
+
+# --------------------------------------------------------------- fallback
+def test_fallback_is_not_presented_as_ai(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_summary(monkeypatch, fe_api_client, _summary_result(
+        fallback_reason="model_unavailable",
+        note="Deterministic summary. The summarisation model could not be reached."))
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert "ai-label" not in body
+    assert "AI-assisted" not in body
+    assert "ai-panel--plain" in body
+    assert "Standard summary" in body
+
+
+def test_fallback_shows_the_backend_note(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_summary(monkeypatch, fe_api_client, _summary_result(
+        fallback_reason="unsupported_numbers",
+        note="Deterministic summary. The generated narrative contained "
+             "staffing figures the roster does not support, so it was discarded."))
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert "does not support" in body
+    assert "Rule-based summary" in body
+
+
+def test_fallback_still_shows_the_deterministic_figures(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_summary(monkeypatch, fe_api_client, _summary_result(
+        fallback_reason="model_unavailable"))
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert "short by 2 staff member" in body
+    assert "Short 2" in body
+
+
+def test_page_load_shows_no_fallback_note_at_all(
+        frontend_client, fe_api_client, monkeypatch):
+    """Nothing was attempted on load, so there is nothing to explain."""
+    _stub_summary(monkeypatch, fe_api_client)
+    body = frontend_client.get("/partials/summary").data.decode()
+    assert "Standard summary" not in body
+    assert "ai-panel" not in body
+    assert "Rule-based summary" in body
+
+
+def test_no_shifts_state_renders_the_backend_headline(
+        frontend_client, fe_api_client, monkeypatch):
+    empty = _summary_result(fallback_reason="no_shifts",
+                            note="No shifts match the requested filters, so "
+                                 "there was nothing to summarise.")
+    empty["headline"] = "No shifts match the requested filters."
+    empty["gaps"] = []
+    _stub_summary(monkeypatch, fe_api_client, empty)
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert "No shifts match the requested filters." in body
+    assert "nothing to summarise" in body
+    assert "ai-label" not in body
+
+
+def test_backend_failure_on_the_ai_route_is_contained(
+        frontend_client, fe_api_client, monkeypatch):
+    import api_client
+    _stub_summary(monkeypatch, fe_api_client,
+                  error=api_client.BackendUnavailableError(UNAVAILABLE_MESSAGE))
+    response = frontend_client.get("/partials/summary/ai")
+    body = response.data.decode()
+    assert response.status_code == 200
+    assert "Summary unavailable" in body
+    assert "ai-label" not in body
+
+
+# ------------------------------------------------------------ htmx safety
+def test_summary_panel_does_not_re_arm_itself(
+        frontend_client, fe_api_client, monkeypatch):
+    """No hx-trigger in the swapped content, or the model would run on load."""
+    _stub_summary(monkeypatch, fe_api_client, _ai_summary())
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert "hx-trigger" not in body
+
+
+def test_repeated_generation_replaces_rather_than_appends(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_summary(monkeypatch, fe_api_client, _ai_summary())
+    first = frontend_client.get("/partials/summary/ai").data.decode()
+    second = frontend_client.get("/partials/summary/ai").data.decode()
+    assert first == second
+    assert first.count('class="ai-panel"') == 1
+    assert first.count("Regenerate AI summary") == 1
+    assert 'hx-target="#summary-panel" hx-swap="innerHTML"' in first
+
+
+def test_trigger_is_disabled_while_in_flight(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_summary(monkeypatch, fe_api_client)
+    body = frontend_client.get("/partials/summary").data.decode()
+    assert 'hx-disabled-elt="this"' in body
+    assert 'hx-indicator="#loading-indicator"' in body
+
+
+def test_the_trigger_survives_into_the_ai_result(
+        frontend_client, fe_api_client, monkeypatch):
+    """The manager can regenerate without reloading the page."""
+    _stub_summary(monkeypatch, fe_api_client, _ai_summary())
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert "Regenerate AI summary" in body
+    assert 'hx-get="/partials/summary/ai' in body
+
+
+# ----------------------------------------------------------- read-only
+def test_the_summary_panel_offers_no_mutating_action(
+        frontend_client, fe_api_client, monkeypatch):
+    """Narration describes; it must not offer to change anything."""
+    _stub_summary(monkeypatch, fe_api_client, _ai_summary())
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert "hx-post" not in body
+    assert "hx-delete" not in body
+    assert "hx-put" not in body
+    for word in ("Assign", "Unassign", "Delete"):
+        assert word not in body
+
+
+def test_generating_a_summary_calls_no_mutating_api(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_summary(monkeypatch, fe_api_client, _ai_summary())
+    for name in ("assign_staff", "unassign_staff", "update_shift",
+                 "delete_shift", "create_shift"):
+        monkeypatch.setattr(
+            fe_api_client, name,
+            lambda *a, **k: (_ for _ in ()).throw(AssertionError(name)))
+    assert frontend_client.get("/partials/summary/ai").status_code == 200
+
+
+# --------------------------------------- the trigger is genuinely reachable
+# A regression report said the Generate AI summary action was missing from the
+# card on a normal page load. These assert it against the REAL initial state —
+# the deterministic narrate=False render that the overview actually requests —
+# rather than a branch a test happened to construct.
+
+def _initial_summary_html(frontend_client, fe_api_client, monkeypatch, **kwargs):
+    """Exactly what #summary-panel receives on page load."""
+    _stub_summary(monkeypatch, fe_api_client, _summary_result(**kwargs))
+    response = frontend_client.get("/partials/summary?date=2026-08-24")
+    assert response.status_code == 200
+    return response.data.decode()
+
+
+def test_initial_deterministic_render_contains_the_trigger(
+        frontend_client, fe_api_client, monkeypatch):
+    """The default path the overview takes must offer the action."""
+    body = _initial_summary_html(frontend_client, fe_api_client, monkeypatch)
+    assert "Generate AI summary" in body
+    assert 'hx-get="/partials/summary/ai?date=2026-08-24"' in body
+    assert 'hx-target="#summary-panel"' in body
+    # ...alongside the deterministic content, in the same fragment.
+    assert HEADLINE in body
+    assert "Rule-based summary — not AI-generated" in body
+
+
+def test_trigger_sits_after_the_deterministic_content(
+        frontend_client, fe_api_client, monkeypatch):
+    """It reads as the card's footer action, not an interruption."""
+    body = _initial_summary_html(frontend_client, fe_api_client, monkeypatch)
+    assert body.index(HEADLINE) < body.index("Generate AI summary")
+    assert body.index("Rule-based summary") < body.index("Generate AI summary")
+
+
+def test_trigger_is_present_with_no_gaps_to_show(
+        frontend_client, fe_api_client, monkeypatch):
+    """A fully staffed day still offers the action."""
+    result = _summary_result()
+    result["headline"] = "All 3 shift(s) are fully staffed."
+    result["gaps"] = []
+    _stub_summary(monkeypatch, fe_api_client, result)
+    body = frontend_client.get("/partials/summary").data.decode()
+    assert "Generate AI summary" in body
+
+
+def test_trigger_is_present_with_no_shifts_at_all(
+        frontend_client, fe_api_client, monkeypatch):
+    result = _summary_result(fallback_reason="no_shifts")
+    result["headline"] = "No shifts match the requested filters."
+    result["gaps"] = []
+    _stub_summary(monkeypatch, fe_api_client, result)
+    assert "AI summary" in frontend_client.get("/partials/summary").data.decode()
+
+
+@pytest.mark.parametrize("kwargs,expected", [
+    ({}, "Generate AI summary"),
+    ({"fallback_reason": "model_unavailable"}, "Try AI summary again"),
+    ({"fallback_reason": "unsupported_numbers"}, "Try AI summary again"),
+    ({"fallback_reason": "ai_disabled"}, "Try AI summary again"),
+])
+def test_trigger_wording_matches_the_state(
+        frontend_client, fe_api_client, monkeypatch, kwargs, expected):
+    """The label says what pressing it would do from where the reader is."""
+    _stub_summary(monkeypatch, fe_api_client, _summary_result(**kwargs))
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert expected in body
+
+
+def test_ai_success_offers_regeneration(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_summary(monkeypatch, fe_api_client, _ai_summary())
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert "Regenerate AI summary" in body
+    assert "Generate AI summary" not in body.replace("Regenerate AI summary", "")
+
+
+def test_every_non_error_state_offers_an_action(
+        frontend_client, fe_api_client, monkeypatch):
+    """No reachable non-error state may leave the card with no way forward."""
+    for result in (_summary_result(),
+                   _summary_result(fallback_reason="model_unavailable"),
+                   _summary_result(fallback_reason="no_shifts"),
+                   _ai_summary()):
+        _stub_summary(monkeypatch, fe_api_client, result)
+        body = frontend_client.get("/partials/summary").data.decode()
+        assert "AI summary" in body, result["generation"]["fallback_reason"]
+        assert 'hx-target="#summary-panel"' in body
+
+
+def test_backend_failure_offers_a_deterministic_reload(
+        frontend_client, fe_api_client, monkeypatch):
+    """A card that can fail must not leave a page reload as the only recovery."""
+    import api_client
+    _stub_summary(monkeypatch, fe_api_client,
+                  error=api_client.BackendUnavailableError(UNAVAILABLE_MESSAGE))
+    body = frontend_client.get("/partials/summary").data.decode()
+    assert "Summary unavailable" in body
+    assert "Reload summary" in body
+    assert 'hx-get="/partials/summary?date=' in body
+    # Recovery re-fetches the figures; it must not ask for narration.
+    assert "/partials/summary/ai" not in body
+
+
+def test_error_state_reload_does_not_re_arm_itself(
+        frontend_client, fe_api_client, monkeypatch):
+    import api_client
+    _stub_summary(monkeypatch, fe_api_client,
+                  error=api_client.BackendUnavailableError(UNAVAILABLE_MESSAGE))
+    body = frontend_client.get("/partials/summary").data.decode()
+    assert "hx-trigger" not in body
+    assert 'hx-disabled-elt="this"' in body
+
+
+def test_the_trigger_is_not_gated_behind_an_ai_condition():
+    """Structural: the action must not live inside the is_ai/attempted block.
+
+    The reported symptom — deterministic summary fine, trigger absent — is what
+    a conditional around this control would look like, so its placement is
+    pinned rather than left to the next edit.
+    """
+    template = (FRONTEND_DIR / "templates" / "partials" / "summary.html").read_text()
+    action_start = template.index("hx-get=\"/partials/summary/ai")
+    block_start = template.index("{% if is_ai %}")
+    block_end = template.index("{% endif %}", block_start)
+    assert not block_start < action_start < block_end

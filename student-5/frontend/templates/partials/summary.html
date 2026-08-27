@@ -1,15 +1,51 @@
-{#- Rendered ONLY by GET /partials/summary, swapped into the PERSISTENT
-    #summary-panel wrapper via hx-swap="innerHTML". No hx-* attributes here —
-    see demand.html for why. -#}
+{#- Rendered by GET /partials/summary (deterministic, on page load) and by
+    GET /partials/summary/ai (narration explicitly requested). Both swap into
+    the PERSISTENT #summary-panel wrapper via hx-swap="innerHTML" — no hx-*
+    trigger lives in here, so the panel never re-arms itself and a model call
+    can only ever follow a click. See demand.html for the same convention.
+
+    The deterministic figures below are the answer. A narrative, when there is
+    one, is commentary laid beside them — it never replaces a number.
+
+    EVERY state ends in an action, including the error state. A card that can
+    fail but offers no way to try again leaves a page reload as the only
+    recovery, which is not a state this panel should be able to reach. -#}
 {% if error %}
-<div class="alert alert--danger" role="alert">
-  <div>
-    <p class="alert__title">Summary unavailable</p>
-    <p class="alert__body">{{ error }}</p>
+<div class="stack stack--sm">
+  <div class="alert alert--danger" role="alert">
+    <div>
+      <p class="alert__title">Summary unavailable</p>
+      <p class="alert__body">{{ error }}</p>
+    </div>
+  </div>
+
+  {#- Reloads the DETERMINISTIC panel, not the narration: when the service is
+      unreachable the useful recovery is the figures, and asking for a summary
+      of data we could not fetch would fail the same way. -#}
+  <div class="suggest-actions">
+    <button class="btn-secondary btn-compact" type="button"
+            hx-get="/partials/summary?date={{ today }}"
+            hx-target="#summary-panel" hx-swap="innerHTML"
+            hx-indicator="#loading-indicator"
+            hx-disabled-elt="this"
+            aria-controls="summary-panel">Reload summary</button>
+    <span class="drawer__muted">
+      Fetches the coverage figures again. No summary is generated.
+    </span>
   </div>
 </div>
 
 {% else %}
+{% set is_ai = summary.mode == 'ai' %}
+{#- An attempt was made unless the backend says narration was never asked for.
+    That distinction decides whether a fallback note is worth showing: on first
+    load there is nothing to explain. -#}
+{% set attempted = summary.generation and summary.generation.fallback_reason != 'not_requested' %}
+{#- The action is offered in every state; only its wording changes, so it says
+    what pressing it would actually do from where the reader is standing. -#}
+{% set action_label = 'Regenerate AI summary' if is_ai
+                      else 'Try AI summary again' if attempted
+                      else 'Generate AI summary' %}
 <div class="stack stack--sm">
   <p class="u-strong">{{ summary.headline }}</p>
 
@@ -24,6 +60,59 @@
   </ul>
   {% endif %}
 
+  {% if is_ai %}
+  {#- The shared AI surface: labelled, stating its basis, ending in a human
+      decision. Only ever rendered when the model actually produced a usable
+      narrative that survived validation against these same figures. -#}
+  <div class="ai-panel" role="status">
+    <div class="ai-panel__header">
+      <span class="ai-label"><span class="ai-label__dot" aria-hidden="true"></span>AI-assisted</span>
+      <span class="ai-panel__title" id="summary-narrative-heading">Operational summary</span>
+    </div>
+    <div class="ai-panel__body stack stack--sm">
+      <p class="ai-basis">{{ summary.narrative }}</p>
+      {% if summary.priorities %}
+      <ol class="summary-priorities" aria-labelledby="summary-narrative-heading">
+        {% for priority in summary.priorities %}
+        <li>{{ priority }}</li>
+        {% endfor %}
+      </ol>
+      {% endif %}
+      <p class="ai-disclaimer">{{ summary.note }}</p>
+    </div>
+  </div>
+
+  {% elif attempted %}
+  {#- Narration was asked for and did not happen. Same panel, none of the AI
+      tinting and no AI label: crediting a model that produced nothing would
+      misrepresent where the text above came from. -#}
+  <div class="ai-panel ai-panel--plain" role="status">
+    <div class="ai-panel__header">
+      <span class="badge-neutral">Standard summary</span>
+      <span class="ai-panel__title">Operational summary</span>
+    </div>
+    <div class="ai-panel__body">
+      <p class="ai-disclaimer">{{ summary.note }}</p>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if not is_ai %}
   <p class="u-label">Rule-based summary — not AI-generated</p>
+  {% endif %}
+
+  {#- Card footer. Deliberately outside every branch above: the manager can
+      always ask, whatever the last attempt did. -#}
+  <div class="suggest-actions">
+    <button class="btn-secondary btn-compact" type="button"
+            hx-get="/partials/summary/ai?date={{ today }}"
+            hx-target="#summary-panel" hx-swap="innerHTML"
+            hx-indicator="#loading-indicator"
+            hx-disabled-elt="this"
+            aria-controls="summary-panel">{{ action_label }}</button>
+    <span class="drawer__muted">
+      Describes the figures above. It changes nothing and assigns nobody.
+    </span>
+  </div>
 </div>
 {% endif %}

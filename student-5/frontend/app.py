@@ -2127,16 +2127,40 @@ def create_app() -> Flask:
         response.headers["HX-Trigger"] = "requests-changed"
         return response
 
-    @app.get("/partials/summary")
-    def summary_partial():
-        today = request.args.get("date") or _today()
+    def _render_summary(today, narrate):
+        """Render the operational summary panel.
+
+        One template serves both paths. The deterministic figures are always
+        rendered; whether a narrative sits above them is decided by the
+        backend's own `mode`, not by which route was called — so a requested
+        narration that failed renders as the fallback it actually is.
+        """
         try:
-            summary = api_client.get_coverage_summary(shift_date=today)
+            summary = api_client.get_coverage_summary(
+                shift_date=today, narrate=narrate)
         except (BackendUnavailableError, BackendError) as error:
             return render_template("partials/summary.html", today=today,
                                     summary=None, error=str(error))
         return render_template("partials/summary.html", today=today,
                                 summary=summary, error=None)
+
+    @app.get("/partials/summary")
+    def summary_partial():
+        """The panel as the overview loads it. Deterministic, never narrated.
+
+        This runs on every page view, so it must not put an LLM round trip in
+        front of the landing page. Narration is a separate, explicit request.
+        """
+        return _render_summary(request.args.get("date") or _today(), narrate=False)
+
+    @app.get("/partials/summary/ai")
+    def summary_ai_partial():
+        """The same panel, with narration explicitly requested by a manager.
+
+        Read-only: it asks the backend to describe figures it already has.
+        Nothing on this path creates, changes or assigns anything.
+        """
+        return _render_summary(request.args.get("date") or _today(), narrate=True)
 
     return app
 

@@ -366,14 +366,19 @@ SHIFT_STATUSES = ("Planned", "Open", "Filled", "Completed", "Cancelled")
 
 
 def get_coverage_summary(shift_date: Optional[str] = None,
-                          department: Optional[str] = None) -> Dict[str, Any]:
-    """POST /api/shifts/coverage-summary — coverage shaped for summarisation.
+                          department: Optional[str] = None,
+                          narrate: bool = False) -> Dict[str, Any]:
+    """POST /api/shifts/coverage-summary — the coverage position.
 
-    Existing endpoint (student-5/backend/routes/ai_routes.py). Currently
-    rule-based (`ai_enabled: false`, `mode: "rule-based"`) — it is real,
-    already-implemented data, not an AI recommendation.
+    ``narrate`` is OPT-IN and defaults off, which is what keeps a model call
+    off the Workforce Overview page load. The deterministic figures come back
+    either way; narration only adds a paragraph beside them.
+
+    The reply carries its own provenance — ``mode`` is ``"ai"`` only when the
+    model actually produced a usable narrative — and the template renders that
+    verdict rather than assuming one. Read-only: nothing here changes a shift.
     """
-    payload: Dict[str, Any] = {}
+    payload: Dict[str, Any] = {"narrate": narrate}
     if shift_date:
         payload["shift_date"] = shift_date
     if department:

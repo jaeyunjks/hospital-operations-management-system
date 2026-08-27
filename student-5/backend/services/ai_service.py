@@ -38,6 +38,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from config import Config
+from prompts import coverage_summary as coverage_summary_prompt
 from prompts import suggest_staff as suggest_staff_prompt
 from services import coverage_service, eligibility_service
 from services.ollama_client import (REASON_INVALID_OUTPUT, REASON_UNAVAILABLE,
@@ -64,9 +65,60 @@ _FALLBACK_NOTES = {
         "response."),
 }
 
+#: Narration was never asked for. Not a failure — the deterministic summary
+#: loads on every page view, and only an explicit request calls the model.
+FALLBACK_NOT_REQUESTED = "not_requested"
+
+#: No shift matched the filters, so there was nothing to narrate.
+FALLBACK_NO_SHIFTS = "no_shifts"
+
+#: The narrative contained a staffing figure the facts do not support. Kept
+#: distinct from ``invalid_model_output``: unusable JSON is a broken model,
+#: whereas this is a model that answered fluently and got the numbers wrong,
+#: which is the more dangerous of the two and worth naming.
+FALLBACK_UNSUPPORTED_NUMBERS = "unsupported_numbers"
+
+#: Coverage-summary equivalents of ``_FALLBACK_NOTES``. Separate because the
+#: wording describes a narrative, not an ordering.
+_COVERAGE_FALLBACK_NOTES = {
+    FALLBACK_NOT_REQUESTED: (
+        "Deterministic summary. AI narration was not requested."),
+    FALLBACK_AI_DISABLED: (
+        "Deterministic summary. AI-Mode is switched off."),
+    FALLBACK_NO_SHIFTS: (
+        "No shifts match the requested filters, so there was nothing to "
+        "summarise."),
+    REASON_UNAVAILABLE: (
+        "Deterministic summary. The summarisation model could not be reached."),
+    REASON_INVALID_OUTPUT: (
+        "Deterministic summary. The summarisation model returned an unusable "
+        "response."),
+    FALLBACK_UNSUPPORTED_NUMBERS: (
+        "Deterministic summary. The generated narrative contained staffing "
+        "figures the roster does not support, so it was discarded."),
+}
+
 #: A rationale is a caption, not a report. Model output is untrusted text, so
 #: it is flattened to a single line and capped before it can reach a template.
 _MAX_RATIONALE = 120
+
+#: A coverage narrative is a short paragraph; its priorities are captions.
+_MAX_SUMMARY = 600
+_MAX_PRIORITY = 120
+_MAX_PRIORITIES = 5
+
+#: At most this many shifts are described to the model. Ordered worst-first,
+#: so a large roster is truncated from the fully staffed end where the detail
+#: matters least; the totals still describe every shift.
+_MAX_FACT_SHIFTS = 20
+
+#: Number words the validator understands, so "three nurses short" is checked
+#: as carefully as "3 nurses short". Beyond twelve a model writes digits.
+_NUMBER_WORDS = {
+    "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11,
+    "twelve": 12,
+}
 
 
 def _llm_candidate(candidate: Dict[str, Any]) -> Dict[str, Any]:
@@ -109,14 +161,24 @@ def _llm_shift(shift: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _clean_rationale(value: Any) -> Optional[str]:
-    """Flatten one model-written rationale to a short single-line caption."""
+def _clean_text(value: Any, limit: int) -> Optional[str]:
+    """Flatten one piece of model-written text to a bounded single line.
+
+    Model output is untrusted text on its way to a template: collapsing the
+    whitespace and capping the length stops it arriving as a wall of prose or
+    smuggling layout through newlines.
+    """
     if not isinstance(value, str):
         return None
     text = re.sub(r"\s+", " ", value).strip()
     if not text:
         return None
-    return text[:_MAX_RATIONALE].rstrip()
+    return text[:limit].rstrip()
+
+
+def _clean_rationale(value: Any) -> Optional[str]:
+    """Flatten one model-written rationale to a short single-line caption."""
+    return _clean_text(value, _MAX_RATIONALE)
 
 
 def _ranked_staff_id(entry: Any) -> Optional[int]:
@@ -270,12 +332,147 @@ def suggest_staff(shift_id: int, limit: int = 5) -> Dict[str, Any]:
     }
 
 
-def coverage_summary(department: Optional[str] = None,
-                     shift_date: Optional[str] = None) -> Dict[str, Any]:
-    """Return coverage data shaped for LLM summarisation.
+# ---------------------------------------------------- coverage narration
+def _coverage_fact_shift(row: Dict[str, Any]) -> Dict[str, Any]:
+    """Project one coverage row down to what a model may be told.
 
-    Produces a deterministic plain-text summary now, and carries the structured
-    ``context`` the model will summarise once AI-Mode is enabled.
+    Every field here is an aggregate count or a scheduling attribute. What is
+    absent is the point: no ``shift_id`` (the narrative names departments and
+    times, not internal keys), and no free text of any kind. Shift notes,
+    staff notes and absence reasons never enter this projection, because that
+    is where clinical and personal detail lives and none of it bears on
+    describing a staffing position.
+    """
+    return {
+        "department": row["department"],
+        "shift_date": row["shift_date"],
+        "start_time": row["start_time"],
+        "end_time": row["end_time"],
+        "required_role": row["required_role"],
+        "required_positions": row["required_staff_count"],
+        "assigned_positions": row["assigned_staff_count"],
+        "filled_positions": row["filled_staff_count"],
+        "shortfall": row["shortfall"],
+        "surplus": row["surplus"],
+        "coverage_status": row["coverage_status"],
+    }
+
+
+def _coverage_facts(coverage: Dict[str, Any]) -> Dict[str, Any]:
+    """The authoritative figures, projected for the model.
+
+    Shifts are ordered worst-first so that a roster larger than the cap loses
+    its fully staffed tail rather than its shortages. ``shifts_total`` still
+    reports the true count, so a truncated list cannot be mistaken for the
+    whole picture — by the model or by anyone reading the context back.
+    """
+    rows = sorted(coverage["shifts"],
+                  key=lambda row: (-row["shortfall"], -row["surplus"],
+                                   row["shift_date"], row["start_time"]))
+    return {
+        "task": "summarise_staffing_coverage",
+        "scope": coverage["filters"],
+        "totals": coverage["summary"],
+        "shifts": [_coverage_fact_shift(row) for row in rows[:_MAX_FACT_SHIFTS]],
+        "shifts_described": min(len(rows), _MAX_FACT_SHIFTS),
+        "shifts_total": len(rows),
+    }
+
+
+def _numbers_in(node: Any) -> set:
+    """Every integer appearing anywhere in the authoritative facts.
+
+    Digits inside strings count too, so a date or a time in the facts also
+    licenses the model to mention it.
+    """
+    found = set()
+    if isinstance(node, bool):
+        return found
+    if isinstance(node, int):
+        found.add(node)
+    elif isinstance(node, str):
+        found.update(int(token) for token in re.findall(r"\d+", node))
+    elif isinstance(node, dict):
+        for value in node.values():
+            found |= _numbers_in(value)
+    elif isinstance(node, list):
+        for value in node:
+            found |= _numbers_in(value)
+    return found
+
+
+def _numbers_claimed(text: str) -> set:
+    """Every integer the narrative asserts, written as digits or as words."""
+    found = {int(token) for token in re.findall(r"\d+", text)}
+    lowered = text.lower()
+    for word, value in _NUMBER_WORDS.items():
+        if re.search(rf"\b{word}\b", lowered):
+            found.add(value)
+    return found
+
+
+def _reject_invented_numbers(texts: List[str], supported: set) -> None:
+    """Refuse a narrative that states a figure the roster does not support.
+
+    The backend owns every staffing number in this system, so the narrative
+    may borrow one but never produce one. A fluent summary asserting "three
+    nurses short" when nobody is short is worse than no summary at all: it is
+    indistinguishable from the real thing at a glance, and a manager would act
+    on it.
+
+    Deliberately fails CLOSED. An ordinary word like "one" is checked as a
+    number, so a narrative can occasionally be rejected over a harmless turn
+    of phrase. That costs a paragraph the manager never needed; the other
+    direction costs them a wrong number they would trust.
+    """
+    for text in texts:
+        unsupported = _numbers_claimed(text) - supported
+        if unsupported:
+            raise OllamaError(
+                FALLBACK_UNSUPPORTED_NUMBERS,
+                f"unsupported figures: {sorted(unsupported)}")
+
+
+def _narrate_coverage(facts: Dict[str, Any]):
+    """Ask the model to describe the position. Raises ``OllamaError`` on any miss."""
+    reply = ollama_client.generate_json(
+        prompt=coverage_summary_prompt.build_prompt(facts),
+        system=coverage_summary_prompt.SYSTEM_PROMPT,
+    )
+
+    narrative = _clean_text(
+        reply.get(coverage_summary_prompt.SUMMARY_KEY), _MAX_SUMMARY)
+    if not narrative:
+        raise OllamaError(REASON_INVALID_OUTPUT, "no usable summary text")
+
+    raw = reply.get(coverage_summary_prompt.PRIORITIES_KEY) or []
+    if not isinstance(raw, list):
+        raise OllamaError(REASON_INVALID_OUTPUT, "priorities was not a list")
+    priorities = []
+    for item in raw[:_MAX_PRIORITIES]:
+        cleaned = _clean_text(item, _MAX_PRIORITY)
+        if cleaned:
+            priorities.append(cleaned)
+
+    # Checked only after cleaning, so the text validated is the text rendered.
+    _reject_invented_numbers([narrative, *priorities], _numbers_in(facts))
+    return narrative, priorities
+
+
+def coverage_summary(department: Optional[str] = None,
+                     shift_date: Optional[str] = None,
+                     narrate: bool = False) -> Dict[str, Any]:
+    """Return the coverage position, optionally narrated by the model.
+
+    The deterministic figures are calculated first and unconditionally, and
+    they are returned in full whatever happens next: ``headline``, ``summary``
+    and ``gaps`` are the authoritative answer, and the narrative is commentary
+    laid beside them. A manager reading a number is always reading the
+    roster's number, never the model's.
+
+    ``narrate`` is OPT-IN. The deterministic summary loads on every Workforce
+    Overview page view, and a model call on every page view would be both slow
+    and unasked for, so narration happens only when someone requests it.
     """
     coverage = coverage_service.shift_coverage(
         department=department, shift_date=shift_date
@@ -293,19 +490,50 @@ def coverage_summary(department: Optional[str] = None,
             f"short by {summary['total_shortfall']} staff member(s) in total."
         )
 
+    facts = _coverage_facts(coverage)
+    narrative: Optional[str] = None
+    priorities: List[str] = []
+    mode = "rule-based"
+    fallback_reason: Optional[str] = None
+
+    if not narrate:
+        fallback_reason = FALLBACK_NOT_REQUESTED
+    elif not Config.AI_ENABLED:
+        fallback_reason = FALLBACK_AI_DISABLED
+    elif summary["total_shifts"] == 0:
+        # Nothing to describe. Calling the model to say so would spend a
+        # timeout budget to learn what the headline already states.
+        fallback_reason = FALLBACK_NO_SHIFTS
+    else:
+        try:
+            narrative, priorities = _narrate_coverage(facts)
+            mode = "ai"
+        except OllamaError as error:
+            # The reason CODE is kept; the exception detail is not. A manager
+            # needs to know the summary is deterministic, not which socket
+            # failed or what the model actually said.
+            fallback_reason = error.reason
+
+    note = (_COVERAGE_FALLBACK_NOTES.get(fallback_reason,
+                                         _COVERAGE_FALLBACK_NOTES[REASON_UNAVAILABLE])
+            if fallback_reason is not None
+            else ("Narrated by the local model from the roster's own figures. "
+                  "A summary is not a decision; the manager acts."))
+
     return {
         "ai_enabled": Config.AI_ENABLED,
-        "mode": "rule-based",
-        "note": ("Deterministic summary. LLM narrative is added during the AI "
-                 "integration task; output requires human review."),
+        "mode": mode,
+        "note": note,
+        "generation": {
+            "source": "ollama" if mode == "ai" else "deterministic",
+            "model": Config.OLLAMA_MODEL,
+            "fallback_reason": fallback_reason,
+        },
+        # Authoritative, and present in every response regardless of the model.
         "headline": headline,
         "summary": summary,
         "gaps": gaps,
-        "context": {
-            "task": "summarise_staffing_coverage",
-            "filters": coverage["filters"],
-            "summary": summary,
-            "understaffed_shifts": gaps,
-            "model": Config.OLLAMA_MODEL,
-        },
+        "narrative": narrative,
+        "priorities": priorities,
+        "context": {**facts, "model": Config.OLLAMA_MODEL},
     }

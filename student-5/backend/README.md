@@ -129,10 +129,44 @@ a planner roll-up and the API cannot disagree about the same roster.
 | Method | Path | Purpose |
 |--------|------|---------|
 | POST | `/api/shifts/suggest-staff` | Eligible candidate staff. Body: `{"shift_id": 1, "limit": 5}` |
-| POST | `/api/shifts/coverage-summary` | Coverage shaped for LLM summarisation |
+| POST | `/api/shifts/coverage-summary` | Coverage position, optionally narrated. Body: `{"shift_date": "...", "department": "...", "narrate": false}` |
 
 Both are **manager-only**, like every other workforce-wide read.
-`coverage-summary` is still structure-only and makes no LLM call.
+
+### Coverage Summary narration
+
+    coverage_service -> facts -> explicit request -> Ollama -> manager reads
+
+`narrate` is **opt-in and defaults to false**. The deterministic summary is
+fetched on every Workforce Overview page view; making the model call implicit
+would put an LLM round trip in front of a landing page nobody asked to wait
+for. Only the explicit "Generate AI summary" action sets it.
+
+`headline`, `summary` and `gaps` are the authoritative answer and are returned
+in full whatever the model does. `narrative` and `priorities` are commentary
+laid beside them — never a substitute for a number.
+
+**The model may not produce a figure, only borrow one.** Every integer in the
+narrative and its priorities, written as digits or as words, is checked against
+the numbers appearing in the facts it was given. A narrative asserting a
+staffing figure the roster does not support is discarded and the deterministic
+summary served instead, with `fallback_reason: "unsupported_numbers"`. This
+fails **closed**: an ordinary turn of phrase can occasionally cost a paragraph,
+which is the cheaper error than a fluent wrong number a manager would act on.
+
+Provenance mirrors Suggest Staff: `mode` is `"ai"` only when a narrative
+survived validation, and `generation` carries `source`, `model` and
+`fallback_reason`. Reasons: `not_requested`, `ai_disabled`, `no_shifts` (no
+call made), `model_unavailable`, `invalid_model_output`, `unsupported_numbers`.
+Every one returns HTTP 200 with the full deterministic figures.
+
+Data sent to the model is aggregate only — department, date, times, required
+role and the position counts. No `shift_id`, no `staff_id`, no names, and no
+free text of any kind: shift notes, staff notes and absence reasons never enter
+the projection. A roster larger than 20 shifts is truncated worst-first, with
+`shifts_total` still reporting the true count.
+
+The prompt lives in `prompts/coverage_summary.py`.
 
 ### Suggest Staff ranking
 
@@ -229,8 +263,8 @@ curl -s http://127.0.0.1:5500/health
 | `DATABASE_SERVICE_TIMEOUT` | `5` | Seconds before a database call times out |
 | `AI_ENABLED` | `false` | AI-Mode switch; no LLM call is attempted while false |
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama runtime base URL |
-| `OLLAMA_MODEL` | `llama3` | Model used to rank suggested staff |
-| `OLLAMA_TIMEOUT` | `8` | Seconds before abandoning ranking and serving the deterministic order |
+| `OLLAMA_MODEL` | `llama3` | Model used to rank staff and narrate coverage |
+| `OLLAMA_TIMEOUT` | `8` | Seconds before abandoning the model and serving deterministic output |
 
 ## Error responses
 
