@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% set page = 'rooms' %}
+{% block content %}
+
+<section class="card">
+  <h2>Add a room</h2>
+  <p class="hint">Rooms are never deleted. Retiring a room sets it to Out of Service so historical
+     arrangements stay valid.</p>
+  <form class="inline" method="post" action="/rooms">
+    <label class="field">Room number <input name="room_number" required placeholder="W3-301"></label>
+    <label class="field">Ward <input name="ward" required placeholder="General Ward 3"></label>
+    <label class="field">Floor <input name="floor" required placeholder="Level 6"></label>
+    <label class="field">Room type
+      <select name="type_id" required>
+        {% for t in room_types %}
+          <option value="{{ t.type_id }}">{{ t.type_name }} ({{ t.care_category }})</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field">Notes <input name="notes" placeholder="Optional"></label>
+    <button type="submit">Create room</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Rooms</h2>
+  <form class="inline" method="get" action="/rooms" style="margin-bottom:14px">
+    <label class="field">Ward <input name="ward" value="{{ filters.get('ward','') }}"></label>
+    <label class="field">Status
+      <select name="status">
+        <option value="">All</option>
+        {% for s in room_statuses %}
+          <option value="{{ s }}" {{ 'selected' if filters.get('status') == s }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="secondary">Filter</button>
+  </form>
+
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Room</th><th>Ward</th><th>Floor</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for room in rooms %}
+      <tr>
+        <td><strong>{{ room.room_number }}</strong></td>
+        <td>{{ room.ward }}</td>
+        <td>{{ room.floor }}</td>
+        <td><span class="pill {{ room.status | replace(' ','') }}">{{ room.status }}</span></td>
+        <td>{{ room.notes or '—' }}</td>
+        <td>
+          <details class="row-actions">
+            <summary>Change</summary>
+            <form method="post" action="/rooms/{{ room.room_id }}/status" class="inline">
+              <select name="status">
+                {% for s in room_statuses %}
+                  <option value="{{ s }}" {{ 'selected' if room.status == s }}>{{ s }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="secondary">Set status</button>
+            </form>
+            <form method="post" action="/rooms/{{ room.room_id }}/retire">
+              <button type="submit" class="danger">Retire room</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6" class="empty">No rooms match these filters.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+{% endblock %}

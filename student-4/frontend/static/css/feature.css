@@ -1,0 +1,104 @@
+/* Room & Bed Management — feature styles.
+   The shared team theme (shared/frontend/css/main.css) is layered above
+   this file by the integrated home page; only feature-specific rules
+   belong here. */
+
+:root {
+  --ink: #1e293b;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --surface: #ffffff;
+  --bg: #f8fafc;
+  --accent: #7c3aed;         /* student-4 accent, matching the arch diagram */
+  --ok: #047857;
+  --warn: #b45309;
+  --stop: #b91c1c;
+  --info: #1d4ed8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+header.feature {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 14px 24px;
+}
+header.feature h1 { margin: 0 0 8px; font-size: 19px; }
+header.feature .sub { color: var(--muted); font-size: 13px; }
+
+nav.feature { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+nav.feature a {
+  padding: 6px 12px; border-radius: 6px; text-decoration: none;
+  color: var(--ink); font-size: 14px; border: 1px solid var(--line);
+  background: var(--bg);
+}
+nav.feature a.active, nav.feature a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+main { padding: 22px 24px 60px; max-width: 1180px; }
+section.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 10px; padding: 18px; margin-bottom: 20px;
+}
+section.card > h2 { margin: 0 0 4px; font-size: 16px; }
+section.card > p.hint { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+
+.table-scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .03em; }
+tbody tr:hover { background: var(--bg); }
+
+.pill {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.pill.available, .pill.Available, .pill.Completed { background: #ecfdf5; color: var(--ok); }
+.pill.occupied,  .pill.InUse                     { background: #eff6ff; color: var(--info); }
+.pill.reserved,  .pill.Scheduled, .pill.Cleaning { background: #fffbeb; color: var(--warn); }
+.pill.maintenance, .pill.OutofService, .pill.Cancelled { background: #fef2f2; color: var(--stop); }
+.pill.InProgress { background: #f5f3ff; color: var(--accent); }
+.pill.Critical, .pill.High { background: #fef2f2; color: var(--stop); }
+.pill.Medium { background: #fffbeb; color: var(--warn); }
+.pill.Low { background: #f1f5f9; color: var(--muted); }
+
+form.inline { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
+label.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+input, select, textarea {
+  font: inherit; padding: 7px 9px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--surface); color: var(--ink); min-width: 150px;
+}
+textarea { min-width: 320px; min-height: 62px; resize: vertical; }
+
+button {
+  font: inherit; font-weight: 600; padding: 8px 14px; border-radius: 6px;
+  border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer;
+}
+button.secondary { background: var(--surface); color: var(--ink); border-color: var(--line); }
+button.danger { background: var(--surface); color: var(--stop); border-color: #fecaca; }
+button:hover { filter: brightness(.95); }
+
+.banner { padding: 10px 14px; border-radius: 8px; margin-bottom: 16px; font-size: 14px; }
+.banner.error { background: #fef2f2; color: var(--stop); border: 1px solid #fecaca; }
+.banner.info  { background: #eff6ff; color: var(--info); border: 1px solid #bfdbfe; }
+
+.advisory {
+  border-left: 3px solid var(--accent); background: #faf5ff;
+  padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 13px; margin-top: 12px;
+}
+.advisory strong { color: var(--accent); }
+
+.stat-row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 10px 16px; background: var(--bg); }
+.stat .n { font-size: 22px; font-weight: 700; }
+.stat .k { font-size: 12px; color: var(--muted); }
+
+.empty { color: var(--muted); font-size: 14px; padding: 14px 0; }
+details.row-actions summary { cursor: pointer; color: var(--accent); font-size: 13px; }
+details.row-actions form { margin-top: 8px; }

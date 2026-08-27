@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% set page = 'dashboard' %}
+{% block content %}
+
+<section class="card">
+  <h2>Ward occupancy and theatre utilisation</h2>
+  <p class="hint">AI-generated summary. Runs only when requested, so the page never waits on the model.</p>
+  <button hx-post="/occupancy-summary" hx-target="#summary" hx-swap="innerHTML"
+          hx-indicator="#summary-loading">Generate summary</button>
+  <span id="summary-loading" class="htmx-indicator hint">Asking the model…</span>
+  <div id="summary">
+    {% if theatre_summary %}
+      <div class="stat-row" style="margin-top:14px">
+        <div class="stat"><div class="n">{{ theatre_summary.in_use }}</div><div class="k">theatres in use</div></div>
+        <div class="stat"><div class="n">{{ theatre_summary.free }}</div><div class="k">theatres free</div></div>
+        <div class="stat"><div class="n">{{ theatre_summary.unusable }}</div><div class="k">theatres unusable</div></div>
+      </div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="card">
+  <h2>Suggest a room</h2>
+  <p class="hint">Enter the patient's recorded requirements. The service classifies them into a care
+     category, filters the beds available in that category, and asks the model to rank them.</p>
+  <form class="inline" hx-post="/suggest" hx-target="#suggestions" hx-swap="innerHTML"
+        hx-indicator="#suggest-loading">
+    <label class="field">Patient requirements
+      <textarea name="patient_requirements" required
+                placeholder="e.g. Ventilator support, continuous monitoring"></textarea>
+    </label>
+    <label class="field">Preferred ward (optional)
+      <input name="ward" placeholder="Critical Care">
+    </label>
+    <button type="submit">Suggest a room</button>
+    <span id="suggest-loading" class="htmx-indicator hint">Ranking beds…</span>
+  </form>
+  <div id="suggestions"></div>
+</section>
+
+<section class="card">
+  <h2>Bed availability</h2>
+  <p class="hint">Live status of every bed, filtered by ward, care category and status.</p>
+  <form class="inline" hx-get="/" hx-target="#bed-table" hx-swap="innerHTML" hx-trigger="change, submit">
+    <label class="field">Care category
+      <select name="care_category">
+        <option value="">All</option>
+        {% for c in care_categories %}
+          <option value="{{ c }}" {{ 'selected' if filters.get('care_category') == c }}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field">Bed status
+      <select name="bed_status">
+        <option value="">All</option>
+        {% for s in ['available','reserved','occupied','maintenance'] %}
+          <option value="{{ s }}" {{ 'selected' if filters.get('bed_status') == s }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field">Ward
+      <input name="ward" value="{{ filters.get('ward','') }}" placeholder="Any ward">
+    </label>
+    <button type="submit" class="secondary">Apply</button>
+  </form>
+  <div id="bed-table">{% include "partials/bed_table.html" %}</div>
+</section>
+
+{% endblock %}

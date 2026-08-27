@@ -1,13 +1,17 @@
 -- =====================================================================
--- Room, Bed & Operating Theatre Management — database schema
--- Student 4 (Jisoo Jung / Asher)
+-- Room & Bed Management — database schema
+-- Student 4 (Jisoo Jung / Asher), HOMS Group 10
+--
+-- Owned data (HOMS Architecture v2.2, Table 17):
+--   "Room & Bed Service — room state, bed allocation, occupancy,
+--    shortage and release."
 --
 -- SQLite. Applied by init_db.py, which runs this file then seed_data.sql.
 -- =====================================================================
 
 PRAGMA foreign_keys = ON;
 
--- Dropped in reverse dependency order so the script is re-runnable.
+DROP TABLE IF EXISTS shortage_cases;
 DROP TABLE IF EXISTS room_arrangements;
 DROP TABLE IF EXISTS beds;
 DROP TABLE IF EXISTS rooms;
@@ -16,8 +20,9 @@ DROP TABLE IF EXISTS room_types;
 
 -- ---------------------------------------------------------------------
 -- room_types
--- Lookup table. care_category groups every room into one of three
--- buckets so patients with similar care needs are placed together.
+-- care_category groups every room into one of three buckets so patients
+-- with similar care needs are placed together, and so the AI suggestion
+-- endpoint can narrow candidates before ranking them.
 -- ---------------------------------------------------------------------
 CREATE TABLE room_types (
     type_id             INTEGER PRIMARY KEY,
@@ -32,8 +37,8 @@ CREATE TABLE room_types (
 
 -- ---------------------------------------------------------------------
 -- rooms
--- Soft delete: status is set to 'Out of Service' rather than removing
--- the row, so historical arrangements stay valid.
+-- Soft delete: status becomes 'Out of Service'; the row is never removed,
+-- so historical arrangements stay valid.
 -- ---------------------------------------------------------------------
 CREATE TABLE rooms (
     room_id     INTEGER PRIMARY KEY,
@@ -51,14 +56,17 @@ CREATE TABLE rooms (
 -- ---------------------------------------------------------------------
 -- beds
 -- A bed row is any allocatable slot, including an operating table.
--- Soft delete: status is set to 'maintenance'.
+--
+-- 'reserved' implements the reserve -> allocate -> occupy sequence
+-- required by Architecture v2.2 section 5.2 (bed shortage workflow).
+-- Soft delete: status becomes 'maintenance'.
 -- ---------------------------------------------------------------------
 CREATE TABLE beds (
     bed_id     INTEGER PRIMARY KEY,
     room_id    INTEGER NOT NULL,
     bed_number TEXT    NOT NULL,
     status     TEXT    NOT NULL DEFAULT 'available'
-               CHECK (status IN ('available', 'occupied', 'maintenance')),
+               CHECK (status IN ('available', 'reserved', 'occupied', 'maintenance')),
     UNIQUE (room_id, bed_number),
     FOREIGN KEY (room_id) REFERENCES rooms (room_id)
 );
@@ -67,11 +75,18 @@ CREATE TABLE beds (
 -- ---------------------------------------------------------------------
 -- room_arrangements
 -- Holds BOTH inpatient bed stays and operating theatre sessions,
--- distinguished by `purpose`.
+-- distinguished by `purpose`. One table means the double-booking
+-- conflict check is written once and covers both.
 --
--- patient_id refers to the Patient & Admission service (Student 1). It is
--- deliberately NOT a foreign key: that table lives in a separate database
--- microservice, so the constraint cannot and must not be declared here.
+-- patient_id and admission_id refer to the Patient & Admission service
+-- (Student 1). They are deliberately NOT foreign keys: that data lives
+-- in a separate database microservice, so the constraint cannot and must
+-- not be declared here. Architecture v2.2 Table 14 defines the current
+-- allocation as Admission <-> Bed, so admission_id is the precise link;
+-- it is nullable until Student 1's admission identifiers are agreed.
+--
+-- transferred_from_id records a patient moved between beds, so the two
+-- arrangements form a traceable chain rather than two unrelated rows.
 --
 -- Arrangements are never deleted. They are cancelled by setting
 -- status = 'Cancelled', preserving a complete audit trail.
@@ -80,6 +95,7 @@ CREATE TABLE room_arrangements (
     arrangement_id       INTEGER PRIMARY KEY,
     bed_id               INTEGER NOT NULL,
     patient_id           INTEGER NOT NULL,
+    admission_id         INTEGER,
     purpose              TEXT    NOT NULL
                          CHECK (purpose IN ('Inpatient stay', 'Surgery')),
     procedure_name       TEXT,
@@ -91,16 +107,48 @@ CREATE TABLE room_arrangements (
     end_time             TEXT,
     status               TEXT    NOT NULL DEFAULT 'Scheduled'
                          CHECK (status IN ('Scheduled', 'In Progress', 'Completed', 'Cancelled')),
+    transferred_from_id  INTEGER,
     arranged_by          TEXT    NOT NULL,
-    FOREIGN KEY (bed_id) REFERENCES beds (bed_id)
+    FOREIGN KEY (bed_id) REFERENCES beds (bed_id),
+    FOREIGN KEY (transferred_from_id) REFERENCES room_arrangements (arrangement_id)
 );
 
 
 -- ---------------------------------------------------------------------
--- Indexes
--- idx_arr_bed_time backs the double-booking conflict check.
+-- shortage_cases
+-- Architecture v2.2 section 5.2: when no compatible bed is available,
+-- Room & Bed Management opens a shortage case, records the requirement
+-- and urgency, offers compatible options and stores the coordinator's
+-- decision and reason. The AI may rank options; it never allocates.
 -- ---------------------------------------------------------------------
-CREATE INDEX idx_rooms_type   ON rooms (type_id);
-CREATE INDEX idx_beds_room    ON beds (room_id);
-CREATE INDEX idx_arr_bed_time ON room_arrangements (bed_id, start_time, end_time);
-CREATE INDEX idx_arr_status   ON room_arrangements (status);
+CREATE TABLE shortage_cases (
+    case_id                INTEGER PRIMARY KEY,
+    patient_id             INTEGER NOT NULL,
+    admission_id           INTEGER,
+    required_care_category TEXT    NOT NULL
+                           CHECK (required_care_category IN ('Surgical', 'Short-term', 'Long-term')),
+    required_ward          TEXT,
+    urgency                TEXT    NOT NULL DEFAULT 'Medium'
+                           CHECK (urgency IN ('Low', 'Medium', 'High', 'Critical')),
+    holding_location       TEXT,
+    opened_at              TEXT    NOT NULL,
+    resolved_at            TEXT,
+    status                 TEXT    NOT NULL DEFAULT 'Open'
+                           CHECK (status IN ('Open', 'Option offered', 'Resolved', 'Escalated', 'Cancelled')),
+    chosen_option          TEXT,
+    decision_reason        TEXT,
+    resolved_bed_id        INTEGER,
+    opened_by              TEXT    NOT NULL,
+    decided_by             TEXT,
+    FOREIGN KEY (resolved_bed_id) REFERENCES beds (bed_id)
+);
+
+
+-- ---------------------------------------------------------------------
+-- Indexes. idx_arr_bed_time backs the double-booking conflict check.
+-- ---------------------------------------------------------------------
+CREATE INDEX idx_rooms_type      ON rooms (type_id);
+CREATE INDEX idx_beds_room       ON beds (room_id);
+CREATE INDEX idx_arr_bed_time    ON room_arrangements (bed_id, start_time, end_time);
+CREATE INDEX idx_arr_status      ON room_arrangements (status);
+CREATE INDEX idx_shortage_status ON shortage_cases (status, urgency);

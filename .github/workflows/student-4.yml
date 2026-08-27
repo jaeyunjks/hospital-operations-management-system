@@ -1,28 +1,93 @@
 # ==========================================================================
-# CI/CD workflow — student-4 (PLACEHOLDER)
-# ==========================================================================
-# Owner: student-4  (see docs/architecture/feature-ownership.md)
+# CI/CD workflow — student-4 (Room & Bed Management)
+# Owner: Jisoo Jung (Asher)
 #
-# This is a placeholder. There is no application code for student-4 yet, so
-# this workflow intentionally does NOT build or test anything and does NOT run
-# on push / pull_request — it will not report a passing check against code that
-# has not been validated.
-#
-# When student-4's microservice exists, replace the body below with a real
-# pipeline scoped to `student-4/**` (setup Python -> install -> lint ->
-# pytest student-4/tests -> docker build from student-4/Dockerfile).
-# See .github/workflows/README.md.
+# Scoped to student-4/** so it never runs against another student's work.
+# Stages: install -> build the database -> pytest -> build all three
+# container images -> smoke test the running stack.
 # ==========================================================================
-name: student-4 (placeholder)
+name: student-4 — Room & Bed Management
 
 on:
+  push:
+    branches: [main, room-bed-management]
+    paths: ['student-4/**', '.github/workflows/student-4.yml']
+  pull_request:
+    paths: ['student-4/**', '.github/workflows/student-4.yml']
   workflow_dispatch:
 
 jobs:
-  placeholder:
+  test:
+    name: Build database and run tests
     runs-on: ubuntu-latest
     steps:
-      - name: Not yet implemented
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
         run: |
-          echo "student-4 CI/CD is a placeholder — no pipeline implemented yet."
-          echo "See .github/workflows/README.md for the required future steps."
+          python -m pip install --upgrade pip
+          pip install -r student-4/backend/requirements.txt
+          pip install -r student-4/frontend/requirements.txt
+          pip install pytest
+
+      - name: Build and validate the database
+        # Fails the run if any table holds fewer than 10 records or the
+        # seed data contradicts itself.
+        run: python student-4/database/init_db.py --check
+
+      - name: Run pytest
+        run: python -m pytest student-4/tests -v
+
+  docker:
+    name: Build container images and smoke test
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the three images
+        run: |
+          docker build -t student-4-database ./student-4/database
+          docker build -t student-4-backend  ./student-4/backend
+          docker build -t student-4-frontend ./student-4/frontend
+
+      - name: Start the stack
+        run: |
+          docker network create homs-ci
+          docker run -d --name s4-db --network homs-ci student-4-database
+          docker run -d --name s4-be --network homs-ci \
+            -e DATABASE_URL=http://s4-db:6400 student-4-backend
+          docker run -d --name s4-fe --network homs-ci -p 3400:3400 \
+            -e BACKEND_URL=http://s4-be:5400 student-4-frontend
+
+      - name: Wait for the services to answer
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3400/health > /dev/null; then
+              echo "frontend is up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "frontend did not start in time"
+          docker logs s4-db; docker logs s4-be; docker logs s4-fe
+          exit 1
+
+      - name: Smoke test the running stack
+        run: |
+          set -e
+          echo "— health —"
+          curl -sf http://localhost:3400/health | tee /tmp/health.json
+          echo
+          echo "— availability page —"
+          curl -sf http://localhost:3400/ -o /dev/null -w 'dashboard HTTP %{http_code}\n'
+          echo "— theatre board —"
+          curl -sf http://localhost:3400/theatres -o /dev/null -w 'theatres HTTP %{http_code}\n'
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs s4-db; docker logs s4-be; docker logs s4-fe

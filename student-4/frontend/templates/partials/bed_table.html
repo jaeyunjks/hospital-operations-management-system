@@ -1,0 +1,29 @@
+<div class="table-scroll">
+<table>
+  <thead>
+    <tr>
+      <th>Bed</th><th>Room</th><th>Ward</th><th>Floor</th>
+      <th>Room type</th><th>Care category</th><th>Monitored</th>
+      <th>Bed status</th><th>Room status</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for bed in beds %}
+    <tr>
+      <td><strong>{{ bed.bed_number }}</strong></td>
+      <td>{{ bed.room_number }}</td>
+      <td>{{ bed.ward }}</td>
+      <td>{{ bed.floor }}</td>
+      <td>{{ bed.type_name }}</td>
+      <td>{{ bed.care_category }}</td>
+      <td>{{ 'Yes' if bed.requires_monitoring else 'No' }}</td>
+      <td><span class="pill {{ bed.bed_status }}">{{ bed.bed_status }}</span></td>
+      <td><span class="pill {{ bed.room_status | replace(' ','') }}">{{ bed.room_status }}</span></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="9" class="empty">No beds match these filters.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+<p class="hint">{{ beds | length }} bed(s) shown.</p>

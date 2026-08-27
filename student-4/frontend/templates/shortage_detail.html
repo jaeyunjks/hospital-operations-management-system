@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% set page = 'shortages' %}
+{% block content %}
+
+{% if detail %}
+{% set case = detail.case %}
+<section class="card">
+  <h2>Shortage case #{{ case.case_id }}</h2>
+  <p class="hint">
+    Patient {{ case.patient_id }} · needs {{ case.required_care_category }}
+    {% if case.required_ward %}in {{ case.required_ward }}{% endif %} ·
+    urgency <span class="pill {{ case.urgency }}">{{ case.urgency }}</span> ·
+    waiting at {{ case.holding_location or 'not recorded' }} ·
+    opened {{ case.opened_at }} by {{ case.opened_by }}
+  </p>
+  <p>Status: <span class="pill {{ case.status | replace(' ','') }}">{{ case.status }}</span>
+    {% if case.chosen_option %}— {{ case.chosen_option }}{% endif %}</p>
+  {% if case.decision_reason %}<p class="hint">Reason recorded: {{ case.decision_reason }}
+     ({{ case.decided_by }})</p>{% endif %}
+</section>
+
+<section class="card">
+  <h2>Compatible options</h2>
+  <p class="hint">Free now first, then beds pending cleaning, then approved alternative wards.
+     Escalation is always available. Choosing a bed reserves it — it is not occupied until an
+     arrangement is created.</p>
+
+  <div class="table-scroll">
+  <table>
+    <thead><tr><th>Option</th><th>Bed</th><th>Room</th><th>Ward</th><th>Note</th><th>Choose</th></tr></thead>
+    <tbody>
+    {% for o in detail.options %}
+      <tr>
+        <td>{{ o.kind | replace('_',' ') }}</td>
+        <td>{{ o.bed_number or '—' }}</td>
+        <td>{{ o.room_number or '—' }}</td>
+        <td>{{ o.ward or '—' }}</td>
+        <td>{{ o.note }}</td>
+        <td>
+          <details class="row-actions">
+            <summary>Select</summary>
+            <form method="post" action="/shortages/{{ case.case_id }}/decide" class="inline">
+              <input type="hidden" name="chosen_option" value="{{ o.note }}">
+              {% if o.bed_id %}<input type="hidden" name="resolved_bed_id" value="{{ o.bed_id }}">
+              {% else %}<input type="hidden" name="escalate" value="1">{% endif %}
+              <label class="field">Reason (required)
+                <input name="decision_reason" required placeholder="Why this option">
+              </label>
+              <button type="submit">Record decision</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <p class="hint"><a href="/shortages">← Back to all cases</a></p>
+</section>
+{% endif %}
+
+{% endblock %}

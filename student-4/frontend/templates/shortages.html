@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% set page = 'shortages' %}
+{% block content %}
+
+<section class="card">
+  <h2>Open a shortage case</h2>
+  <p class="hint">Raised when no compatible bed is available. The case records the requirement,
+     urgency and where the patient is waiting.</p>
+  <form class="inline" method="post" action="/shortages">
+    <label class="field">Patient ID <input name="patient_id" type="number" required></label>
+    <label class="field">Care category required
+      <select name="required_care_category" required>
+        {% for c in care_categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+      </select>
+    </label>
+    <label class="field">Ward required <input name="required_ward" placeholder="Optional"></label>
+    <label class="field">Urgency
+      <select name="urgency">
+        {% for u in ['Low','Medium','High','Critical'] %}
+          <option value="{{ u }}" {{ 'selected' if u == 'Medium' }}>{{ u }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field">Holding location <input name="holding_location" placeholder="Where the patient is now"></label>
+    <button type="submit">Open case</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>Shortage cases</h2>
+  <form class="inline" method="get" action="/shortages" style="margin-bottom:14px">
+    <label class="field">Status
+      <select name="status">
+        <option value="">All</option>
+        {% for s in ['Open','Option offered','Resolved','Escalated','Cancelled'] %}
+          <option value="{{ s }}" {{ 'selected' if filters.get('status') == s }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="secondary">Filter</button>
+  </form>
+
+  <div class="table-scroll">
+  <table>
+    <thead>
+      <tr><th>#</th><th>Patient</th><th>Needs</th><th>Urgency</th><th>Waiting at</th>
+          <th>Opened</th><th>Status</th><th>Decision</th><th></th></tr>
+    </thead>
+    <tbody>
+    {% for c in cases %}
+      <tr>
+        <td>{{ c.case_id }}</td>
+        <td>{{ c.patient_id }}</td>
+        <td>{{ c.required_care_category }}{% if c.required_ward %}<br>
+            <span class="hint">{{ c.required_ward }}</span>{% endif %}</td>
+        <td><span class="pill {{ c.urgency }}">{{ c.urgency }}</span></td>
+        <td>{{ c.holding_location or '—' }}</td>
+        <td>{{ c.opened_at }}</td>
+        <td><span class="pill {{ c.status | replace(' ','') }}">{{ c.status }}</span></td>
+        <td>{{ c.chosen_option or '—' }}{% if c.decision_reason %}<br>
+            <span class="hint">{{ c.decision_reason }}</span>{% endif %}</td>
+        <td><a href="/shortages/{{ c.case_id }}">Review</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="9" class="empty">No shortage cases match these filters.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+{% endblock %}

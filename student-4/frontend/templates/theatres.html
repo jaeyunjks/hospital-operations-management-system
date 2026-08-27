@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% set page = 'theatres' %}
+{% block content %}
+
+<section class="card">
+  <h2>Operating theatre board</h2>
+  <p class="hint">Which theatres are in use, free or unusable, and what is running or scheduled next in each.</p>
+
+  {% if board %}
+    <div class="stat-row">
+      <div class="stat"><div class="n">{{ board.summary.in_use }}</div><div class="k">in use</div></div>
+      <div class="stat"><div class="n">{{ board.summary.free }}</div><div class="k">free</div></div>
+      <div class="stat"><div class="n">{{ board.summary.cleaning }}</div><div class="k">being cleaned</div></div>
+      <div class="stat"><div class="n">{{ board.summary.unusable }}</div><div class="k">unusable</div></div>
+    </div>
+
+    <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Theatre</th><th>State</th><th>Session</th><th>Procedure</th>
+            <th>Surgeon</th><th>Window</th><th>Patient</th></tr>
+      </thead>
+      <tbody>
+      {% for t in board.theatres %}
+        <tr>
+          <td><strong>{{ t.room_number }}</strong><br><span class="hint">{{ t.ward }}</span></td>
+          <td><span class="pill {{ t.room_status | replace(' ','') }}">{{ t.state_label }}</span></td>
+          <td>{{ t.session_kind or '—' }}</td>
+          <td>{{ t.session.procedure_name if t.session else '—' }}</td>
+          <td>{{ t.session.surgeon_name if t.session else '—' }}</td>
+          <td>{% if t.session %}{{ t.session.start_time }} → {{ t.session.end_time or 'open' }}{% else %}—{% endif %}</td>
+          <td>{{ t.session.patient_id if t.session else '—' }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  {% endif %}
+</section>
+
+{% endblock %}

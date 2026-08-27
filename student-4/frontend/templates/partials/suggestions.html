@@ -1,0 +1,40 @@
+{% if error %}
+  <div class="banner error">{{ error }}</div>
+{% else %}
+  <p class="hint">
+    Classified as <strong>{{ result.plan.care_category }}</strong>
+    — {{ result.plan.classification_reason }}.
+    {{ result.plan.candidate_count }} candidate bed(s) considered.
+  </p>
+
+  {% if result.suggestions %}
+    <div class="table-scroll">
+    <table>
+      <thead><tr><th>#</th><th>Bed</th><th>Room</th><th>Ward</th><th>Type</th><th>Reason</th></tr></thead>
+      <tbody>
+      {% for s in result.suggestions %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td><strong>{{ s.bed_number }}</strong></td>
+          <td>{{ s.room_number }}</td>
+          <td>{{ s.ward }}</td>
+          <td>{{ s.type_name }}</td>
+          <td>{{ s.reason }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  {% else %}
+    <p class="empty">{{ result.message }}</p>
+  {% endif %}
+
+  <div class="advisory">
+    <strong>Advisory only — the AI does not allocate beds.</strong>
+    Source: {{ result.source }}{% if result.model %} ({{ result.model }}){% endif %}.
+    An authorised bed coordinator must approve the placement and create the arrangement.
+    {% if result.discarded_ids %}<br>Discarded {{ result.discarded_ids | length }} unavailable
+    bed(s) returned by the model.{% endif %}
+    {% if result.source == 'fallback' %}<br>{{ result.message }}{% endif %}
+  </div>
+{% endif %}

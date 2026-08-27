@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Room &amp; Bed Management{% endblock %} — HOMS</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/feature.css') }}">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+<header class="feature">
+  <h1>Room &amp; Bed Management</h1>
+  <div class="sub">Hospital Operations Management System · Student 4 — Jisoo Jung (Asher)</div>
+  <nav class="feature">
+    <a href="/"            class="{{ 'active' if page == 'dashboard' }}">Availability</a>
+    <a href="/theatres"    class="{{ 'active' if page == 'theatres' }}">Operating theatres</a>
+    <a href="/arrangements" class="{{ 'active' if page == 'arrangements' }}">Arrangements</a>
+    <a href="/rooms"       class="{{ 'active' if page == 'rooms' }}">Rooms</a>
+    <a href="/shortages"   class="{{ 'active' if page == 'shortages' }}">Shortage cases</a>
+  </nav>
+</header>
+<main>
+  {% if error %}<div class="banner error">{{ error }}</div>{% endif %}
+  {% if request.args.get('message') %}<div class="banner info">{{ request.args.get('message') }}</div>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>
