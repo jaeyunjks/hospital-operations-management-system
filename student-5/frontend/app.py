@@ -1487,6 +1487,36 @@ def create_app() -> Flask:
         response.headers["HX-Trigger"] = "shifts-updated"
         return response
 
+    @app.get("/partials/shifts/<int:shift_id>/suggest")
+    def suggest_staff_partial(shift_id: int):
+        """Render the AI-assisted ranking of this shift's eligible candidates.
+
+        A read-only view over `POST /api/shifts/suggest-staff`. It renders the
+        backend's shortlist and its stated provenance; it applies no ordering,
+        no filtering and no eligibility rule of its own, and it never assigns
+        anyone — the Assign form in the panel is the same one the candidate
+        list uses.
+
+        Rendered into its own container rather than the whole drawer, so
+        asking for a suggestion does not disturb the assignments above it.
+        """
+        embedded = request.args.get("panel") == "1"
+        try:
+            result = api_client.suggest_staff(shift_id)
+        except NotFoundError:
+            return render_template("partials/shift_suggestions.html",
+                                    shift_id=shift_id, embedded=embedded,
+                                    result=None,
+                                    error="This shift no longer exists.")
+        except (BackendUnavailableError, BackendError) as error:
+            return render_template("partials/shift_suggestions.html",
+                                    shift_id=shift_id, embedded=embedded,
+                                    result=None, error=str(error))
+
+        return render_template("partials/shift_suggestions.html",
+                                shift_id=shift_id, embedded=embedded,
+                                result=result, error=None)
+
     @app.post("/partials/shifts/<int:shift_id>/unassign")
     def unassign_shift_staff_partial(shift_id: int):
         embedded = request.form.get("panel") == "1"

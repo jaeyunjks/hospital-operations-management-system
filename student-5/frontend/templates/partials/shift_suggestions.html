@@ -1,0 +1,108 @@
+{#- AI-assisted ranking of the SAME eligible candidates listed below it.
+
+    This panel contributes ordering and a short rationale. It contributes
+    nobody: the backend ranks only candidates that already passed
+    deterministic eligibility, and no rule is re-applied here. Assign is the
+    existing manual action — nothing in this panel assigns anyone by itself.
+
+    Uses the shared design system's AI surface, which requires that every such
+    surface (1) carries an .ai-label so its origin is unambiguous, (2) states
+    its basis rather than asserting authority, and (3) ends in an explicit
+    human decision. A deterministic fallback is deliberately NOT given the
+    .ai-label: it is not an AI surface and must not be dressed as one. -#}
+{% set detail_target = '#planner-detail' if embedded else '#shift-drawer' %}
+{% set heading_id = 'suggest-heading-' ~ (shift_id | string) ~ ('-panel' if embedded else '-drawer') %}
+
+{% if error %}
+<div class="ai-panel" role="status">
+  <div class="ai-panel__body">
+    <p class="ai-disclaimer">
+      <span aria-hidden="true">✕</span>
+      Suggestions are unavailable. {{ error }}
+    </p>
+  </div>
+</div>
+
+{% elif result.suggestions %}
+{% set is_ai = result.mode == 'ai' %}
+{#- The shared system marks an AI surface by TINT AND LABEL. A deterministic
+    ordering gets neither: the indigo header would credit a model that never
+    ran, which is the same misrepresentation as the label would be. -#}
+<div class="ai-panel{{ '' if is_ai else ' ai-panel--plain' }}" role="status">
+  <div class="ai-panel__header">
+    {% if is_ai %}
+    <span class="ai-label"><span class="ai-label__dot" aria-hidden="true"></span>AI-assisted</span>
+    {% else %}
+    {#- Provenance is stated, never implied. Crediting a model that did not
+        run would misrepresent how this order was reached. -#}
+    <span class="badge-neutral">Standard ordering</span>
+    {% endif %}
+    <span class="ai-panel__title" id="{{ heading_id }}">Suggested order</span>
+  </div>
+
+  <div class="ai-panel__body stack stack--sm">
+    <p class="ai-disclaimer">{{ result.note }}</p>
+
+    <ol class="recommendation-list" aria-labelledby="{{ heading_id }}">
+      {% for person in result.suggestions %}
+      <li class="recommendation">
+        {#- The ordered list already conveys position to assistive tech, so
+            the printed numeral is decorative. -#}
+        <span class="recommendation__rank" aria-hidden="true">{{ loop.index }}</span>
+        <div class="recommendation__main">
+          <p class="recommendation__name">{{ person.name }}</p>
+          <p class="recommendation__meta">
+            {{ person.role }} · {{ person.department }}{% if person.specialisation %} · {{ person.specialisation }}{% endif %}
+          </p>
+          <span class="candidate-flags">
+            <span class="badge-neutral">{{ person.employment_status }}</span>
+            {#- Department is ranking context only; it never blocks. -#}
+            {% if person.department != result.shift.department %}
+            <span class="badge-neutral">Cross-department</span>
+            {% endif %}
+            {#- Weekly availability stays ADVISORY here exactly as it is in the
+                candidate list: shown, never treated as a bar to assignment. -#}
+            {% for note in person.notes %}
+            <span class="candidate-note candidate-note--{{ 'ok' if note.ok else 'warn' }}">
+              <span aria-hidden="true">{{ '✓' if note.ok else '!' }}</span>{{ note.text }}
+            </span>
+            {% endfor %}
+          </span>
+          {#- Present only when the model actually wrote one. -#}
+          {% if person.rationale %}
+          <p class="ai-basis"><span class="u-label">Why</span> {{ person.rationale }}</p>
+          {% endif %}
+        </div>
+
+        {#- The same manual Assign action the candidate list offers. The
+            ranking proposes; the manager decides. -#}
+        <div class="recommendation__decision">
+          <form hx-post="/partials/shifts/{{ shift_id }}/assign"
+                hx-target="{{ detail_target }}" hx-swap="innerHTML"
+                hx-indicator="#loading-indicator">
+            <input type="hidden" name="staff_id" value="{{ person.staff_id }}">
+            {% if embedded %}<input type="hidden" name="panel" value="1">{% endif %}
+            <button class="btn-primary btn-compact" type="submit">Assign</button>
+          </form>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+
+    <p class="ai-disclaimer">
+      A suggestion is not an assignment. Nobody is rostered until you choose
+      Assign.
+    </p>
+  </div>
+</div>
+
+{% else %}
+<div class="ai-panel" role="status">
+  <div class="ai-panel__body">
+    <p class="ai-disclaimer">
+      No staff are eligible for this shift, so there is nothing to rank.
+      {{ result.note }}
+    </p>
+  </div>
+</div>
+{% endif %}

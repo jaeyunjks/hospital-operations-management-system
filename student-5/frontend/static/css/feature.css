@@ -1901,6 +1901,52 @@
 .candidate-note--warn { color: var(--color-warning); }
 .candidate-note--blocked { color: var(--color-danger); }
 
+/* ------------------------------------- AI-assisted suggestion panel --- */
+/* The panel itself is the shared design system's .ai-panel / .ai-label /
+   .ai-basis / .recommendation set. Only the few pieces that set has no rule
+   for are defined here — deliberately not a second AI style of our own. */
+
+.suggest-actions {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.suggest-actions .drawer__muted { flex: 1 1 14rem; }
+
+/* Empty until the button fills it; collapses to nothing in between. */
+.suggest-actions + [aria-live]:empty { display: none; }
+
+/* Deterministic fallback: same panel, none of the AI tinting. The header
+   tint is part of how this design system says "a model produced this", so a
+   standard ordering must not wear it. */
+.ai-panel--plain .ai-panel__header { background: var(--color-surface-muted); }
+
+.recommendation-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  border: var(--border-hair);
+  list-style: none;
+}
+
+.recommendation__meta {
+  font-size: var(--size-ui-xs);
+  line-height: var(--leading-ui);
+  color: var(--color-text-muted);
+}
+
+/* The rationale is the model's reasoning, so it is labelled as a basis and
+   set quietly — it explains a suggestion, it does not assert a conclusion. */
+.ai-basis .u-label { margin-right: var(--space-2); }
+
+@media (max-width: 640px) {
+  .recommendation { align-items: flex-start; flex-wrap: wrap; }
+  .recommendation__decision { margin-left: calc(1.5em + var(--space-4)); }
+}
+
 /* Inert label rather than a disabled button: the action does not exist for
    this candidate, so nothing button-shaped is offered. */
 .candidate-blocked-label {

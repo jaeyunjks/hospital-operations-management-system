@@ -1,4 +1,9 @@
 {% set detail_target = '#planner-detail' if embedded else '#shift-drawer' %}
+{#- Both #planner-detail and #shift-drawer can hold a shift detail at the
+    same time, so the suggestions container is scoped to whichever one is
+    rendering. A shared id would give htmx two targets and the first match
+    would win, swapping the panel into the wrong shift. -#}
+{% set suggest_panel_id = 'planner-suggestions' if embedded else 'drawer-suggestions' %}
 {% if not_found %}
 <div class="drawer__header{{ ' planner-detail__header' if embedded else '' }}">
   <h2 class="u-label" id="shift-drawer-heading">Shift not found</h2>
@@ -140,6 +145,28 @@
       availability and assignment data — deterministic rules, not an AI
       recommendation. The manager makes the decision.
     </p>
+
+    {#- Optional AI ranking over the SAME eligible candidates. Offered only
+        when there is something to rank; with nobody eligible the button would
+        promise an answer the shortlist has already given. -#}
+    {% if eligible_count %}
+    <div class="suggest-actions">
+      <button class="btn-secondary btn-compact" type="button"
+              hx-get="/partials/shifts/{{ shift.shift_id }}/suggest{% if embedded %}?panel=1{% endif %}"
+              hx-target="#{{ suggest_panel_id }}" hx-swap="innerHTML"
+              hx-indicator="#loading-indicator"
+              hx-disabled-elt="this"
+              aria-controls="{{ suggest_panel_id }}">Suggest staff with AI</button>
+      <span class="drawer__muted">
+        Ranks the eligible staff below and explains why. It never assigns
+        anyone — you still choose.
+      </span>
+    </div>
+    {% endif %}
+    {#- Starts empty and is only ever filled by the button above. No
+        hx-trigger="load" here: the panel must not fetch itself, or every
+        drawer render would call the model unbidden. -#}
+    <div id="{{ suggest_panel_id }}" aria-live="polite"></div>
 
     {% if candidate_error %}
     <p class="drawer__muted">Candidate staff are unavailable. {{ candidate_error }}</p>

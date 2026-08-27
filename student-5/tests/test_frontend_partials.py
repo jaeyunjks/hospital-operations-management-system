@@ -3440,3 +3440,336 @@ def test_conflict_review_is_never_hidden_by_the_department_selection(frontend_cl
             f"/partials/roster-status?week_start=2026-08-24&department={department}"
         ).get_data(as_text=True)
         assert "Conflict review" in body
+
+
+# ==========================================================================
+# Suggest Staff — AI-assisted ranking in the shift drawer (Phase 3)
+# ==========================================================================
+# The panel renders the backend's shortlist and its stated provenance. It
+# decides nothing: no ordering, no eligibility, and no assignment happens on
+# this side. These tests mostly assert that.
+
+def _suggestion(staff_id=1, name="Amara Okafor", role="Registered Nurse",
+                dept="Intensive Care", specialisation=None,
+                employment="Full-Time", weekly_ok=True, rationale=None):
+    """One ranked suggestion, in the shape the backend returns."""
+    row = _candidate(staff_id=staff_id, name=name, role=role, dept=dept,
+                     specialisation=specialisation, employment=employment,
+                     weekly_ok=weekly_ok)
+    if rationale is not None:
+        row["rationale"] = rationale
+    return row
+
+
+def _suggest_result(mode="ai", suggestions=None, note=None, fallback_reason=None):
+    suggestions = suggestions if suggestions is not None else [_suggestion()]
+    return {
+        "ai_enabled": mode == "ai",
+        "mode": mode,
+        "note": note or ("Ranked by the local model from the eligible "
+                         "candidates only."),
+        "ranking": {"source": "ollama" if mode == "ai" else "deterministic",
+                    "model": "llama3", "fallback_reason": fallback_reason},
+        "shift": SHIFT_FIXTURE,
+        "already_assigned_staff_ids": [],
+        "eligible_count": len(suggestions),
+        "suggestions": suggestions,
+        "context": {"task": "suggest_staff_for_shift", "model": "llama3",
+                    "candidate_count": len(suggestions), "candidates": []},
+    }
+
+
+def _stub_suggest(monkeypatch, fe_api_client, result=None, error=None):
+    """Stub the API client call and record the arguments it was given."""
+    calls = []
+
+    def _suggest(shift_id, limit=5):
+        calls.append({"shift_id": shift_id, "limit": limit})
+        if error is not None:
+            raise error
+        return result if result is not None else _suggest_result()
+
+    monkeypatch.setattr(fe_api_client, "suggest_staff", _suggest)
+    return calls
+
+
+# ------------------------------------------------------------- the trigger
+def test_shift_detail_offers_the_suggest_staff_action(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_detail(monkeypatch, fe_api_client, [], [_candidate(1)])
+    body = frontend_client.get("/partials/shifts/11").data.decode()
+    assert "Suggest staff with AI" in body
+    assert 'hx-get="/partials/shifts/11/suggest"' in body
+    assert 'hx-target="#drawer-suggestions"' in body
+    assert 'id="drawer-suggestions"' in body
+
+
+def test_suggest_trigger_is_absent_when_nobody_is_eligible(
+        frontend_client, fe_api_client, monkeypatch):
+    """Offering to rank an empty list would promise an answer already given."""
+    _stub_shift_detail(monkeypatch, fe_api_client, [], [
+        _candidate(1, eligible=False, blocked_reason="On Leave")])
+    body = frontend_client.get("/partials/shifts/11").data.decode()
+    assert "Suggest staff with AI" not in body
+
+
+def test_suggest_panel_id_is_scoped_to_the_rendering_container(
+        frontend_client, fe_api_client, monkeypatch):
+    """The planner can show a detail in the panel AND the drawer at once.
+
+    A shared id would give htmx two matching targets and the first would win,
+    swapping suggestions into the wrong shift.
+    """
+    _stub_shift_detail(monkeypatch, fe_api_client, [], [_candidate(1)])
+    drawer = frontend_client.get("/partials/shifts/11").data.decode()
+    panel = frontend_client.get("/partials/shifts/11?panel=1").data.decode()
+    assert 'id="drawer-suggestions"' in drawer
+    assert 'id="planner-suggestions"' in panel
+    assert 'hx-target="#planner-suggestions"' in panel
+    assert "drawer-suggestions" not in panel
+
+
+def test_embedded_trigger_keeps_the_panel_flag(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_detail(monkeypatch, fe_api_client, [], [_candidate(1)])
+    panel = frontend_client.get("/partials/shifts/11?panel=1").data.decode()
+    assert 'hx-get="/partials/shifts/11/suggest?panel=1"' in panel
+
+
+# ------------------------------------------------- goes through the client
+def test_suggestions_are_fetched_through_the_api_client(
+        frontend_client, fe_api_client, monkeypatch):
+    calls = _stub_suggest(monkeypatch, fe_api_client)
+    frontend_client.get("/partials/shifts/11/suggest")
+    assert calls == [{"shift_id": 11, "limit": 5}]
+
+
+def test_browser_is_never_given_a_backend_url(
+        frontend_client, fe_api_client, monkeypatch):
+    """Every hop stays server-side: nothing in the markup points at /api/."""
+    _stub_suggest(monkeypatch, fe_api_client)
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "/api/" not in body
+    assert "suggest-staff" not in body
+
+    _stub_shift_detail(monkeypatch, fe_api_client, [], [_candidate(1)])
+    detail = frontend_client.get("/partials/shifts/11").data.decode()
+    assert "/api/" not in detail
+
+
+# ---------------------------------------------------------- AI rendering
+def test_ai_ranking_renders_candidate_detail_in_order(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(suggestions=[
+        _suggestion(2, "Daniel Reyes", role="Doctor", dept="Emergency",
+                    specialisation="Emergency Medicine"),
+        _suggestion(3, "Mei Lin Tan", role="Doctor", dept="Surgery",
+                    specialisation="Anaesthetics"),
+    ]))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert body.index("Daniel Reyes") < body.index("Mei Lin Tan")
+    assert "Doctor" in body and "Emergency Medicine" in body
+    assert "Anaesthetics" in body
+    assert "<ol" in body
+
+
+def test_ai_result_is_labelled_as_ai_assisted(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(mode="ai"))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "ai-label" in body
+    assert "AI-assisted" in body
+
+
+def test_rationale_is_rendered_when_present(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(suggestions=[
+        _suggestion(2, "Daniel Reyes", rationale="Knows the ward well")]))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "Knows the ward well" in body
+    assert "ai-basis" in body
+
+
+def test_missing_rationale_renders_no_empty_basis(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(suggestions=[
+        _suggestion(2, "Daniel Reyes")]))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "Daniel Reyes" in body
+    assert "ai-basis" not in body
+
+
+def test_weekly_availability_is_shown_as_advisory_context(
+        frontend_client, fe_api_client, monkeypatch):
+    """Advisory in the panel exactly as it is in the candidate list."""
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(suggestions=[
+        _suggestion(2, "Daniel Reyes", weekly_ok=False)]))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "Outside weekly availability" in body
+    assert "candidate-note--warn" in body
+    # Advisory never removes the action.
+    assert ">Assign</button>" in body
+
+
+def test_cross_department_is_context_not_a_block(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(suggestions=[
+        _suggestion(2, "Daniel Reyes", dept="Surgery")]))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "Cross-department" in body
+    assert ">Assign</button>" in body
+
+
+def test_no_internal_scoring_is_displayed(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(suggestions=[
+        _suggestion(2, "Daniel Reyes", rationale="Knows the ward")]))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    for word in ("score", "Score", "confidence", "Confidence", "weight"):
+        assert word not in body
+
+
+# -------------------------------------------------------------- fallback
+def test_rule_based_result_is_not_presented_as_ai(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(
+        mode="rule-based", fallback_reason="model_unavailable",
+        note="Deterministic ordering. The ranking model could not be reached."))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "ai-label" not in body
+    assert "AI-assisted" not in body
+    assert "Standard ordering" in body
+    # The panel's AI tinting is part of the claim, so it is dropped too.
+    assert "ai-panel--plain" in body
+
+
+def test_ai_result_keeps_the_ai_panel_tinting(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(mode="ai"))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "ai-panel--plain" not in body
+
+
+def test_fallback_shows_the_backend_note(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(
+        mode="rule-based", fallback_reason="model_unavailable",
+        note="Deterministic ordering. The ranking model could not be reached."))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "could not be reached" in body
+
+
+def test_fallback_still_lists_the_candidates(
+        frontend_client, fe_api_client, monkeypatch):
+    """A missing model costs the rationales, never the shortlist."""
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(
+        mode="rule-based", fallback_reason="ai_disabled",
+        note="Deterministic ordering. AI-Mode is switched off.",
+        suggestions=[_suggestion(2, "Daniel Reyes")]))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "Daniel Reyes" in body
+    assert ">Assign</button>" in body
+
+
+def test_no_eligible_candidates_state(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(
+        mode="rule-based", suggestions=[], fallback_reason="no_candidates",
+        note="No staff are eligible for this shift, so no ranking was requested."))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "nothing to rank" in body
+    assert ">Assign</button>" not in body
+
+
+def test_backend_failure_renders_a_contained_message(
+        frontend_client, fe_api_client, monkeypatch):
+    import api_client
+    _stub_suggest(monkeypatch, fe_api_client,
+                  error=api_client.BackendUnavailableError(UNAVAILABLE_MESSAGE))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "Suggestions are unavailable" in body
+    assert ">Assign</button>" not in body
+
+
+def test_deleted_shift_renders_a_not_found_message(
+        frontend_client, fe_api_client, monkeypatch):
+    import api_client
+    _stub_suggest(monkeypatch, fe_api_client,
+                  error=api_client.NotFoundError("missing"))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "no longer exists" in body
+
+
+# ----------------------------------------------------- assignment stays manual
+def test_assign_is_the_only_action_offered_in_the_panel(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(suggestions=[
+        _suggestion(2, "Daniel Reyes")]))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert 'hx-post="/partials/shifts/11/assign"' in body
+    assert 'name="staff_id" value="2"' in body
+    assert "unassign" not in body
+
+
+def test_suggesting_never_assigns_anyone(
+        frontend_client, fe_api_client, monkeypatch):
+    """Rendering the panel must not call the assign endpoint at all."""
+    _stub_suggest(monkeypatch, fe_api_client)
+    monkeypatch.setattr(
+        fe_api_client, "assign_staff",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not assign")))
+    response = frontend_client.get("/partials/shifts/11/suggest")
+    assert response.status_code == 200
+
+
+def test_panel_assign_targets_the_detail_container(
+        frontend_client, fe_api_client, monkeypatch):
+    """Assigning re-renders the whole detail, which clears the stale panel."""
+    _stub_suggest(monkeypatch, fe_api_client)
+    drawer = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert 'hx-target="#shift-drawer"' in drawer
+    panel = frontend_client.get("/partials/shifts/11/suggest?panel=1").data.decode()
+    assert 'hx-target="#planner-detail"' in panel
+    assert 'name="panel" value="1"' in panel
+
+
+# ------------------------------------------------------------ htmx safety
+def test_panel_does_not_re_arm_itself(
+        frontend_client, fe_api_client, monkeypatch):
+    """No hx-trigger="load" anywhere, or every render would call the model."""
+    _stub_suggest(monkeypatch, fe_api_client)
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "hx-trigger" not in body
+    assert "/suggest" not in body
+
+
+def test_repeated_clicks_replace_rather_than_append(
+        frontend_client, fe_api_client, monkeypatch):
+    """innerHTML into a fixed target: asking twice cannot stack two panels."""
+    _stub_shift_detail(monkeypatch, fe_api_client, [], [_candidate(1)])
+    detail = frontend_client.get("/partials/shifts/11").data.decode()
+    assert 'hx-target="#drawer-suggestions" hx-swap="innerHTML"' in detail
+    assert detail.count('id="drawer-suggestions"') == 1
+
+    _stub_suggest(monkeypatch, fe_api_client)
+    first = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    second = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert first == second
+    assert first.count("ai-panel") == second.count("ai-panel")
+
+
+def test_trigger_is_disabled_while_in_flight(
+        frontend_client, fe_api_client, monkeypatch):
+    """Guards against a double-click firing two model calls."""
+    _stub_shift_detail(monkeypatch, fe_api_client, [], [_candidate(1)])
+    body = frontend_client.get("/partials/shifts/11").data.decode()
+    assert 'hx-disabled-elt="this"' in body
+    assert 'hx-indicator="#loading-indicator"' in body
+
+
+def test_panel_container_announces_changes(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_detail(monkeypatch, fe_api_client, [], [_candidate(1)])
+    body = frontend_client.get("/partials/shifts/11").data.decode()
+    assert 'id="drawer-suggestions" aria-live="polite"' in body
+    assert 'aria-controls="drawer-suggestions"' in body

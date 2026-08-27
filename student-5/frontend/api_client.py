@@ -202,6 +202,23 @@ def list_shift_candidates(shift_id: int) -> Dict[str, Any]:
     return _request("GET", f"/api/shifts/{shift_id}/candidates")
 
 
+def suggest_staff(shift_id: int, limit: int = 5) -> Dict[str, Any]:
+    """POST /api/shifts/suggest-staff — ranked eligible candidates for a shift.
+
+    The browser never calls the backend itself: this runs server-side like
+    every other call in this module, so the simulated identity headers travel
+    with it and the backend's manager guard is the thing that decides whether
+    the workflow is allowed.
+
+    The reply carries its own provenance — ``mode`` is ``"ai"`` only when the
+    model actually ranked the list — and the template renders that verdict
+    rather than assuming one. Suggesting is not assigning; nothing here
+    creates an assignment.
+    """
+    return _request("POST", "/api/shifts/suggest-staff",
+                     payload={"shift_id": shift_id, "limit": limit})
+
+
 def assign_staff(shift_id: int, staff_id: int,
                  approved_by: Optional[str] = None) -> Dict[str, Any]:
     """POST /api/shifts/<id>/assign — assign a real numeric staff ID."""

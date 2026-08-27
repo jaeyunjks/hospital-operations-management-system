@@ -7,6 +7,7 @@ and application logic without needing a second process or a real SQLite file.
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -16,6 +17,33 @@ BACKEND_DIR = Path(__file__).resolve().parents[1] / "backend"
 sys.path.insert(0, str(BACKEND_DIR))
 
 from errors import ConflictError, NotFoundError  # noqa: E402
+
+#: Cached backend application module. Loaded once, like a plain import.
+_BACKEND_APP_MODULE = None
+
+
+def _backend_app_module():
+    """Load backend/app.py, pinned BY FILE rather than by module name.
+
+    Both services own an ``app.py``, and each puts its own directory at the
+    FRONT of sys.path when imported — they have to, so that `python3 app.py`
+    can find its siblings. The consequence is that a bare `import app` in this
+    fixture resolves to whichever service most recently touched sys.path: load
+    the frontend suite first and the backend tests quietly run against the
+    frontend application, where every /api/ route 404s.
+
+    The whole suite hid this because the backend file collects first and warms
+    sys.modules["app"]; running the frontend file alone exposed it. Pinning the
+    path removes the ordering dependency instead of relying on it.
+    """
+    global _BACKEND_APP_MODULE
+    if _BACKEND_APP_MODULE is None:
+        spec = importlib.util.spec_from_file_location(
+            "student5_backend_app", BACKEND_DIR / "app.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _BACKEND_APP_MODULE = module
+    return _BACKEND_APP_MODULE
 
 
 class StubDatabaseClient:
@@ -321,8 +349,7 @@ def stub_database(monkeypatch):
 @pytest.fixture
 def client(stub_database):
     """Flask test client wired to the stub database."""
-    from app import create_app
-    application = create_app()
+    application = _backend_app_module().create_app()
     application.config.update(TESTING=True)
     with application.test_client() as test_client:
         yield test_client
