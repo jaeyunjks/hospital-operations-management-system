@@ -23,6 +23,7 @@ from __future__ import annotations
 import datetime
 import os
 import sys
+import urllib.parse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -379,6 +380,57 @@ def _initials(name: str) -> str:
 
 #: Assignment states that no longer occupy a place on a shift.
 _INACTIVE_ASSIGNMENT = ("Cancelled", "Declined")
+
+
+#: Operational statuses that put a rostered staff member in conflict with
+#: their own assignments. "Available" is the only status that does not.
+_CONFLICTING_STATUS = ("Unavailable", "On Leave")
+
+
+def _planner_link(shift):
+    """Deep link into the existing Shift Planner with this shift selected.
+
+    One helper rather than a URL rebuilt in each template: the planner reads
+    `selected_shift_id` (not `shift_id`), and a link that gets that wrong
+    opens the right day with nothing selected — a failure that looks like it
+    worked. Scenario B, C and E all route through here.
+    """
+    parts = [
+        ("date", shift.get("shift_date") or ""),
+        ("department", shift.get("department") or ""),
+        ("selected_shift_id", shift.get("shift_id") or ""),
+        ("view", "week"),
+    ]
+    query = urllib.parse.urlencode([(k, v) for k, v in parts if v != ""])
+    return "/shifts?" + query
+
+
+def _availability_conflicts(person, current_assignment, upcoming_shifts):
+    """Assignments the staff member still holds despite not being available.
+
+    Empty whenever the person is Available — being rostered is not a problem
+    then. Nothing here is stored: it is the live roster read back against the
+    live status, so it corrects itself the moment either one changes.
+
+    Cancelled and declined assignments are already excluded upstream by
+    _split_shifts; they no longer occupy a place on a shift, so they are not
+    conflicts.
+    """
+    if not person or person.get("availability_status") not in _CONFLICTING_STATUS:
+        return []
+
+    rows = ([current_assignment] if current_assignment else []) + list(upcoming_shifts or [])
+    # A shift that is both "current" and in the upcoming list would otherwise
+    # be counted twice; _split_shifts keeps them disjoint, but de-duplicating
+    # by shift_id means a change there cannot silently inflate the count.
+    seen, unique = set(), []
+    for row in rows:
+        key = row.get("shift_id")
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(row)
+    return unique
 
 
 def _split_shifts(shifts):
@@ -879,6 +931,7 @@ def create_app() -> Flask:
     app.jinja_env.globals["shift_display_id"] = _shift_display_id
     app.jinja_env.globals["initials"] = _initials
     app.jinja_env.globals["date_long"] = _date_long
+    app.jinja_env.globals["planner_link"] = _planner_link
     app.jinja_env.globals["timedelta"] = datetime.timedelta
 
     # ---------------------------------------------------------- shared assets
@@ -1202,12 +1255,21 @@ def create_app() -> Flask:
         assigned_count = len(assignments) if assignments is not None else None
         coverage = (_coverage(assigned_count, int(shift["required_staff_count"]))
                     if assigned_count is not None else None)
+
+        # Assigned staff whose operational status says they cannot work.
+        # Coverage arithmetic is deliberately NOT changed by this: `assigned`
+        # still counts persisted active assignments, which is what the roster
+        # actually holds. This exists so the count is not read as reassurance
+        # when one of those people is unavailable.
+        unavailable_assigned = [row for row in (assignments or [])
+                                if row.get("availability_status") in _CONFLICTING_STATUS]
         return render_template(
             "partials/shift_detail.html", shift=shift, not_found=False,
             error=None, notice=notice, assignments=assignments,
             assignment_error=assignment_error, candidates=candidates,
             candidate_error=candidate_error, coverage=coverage,
             assigned_count=assigned_count, embedded=embedded,
+            unavailable_assigned=unavailable_assigned,
             eligible_count=sum(1 for row in candidates if row.get("eligible")),
         )
 
@@ -1502,8 +1564,14 @@ def create_app() -> Flask:
         except (BackendUnavailableError, BackendError) as error:
             weekly_error = str(error)
 
+        # Derived here, not stored: the roster read back against the current
+        # operational status. Changing availability never edits an
+        # assignment, so this is the only place the disagreement surfaces.
+        affected = _availability_conflicts(record, current, upcoming)
+
         return render_template(
             "partials/staff_detail.html", person=record, error=None,
+            affected_assignments=affected,
             notice=notice, statuses=api_client.AVAILABILITY_STATUSES,
             display_id=_display_id(staff_id), initials=_initials(record["name"]),
             last_updated=_format_timestamp(record.get("updated_at")),

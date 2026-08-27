@@ -247,10 +247,17 @@ def delete_assignment(connection: sqlite3.Connection, assignment_id: int) -> boo
 # --------------------------------------------------------------------------
 def list_staff_for_shift(connection: sqlite3.Connection,
                          shift_id: int) -> List[Dict[str, Any]]:
-    """Return the staff assigned to one shift, with their assignment status."""
+    """Return the staff assigned to one shift, with their assignment status.
+
+    `availability_status` is included because an assignment and the person's
+    operational availability can disagree: a staff member who becomes
+    Unavailable keeps their existing assignments (nothing is auto-removed),
+    and a reviewer looking at the shift has to be able to see that. Without
+    it the roster looks fully staffed while a rostered person cannot work.
+    """
     rows = connection.execute(
         """
-        SELECT s.staff_id, s.name, s.role, s.department,
+        SELECT s.staff_id, s.name, s.role, s.department, s.availability_status,
                a.assignment_id, a.assignment_status
         FROM shift_assignment AS a
         JOIN staff AS s ON s.staff_id = a.staff_id

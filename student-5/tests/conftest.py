@@ -184,9 +184,28 @@ class StubDatabaseClient:
             del self.assignments[aid]
 
     def list_staff_for_shift(self, shift_id):
-        return [{**self.staff[a["staff_id"]], "assignment_id": a["assignment_id"],
-                 "assignment_status": a["assignment_status"]}
-                for a in self.assignments.values() if a["shift_id"] == shift_id]
+        """Mirror the repository projection EXACTLY.
+
+        Previously this spread the whole staff record, so a test could pass
+        by reading a field the real query never returns. The real SELECT is
+        staff_id/name/role/department/availability_status plus the two
+        assignment columns — nothing else.
+        """
+        rows = []
+        for assignment in self.assignments.values():
+            if assignment["shift_id"] != shift_id:
+                continue
+            person = self.staff[assignment["staff_id"]]
+            rows.append({
+                "staff_id": person["staff_id"],
+                "name": person["name"],
+                "role": person["role"],
+                "department": person["department"],
+                "availability_status": person["availability_status"],
+                "assignment_id": assignment["assignment_id"],
+                "assignment_status": assignment["assignment_status"],
+            })
+        return sorted(rows, key=lambda row: row["name"])
 
     # -- assignments -----------------------------------------------------
     def list_assignments(self, shift_id=None, staff_id=None, assignment_status=None):

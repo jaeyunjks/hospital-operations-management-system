@@ -60,6 +60,46 @@
   </div>
   {% endif %}
 
+  {# ----------------------------------- operational availability conflict #}
+  {#- Shown only when the person is not Available AND is still rostered.
+      Changing availability deliberately leaves assignments alone, so this
+      panel is how the manager finds out there is something to resolve. -#}
+  {% if affected_assignments %}
+  <section class="drawer__section">
+    <div class="conflict-panel" role="alert">
+      <p class="conflict-panel__title">
+        <span aria-hidden="true">⚠</span>
+        Operational availability conflict
+      </p>
+      <p class="conflict-panel__body">
+        {{ person.name }} is <strong>{{ person.availability_status }}</strong>
+        but is still rostered to
+        {{ affected_assignments|length }}
+        {{ 'assignment' if affected_assignments|length == 1 else 'assignments' }}.
+        Nothing has been unassigned — changing availability never edits the
+        roster. Resolve each shift below.
+      </p>
+
+      <ul role="list" class="conflict-list">
+        {% for shift in affected_assignments %}
+        <li class="conflict-item">
+          <span class="conflict-item__when u-mono">
+            {{ shift.shift_date }} · {{ shift.start_time }}–{{ shift.end_time }}
+          </span>
+          <span class="conflict-item__dept">{{ shift.department }}</span>
+          <span class="badge-neutral">{{ shift.assignment_status }}</span>
+          {#- Reuses the Shift Planner rather than adding roster controls to
+              this drawer; there is one place assignments are edited. -#}
+          <a class="btn-secondary btn-compact" href="{{ planner_link(shift) }}">
+            Manage shift
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+  {% endif %}
+
   {# ---------------------------------------------- current assignment #}
   <section class="drawer__section">
     <h3 class="u-label">Current assignment</h3>
@@ -74,6 +114,10 @@
       <div class="row row--wrap" style="margin-top: var(--space-3);">
         <span class="badge-info">{{ current_assignment.assignment_status }}</span>
         <span class="badge-neutral">{{ current_assignment.shift_status }}</span>
+        <span class="spacer"></span>
+        <a class="btn-secondary btn-compact" href="{{ planner_link(current_assignment) }}">
+          Manage shift
+        </a>
       </div>
     </div>
     {% else %}
@@ -104,6 +148,7 @@
           <span class="shift-item__time u-mono">{{ shift.start_time }}–{{ shift.end_time }}</span>
         </span>
         <span class="badge-neutral">{{ shift.assignment_status }}</span>
+        <a class="btn-ghost btn-compact" href="{{ planner_link(shift) }}">Manage</a>
       </li>
       {% endfor %}
     </ul>

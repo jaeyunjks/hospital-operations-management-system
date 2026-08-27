@@ -671,3 +671,152 @@ class TestRequestAuthorization:
                             headers=MANAGER).get_json()["request"]
         for field in ("staff_name", "staff_role", "staff_department"):
             assert single[field] == listed[field]
+
+
+# ==========================================================================
+# Scenario E — unexpected roster maintenance
+# ==========================================================================
+# The whole feature rests on one rule: changing operational availability
+# records a judgement about a person, and never edits the roster. Everything
+# below exists to keep that true.
+
+class TestOperationalAvailabilityUpdate:
+    @pytest.mark.parametrize("status", ["Unavailable", "On Leave", "Available"])
+    def test_manager_sets_operational_status(self, client, status):
+        response = client.put("/api/staff/1/availability", headers=MANAGER,
+                              json={"availability_status": status})
+        assert response.status_code == 200
+        assert response.get_json()["staff"]["availability_status"] == status
+
+    def test_invalid_status_is_rejected(self, client):
+        response = client.put("/api/staff/1/availability", headers=MANAGER,
+                              json={"availability_status": "On Holiday"})
+        assert response.status_code == 400
+
+    def test_unknown_staff_is_404(self, client):
+        response = client.put("/api/staff/999/availability", headers=MANAGER,
+                              json={"availability_status": "Unavailable"})
+        assert response.status_code == 404
+
+    def test_employee_cannot_set_operational_status(self, client):
+        """Operational availability is a management judgement, not
+        self-service — including on your own record."""
+        response = client.put("/api/staff/1/availability", headers=_employee(1),
+                              json={"availability_status": "Unavailable"})
+        assert response.status_code == 403
+
+
+class TestAvailabilityChangeLeavesRosterAlone:
+    """The single most important guarantee in Scenario E."""
+
+    def _set(self, client, status, staff_id=1):
+        return client.put(f"/api/staff/{staff_id}/availability", headers=MANAGER,
+                          json={"availability_status": status})
+
+    def test_becoming_unavailable_does_not_unassign(self, client, stub_database):
+        before = {a["assignment_id"]: dict(a)
+                  for a in stub_database.assignments.values()}
+        self._set(client, "Unavailable")
+        after = {a["assignment_id"]: dict(a)
+                 for a in stub_database.assignments.values()}
+        assert after == before
+
+    def test_becoming_unavailable_does_not_cancel_assignments(self, client,
+                                                              stub_database):
+        self._set(client, "Unavailable")
+        statuses = [a["assignment_status"] for a in stub_database.assignments.values()]
+        assert "Cancelled" not in statuses
+
+    def test_going_on_leave_does_not_unassign(self, client, stub_database):
+        before = len(stub_database.assignments)
+        self._set(client, "On Leave")
+        assert len(stub_database.assignments) == before
+
+    def test_becoming_unavailable_does_not_create_a_replacement(self, client,
+                                                                stub_database):
+        before = set(stub_database.assignments)
+        self._set(client, "Unavailable")
+        assert set(stub_database.assignments) == before
+
+    def test_returning_to_available_restores_nothing(self, client, stub_database):
+        """Removing someone is a decision; undoing the status must not undo
+        the decision."""
+        client.put("/api/shifts/1/unassign", headers=MANAGER,
+                   json={"staff_id": 1})
+        after_removal = {a["assignment_id"]: dict(a)
+                         for a in stub_database.assignments.values()}
+
+        self._set(client, "Unavailable")
+        self._set(client, "Available")
+
+        assert {a["assignment_id"]: dict(a)
+                for a in stub_database.assignments.values()} == after_removal
+
+    def test_availability_change_does_not_touch_weekly_pattern(self, client,
+                                                               stub_database):
+        before = {k: dict(v) for k, v in stub_database.weekly.items()}
+        self._set(client, "Unavailable")
+        assert {k: dict(v) for k, v in stub_database.weekly.items()} == before
+
+    def test_availability_change_does_not_create_a_request(self, client,
+                                                           stub_database):
+        """Scenario C's request entity is for planned, employee-initiated
+        absence. An operational status change is neither."""
+        before = set(stub_database.requests)
+        self._set(client, "Unavailable")
+        assert set(stub_database.requests) == before
+
+
+class TestAssignmentPayloadCarriesAvailability:
+    """The shift view cannot warn about a conflict it is never told about."""
+
+    def test_assignment_listing_includes_operational_status(self, client):
+        rows = client.get("/api/shifts/1/assignments",
+                          headers=MANAGER).get_json()["assignments"]
+        assert rows
+        assert all("availability_status" in row for row in rows)
+
+    def test_availability_change_is_visible_on_the_shift(self, client):
+        client.put("/api/staff/1/availability", headers=MANAGER,
+                   json={"availability_status": "Unavailable"})
+        rows = client.get("/api/shifts/1/assignments",
+                          headers=MANAGER).get_json()["assignments"]
+        assigned = next(row for row in rows if row["staff_id"] == 1)
+        assert assigned["availability_status"] == "Unavailable"
+        # ...and they are still assigned.
+        assert assigned["assignment_status"] == "Assigned"
+
+
+class TestCoverageSemanticsUnchanged:
+    """Coverage counts persisted active assignments. Scenario E deliberately
+    did NOT change that; it makes the conflict visible instead. If this ever
+    starts failing, coverage arithmetic was redefined without a decision."""
+
+    def _coverage(self, client, shift_id=1):
+        rows = client.get("/api/shifts/coverage", headers=MANAGER).get_json()["shifts"]
+        return next(row for row in rows if row["shift_id"] == shift_id)
+
+    def test_unavailable_assigned_staff_still_count_towards_coverage(self, client):
+        before = self._coverage(client)
+        client.put("/api/staff/1/availability", headers=MANAGER,
+                   json={"availability_status": "Unavailable"})
+        after = self._coverage(client)
+        assert after["assigned_staff_count"] == before["assigned_staff_count"]
+        assert after["shortfall"] == before["shortfall"]
+        assert after["coverage_status"] == before["coverage_status"]
+
+    def test_unassigning_opens_a_gap(self, client):
+        before = self._coverage(client)
+        client.put("/api/shifts/1/unassign", headers=MANAGER,
+                   json={"staff_id": 1})
+        after = self._coverage(client)
+        assert after["assigned_staff_count"] == before["assigned_staff_count"] - 1
+        assert after["shortfall"] == before["shortfall"] + 1
+
+    def test_assigning_a_replacement_closes_the_gap(self, client):
+        client.put("/api/shifts/1/unassign", headers=MANAGER,
+                   json={"staff_id": 1})
+        opened = self._coverage(client)
+        client.post("/api/shifts/1/assign", headers=MANAGER, json={"staff_id": 2})
+        closed = self._coverage(client)
+        assert closed["shortfall"] == opened["shortfall"] - 1

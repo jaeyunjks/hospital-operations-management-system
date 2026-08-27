@@ -68,17 +68,43 @@
       <h3 class="u-label" id="current-assignments-heading">Current assignments</h3>
       {% if assignments is not none %}<span class="u-label">{{ assignments|length }} active</span>{% endif %}
     </div>
+    {#- A rostered person who is no longer operationally available is still
+        rostered — nothing auto-unassigns them. Saying so here stops the
+        "Assigned 2 of 2" count from reading as reassurance. -#}
+    {% if unavailable_assigned %}
+    <div class="conflict-panel conflict-panel--inline" role="alert">
+      <p class="conflict-panel__title">
+        <span aria-hidden="true">⚠</span>
+        {{ unavailable_assigned|length }} assigned
+        {{ 'staff member is' if unavailable_assigned|length == 1 else 'staff members are' }}
+        operationally unavailable
+      </p>
+      <p class="conflict-panel__body">
+        They still count towards the assigned total because the assignment
+        record stands. Unassign and replace them to restore working cover.
+      </p>
+    </div>
+    {% endif %}
+
     {% if assignment_error %}
     <p class="drawer__muted">Assignment data is unavailable. {{ assignment_error }}</p>
     {% elif assignments %}
     <ul class="assignment-list" role="list">
       {% for person in assignments %}
-      <li class="assignment-person">
+      {% set unavailable = person.availability_status in ("Unavailable", "On Leave") %}
+      <li class="assignment-person{% if unavailable %} assignment-person--conflict{% endif %}">
         <span class="staff-avatar" aria-hidden="true">{{ initials(person.name) }}</span>
         <span class="assignment-person__main">
           <strong>{{ person.name }}</strong>
           <span>{{ person.role }} · {{ person.department }}</span>
           <span class="u-label">{{ person.assignment_status }}</span>
+          {#- Labelled in words, not by colour alone. -#}
+          {% if unavailable %}
+          <span class="conflict-flag">
+            <span aria-hidden="true">⚠</span>
+            Assigned while {{ person.availability_status }}
+          </span>
+          {% endif %}
         </span>
         <form hx-post="/partials/shifts/{{ shift.shift_id }}/unassign"
               hx-target="{{ detail_target }}" hx-swap="innerHTML"

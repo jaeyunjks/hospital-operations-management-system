@@ -2388,3 +2388,89 @@
   .request-item__side { align-items: flex-start; flex-direction: row; }
   .contextbar__demo { width: 100%; }
 }
+
+/* ==========================================================================
+   10. Operational availability conflicts (Scenario E)
+   --------------------------------------------------------------------------
+   Surfaces the disagreement between a staff member's operational status and
+   the assignments they still hold. Nothing here changes coverage arithmetic;
+   it only stops a healthy-looking count from being read as reassurance.
+
+   Every conflict is carried by a word and a glyph as well as colour.
+   ========================================================================== */
+
+.conflict-panel {
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-warning-soft);
+  border-left: var(--border-accent);
+  border-left-color: var(--color-warning);
+}
+
+.conflict-panel--inline { margin-bottom: var(--space-4); }
+
+.conflict-panel__title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  font-weight: var(--weight-semibold);
+  color: var(--color-warning-mark);
+}
+
+.conflict-panel__body {
+  margin-top: var(--space-2);
+  font-size: var(--size-ui-sm);
+  line-height: var(--leading-ui);
+  color: var(--color-text-secondary);
+}
+
+.conflict-list {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.conflict-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-surface);
+  border: var(--border-hair);
+}
+
+.conflict-item__when {
+  font-size: var(--size-data-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-data);
+}
+
+.conflict-item__dept {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-secondary);
+}
+
+/* An assigned person who cannot work: marked by the bar and the label, so
+   the state survives greyscale and colour-blindness. */
+.assignment-person--conflict {
+  background: var(--color-warning-soft);
+  box-shadow: inset 3px 0 0 var(--color-warning);
+}
+
+.conflict-flag {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-warning-mark);
+}
+
+@media (max-width: 820px) {
+  .conflict-item { align-items: flex-start; }
+}

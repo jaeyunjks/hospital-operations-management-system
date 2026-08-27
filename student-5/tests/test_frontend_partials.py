@@ -13,6 +13,7 @@ cross-test contamination regardless of collection order.
 
 from __future__ import annotations
 
+import datetime
 import importlib.util
 import sys
 from pathlib import Path
@@ -2512,3 +2513,335 @@ def test_an_employee_identity_without_a_staff_member_is_not_valid():
         from flask import session
         session[demo_identity.SESSION_KEY] = {"role": "Employee", "staff_id": None}
         assert demo_identity.current_identity() is None
+
+
+# ==========================================================================
+# Scenario E — unexpected roster maintenance (frontend)
+# ==========================================================================
+
+def _assigned_shift(shift_id=1, date=None, start="07:00", end="15:00",
+                    dept="Emergency", status="Assigned"):
+    """A row as list_staff_shifts returns it (shift fields + assignment state)."""
+    if date is None:
+        date = datetime.date.today().isoformat()
+    return {"shift_id": shift_id, "department": dept, "shift_date": date,
+            "start_time": start, "end_time": end,
+            "required_role": "Registered Nurse", "required_staff_count": 2,
+            "shift_status": "Planned", "assignment_status": status}
+
+
+# ------------------------------------------------- affected-shift derivation
+@pytest.mark.parametrize("status", ["Unavailable", "On Leave"])
+def test_unavailable_staff_with_an_assignment_has_a_conflict(status):
+    fe = _fe()
+    shift = _assigned_shift()
+    conflicts = fe._availability_conflicts(
+        _person(availability=status), None, [shift])
+    assert conflicts == [shift]
+
+
+def test_available_staff_with_assignments_have_no_conflict():
+    """Being rostered is only a problem when you cannot work."""
+    fe = _fe()
+    conflicts = fe._availability_conflicts(
+        _person(availability="Available"), None, [_assigned_shift()])
+    assert conflicts == []
+
+
+def test_unavailable_staff_with_no_assignments_has_no_conflict():
+    fe = _fe()
+    assert fe._availability_conflicts(
+        _person(availability="Unavailable"), None, []) == []
+
+
+def test_multiple_assignments_are_all_reported():
+    fe = _fe()
+    shifts = [_assigned_shift(1), _assigned_shift(2), _assigned_shift(3)]
+    conflicts = fe._availability_conflicts(
+        _person(availability="Unavailable"), None, shifts)
+    assert len(conflicts) == 3
+
+
+def test_current_assignment_is_included_alongside_upcoming():
+    fe = _fe()
+    current = _assigned_shift(9)
+    conflicts = fe._availability_conflicts(
+        _person(availability="Unavailable"), current, [_assigned_shift(10)])
+    assert [row["shift_id"] for row in conflicts] == [9, 10]
+
+
+def test_a_shift_appearing_twice_is_counted_once():
+    """Guards the count against a change in how current/upcoming are split."""
+    fe = _fe()
+    shift = _assigned_shift(4)
+    conflicts = fe._availability_conflicts(
+        _person(availability="Unavailable"), shift, [shift])
+    assert len(conflicts) == 1
+
+
+def test_missing_person_yields_no_conflict():
+    fe = _fe()
+    assert fe._availability_conflicts(None, None, [_assigned_shift()]) == []
+
+
+@pytest.mark.parametrize("status", ["Cancelled", "Declined"])
+def test_inactive_assignments_are_not_roster_conflicts(status):
+    """A cancelled assignment no longer occupies a place on the shift, so it
+    is nothing for the manager to resolve. _split_shifts filters these."""
+    fe = _fe()
+    current, upcoming = fe._split_shifts([_assigned_shift(status=status)])
+    assert current is None and upcoming == []
+    assert fe._availability_conflicts(
+        _person(availability="Unavailable"), current, upcoming) == []
+
+
+# -------------------------------------------------------------- deep link
+def test_planner_link_uses_the_parameters_the_planner_reads():
+    fe = _fe()
+    link = fe._planner_link(_assigned_shift(7, date="2026-09-01", dept="Emergency"))
+    assert "selected_shift_id=7" in link
+    assert "date=2026-09-01" in link
+    assert "view=week" in link
+    assert "department=Emergency" in link
+
+
+def test_planner_link_encodes_departments_containing_spaces():
+    fe = _fe()
+    link = fe._planner_link(_assigned_shift(1, dept="Intensive Care"))
+    assert "Intensive+Care" in link or "Intensive%20Care" in link
+
+
+def test_planner_link_omits_missing_fields_rather_than_sending_blanks():
+    fe = _fe()
+    link = fe._planner_link({"shift_id": 3, "shift_date": "2026-09-01"})
+    assert "department=" not in link
+    assert "selected_shift_id=3" in link
+
+
+# ----------------------------------------------------- staff detail drawer
+@pytest.fixture
+def staff_drawer(frontend_client, fe_api_client, monkeypatch):
+    """Drawer wired to a controllable staff record and shift list."""
+    state = {"person": _person(availability="Available"),
+             "shifts": [_assigned_shift()]}
+    monkeypatch.setattr(fe_api_client, "get_staff",
+                        lambda sid: {"staff": state["person"]})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts",
+                        lambda sid: {"shifts": state["shifts"]})
+    monkeypatch.setattr(fe_api_client, "get_weekly_availability",
+                        lambda sid: {"periods": []})
+    return frontend_client, state
+
+
+def test_drawer_warns_when_unavailable_staff_remain_rostered(staff_drawer):
+    client, state = staff_drawer
+    state["person"] = _person(availability="Unavailable")
+    body = client.get("/partials/staff/1").get_data(as_text=True)
+    assert "Operational availability conflict" in body
+    assert "still rostered to" in body
+
+
+def test_drawer_says_plainly_that_nothing_was_unassigned(staff_drawer):
+    client, state = staff_drawer
+    state["person"] = _person(availability="Unavailable")
+    body = client.get("/partials/staff/1").get_data(as_text=True)
+    assert "Nothing has been unassigned" in body
+
+
+def test_drawer_shows_no_conflict_for_available_staff(staff_drawer):
+    client, _ = staff_drawer
+    body = client.get("/partials/staff/1").get_data(as_text=True)
+    assert "Operational availability conflict" not in body
+
+
+def test_conflict_is_labelled_in_words_not_only_colour(staff_drawer):
+    client, state = staff_drawer
+    state["person"] = _person(availability="On Leave")
+    body = client.get("/partials/staff/1").get_data(as_text=True)
+    assert "On Leave" in body
+    assert "conflict-panel__title" in body
+
+
+def test_every_conflicting_shift_offers_a_manage_link(staff_drawer):
+    client, state = staff_drawer
+    state["person"] = _person(availability="Unavailable")
+    state["shifts"] = [_assigned_shift(1), _assigned_shift(2)]
+    body = client.get("/partials/staff/1").get_data(as_text=True)
+    assert "selected_shift_id=1" in body
+    assert "selected_shift_id=2" in body
+
+
+def test_availability_update_asks_the_directory_to_refresh(staff_drawer,
+                                                           fe_api_client, monkeypatch):
+    """Directory badge and drawer must not disagree after a change."""
+    client, state = staff_drawer
+    monkeypatch.setattr(fe_api_client, "update_availability",
+                        lambda sid, status: {"staff": state["person"]})
+    response = client.post("/partials/staff/1/availability",
+                           data={"availability_status": "Unavailable"})
+    assert response.headers["HX-Trigger"] == "staff-updated"
+
+
+def test_failed_availability_update_does_not_claim_success(staff_drawer,
+                                                           fe_api_client, monkeypatch):
+    client, _ = staff_drawer
+    monkeypatch.setattr(fe_api_client, "update_availability", _raise_unavailable)
+    response = client.post("/partials/staff/1/availability",
+                           data={"availability_status": "Unavailable"})
+    assert "HX-Trigger" not in response.headers
+    assert "was not updated" in response.get_data(as_text=True)
+
+
+def test_drawer_survives_the_shift_lookup_failing(staff_drawer, fe_api_client,
+                                                  monkeypatch):
+    """A conflict panel is worth less than the rest of the record."""
+    client, state = staff_drawer
+    state["person"] = _person(availability="Unavailable")
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", _raise_unavailable)
+    response = client.get("/partials/staff/1")
+    assert response.status_code == 200
+    assert "Amara Okafor" in response.get_data(as_text=True)
+
+
+def test_drawer_declares_no_load_trigger(staff_drawer):
+    """The conflict panel is rendered by its parent, never by itself."""
+    client, state = staff_drawer
+    state["person"] = _person(availability="Unavailable")
+    body = client.get("/partials/staff/1").get_data(as_text=True)
+    assert "load" not in [t.strip() for t in _hx_triggers(body)]
+
+
+# ------------------------------------------------------ shift detail panel
+@pytest.fixture
+def shift_drawer(frontend_client, fe_api_client, monkeypatch):
+    state = {"assignments": [], "candidates": []}
+    monkeypatch.setattr(fe_api_client, "get_shift",
+                        lambda sid: {"shift": _planner_shift(shift_id=1, required=2)})
+    monkeypatch.setattr(fe_api_client, "list_shift_assignments",
+                        lambda sid: {"assignments": state["assignments"]})
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **k: {"staff": state["candidates"], "count": 0})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    monkeypatch.setattr(fe_api_client, "get_weekly_availability",
+                        lambda sid: {"periods": []})
+    monkeypatch.setattr(fe_api_client, "list_unavailability_requests",
+                        lambda **k: {"requests": []})
+    return frontend_client, state
+
+
+def _assignment_row(staff_id=1, name="Amara Okafor", availability="Available",
+                    status="Assigned"):
+    return {"staff_id": staff_id, "name": name, "role": "Registered Nurse",
+            "department": "Emergency", "assignment_id": staff_id,
+            "assignment_status": status, "availability_status": availability}
+
+
+@pytest.mark.parametrize("status", ["Unavailable", "On Leave"])
+def test_shift_flags_an_assigned_person_who_cannot_work(shift_drawer, status):
+    client, state = shift_drawer
+    state["assignments"] = [_assignment_row(availability=status)]
+    body = client.get("/partials/shifts/1").get_data(as_text=True)
+    assert f"Assigned while {status}" in body
+    assert "operationally unavailable" in body
+
+
+def test_shift_does_not_flag_available_assigned_staff(shift_drawer):
+    client, state = shift_drawer
+    state["assignments"] = [_assignment_row()]
+    body = client.get("/partials/shifts/1").get_data(as_text=True)
+    assert "Assigned while" not in body
+
+
+def test_unavailable_assigned_staff_are_still_listed(shift_drawer):
+    """Hiding them would hide the very problem the manager must resolve."""
+    client, state = shift_drawer
+    state["assignments"] = [_assignment_row(availability="Unavailable")]
+    body = client.get("/partials/shifts/1").get_data(as_text=True)
+    assert "Amara Okafor" in body
+    assert "Unassign" in body
+
+
+def test_shift_still_reports_them_in_the_assigned_count(shift_drawer):
+    """Coverage counts persisted assignments; Scenario E did not change that."""
+    client, state = shift_drawer
+    state["assignments"] = [_assignment_row(1, "Amara Okafor", "Unavailable"),
+                            _assignment_row(2, "Priya Nandakumar", "Available")]
+    body = client.get("/partials/shifts/1").get_data(as_text=True)
+    assert "2 active" in body
+    assert "still count towards the assigned total" in body
+
+
+# ------------------------------------------------------------- eligibility
+@pytest.mark.parametrize("status,reason", [
+    ("Unavailable", "Unavailable"),
+    ("On Leave", "On Leave"),
+])
+def test_operationally_unavailable_staff_are_not_assignable(status, reason):
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(availability=status), _planner_shift(), set(), [], [])
+    assert result["eligible"] is False
+    assert result["blocked_reason"] == reason
+
+
+def test_available_staff_continue_through_the_other_rules():
+    """Available is not a free pass — it just stops blocking at this step."""
+    fe = _fe()
+    clash = _planner_shift(shift_id=9, start="08:00", end="16:00")
+    result = fe._evaluate_candidate(
+        _person(availability="Available"), _planner_shift(shift_id=5), set(),
+        [clash], [])
+    assert result["eligible"] is False
+    assert "Already rostered" in result["blocked_reason"]
+
+
+def test_approved_temporary_unavailability_still_blocks_after_scenario_e():
+    """Scenario C's rule must survive Scenario E untouched."""
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(availability="Available"), _planner_shift(date="2026-09-01"),
+        set(), [], [], [_req(start="2026-08-31", end="2026-09-02")])
+    assert result["eligible"] is False
+    assert "Temporarily unavailable" in result["blocked_reason"]
+
+
+def test_unavailable_status_takes_precedence_over_a_role_mismatch():
+    """Ordering check: the reason shown should be the operational one."""
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(role="Doctor", availability="Unavailable"),
+        _planner_shift(), set(), [], [])
+    assert result["blocked_reason"] == "Unavailable"
+
+
+# ---------------------------------------------------------- authorization
+def test_employee_cannot_reach_the_staff_drawer_of_another_person(employee_client,
+                                                                  fe_api_client,
+                                                                  monkeypatch):
+    def forbidden(staff_id):
+        raise fe_api_client.ForbiddenError(
+            "This operation requires the Staff Manager role.")
+
+    monkeypatch.setattr(fe_api_client, "get_staff", forbidden)
+    body = employee_client.get("/partials/staff/2").get_data(as_text=True)
+    assert "requires the Staff Manager role" in body
+
+
+def test_employee_availability_change_is_refused_by_the_backend(employee_client,
+                                                                fe_api_client,
+                                                                monkeypatch):
+    """The frontend does not decide this; it reports what the backend says."""
+    def forbidden(staff_id, status):
+        raise fe_api_client.ForbiddenError(
+            "This operation requires the Staff Manager role.")
+
+    monkeypatch.setattr(fe_api_client, "update_availability", forbidden)
+    monkeypatch.setattr(fe_api_client, "get_staff",
+                        lambda sid: {"staff": _person()})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    monkeypatch.setattr(fe_api_client, "get_weekly_availability",
+                        lambda sid: {"periods": []})
+    response = employee_client.post("/partials/staff/1/availability",
+                                    data={"availability_status": "Unavailable"})
+    assert "HX-Trigger" not in response.headers
+    assert "requires the Staff Manager role" in response.get_data(as_text=True)
