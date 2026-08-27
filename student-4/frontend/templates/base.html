@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Room &amp; Bed Management{% endblock %} — HOMS</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/feature.css') }}">
-  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <!-- htmx is vendored rather than loaded from a CDN so the interface
+       still works during the showcase if there is no internet. -->
+  <script src="{{ url_for('static', filename='js/htmx.min.js') }}"></script>
 </head>
 <body>
 <header class="feature">
