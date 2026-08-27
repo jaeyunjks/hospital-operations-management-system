@@ -1192,3 +1192,95 @@ def test_on_leave_retains_weekly_pattern(frontend_client, fe_api_client, monkeyp
     body = frontend_client.get("/partials/staff/1").data.decode()
     assert "weekly-cell--available" in body
     assert "overrides scheduling eligibility" in body
+
+
+# --------------------------------- grid layout & row interaction (iter 5)
+def test_weekly_grid_state_class_is_not_on_the_td(frontend_client, fe_api_client, monkeypatch):
+    """A <td> with display:block leaves table layout and collapses all seven
+    day columns into one — the state class must sit on an inner element."""
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")))
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert 'td class="weekly-grid__cell weekly-cell--' not in body
+    assert 'span class="weekly-cell weekly-cell--' in body
+
+
+def test_weekly_grid_has_seven_day_columns_and_three_bands(frontend_client, fe_api_client, monkeypatch):
+    import re
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")))
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    cells = _grid_cells(body)
+    assert cells.count('<td class="weekly-grid__cell">') == 21     # 3 bands x 7 days
+    assert len(re.findall(r'<tr>', cells)) == 3
+    for day in ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"):
+        assert f'>{day}</th>' in body
+
+
+def test_weekly_grid_declares_equal_day_columns(frontend_client, fe_api_client, monkeypatch):
+    """A colgroup fixes the label column so the seven days share the rest."""
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly())
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert 'weekly-grid__labels' in body
+    assert body.count("<col>") >= 7
+
+
+def test_conflict_state_when_rostered_without_availability(frontend_client, fe_api_client, monkeypatch):
+    """Derived only: a real assignment with no stored availability covering it."""
+    import datetime
+    monday = datetime.date.today() - datetime.timedelta(days=datetime.date.today().weekday())
+    shift = {"shift_id": 1, "department": "Emergency", "shift_date": monday.isoformat(),
+             "start_time": "07:00", "end_time": "15:00", "shift_status": "Planned",
+             "assignment_id": 1, "assignment_status": "Confirmed"}
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly(), [shift])
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert "weekly-cell--conflict" in _grid_cells(body)
+    assert "Rostered outside availability" in body      # legend key appears
+
+
+def test_no_conflict_legend_when_no_conflicts(frontend_client, fe_api_client, monkeypatch):
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")))
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert "Rostered outside availability" not in body
+
+
+def test_whole_row_opens_detail_with_one_request(frontend_client, fe_api_client, monkeypatch):
+    """The row owns the request so a click anywhere in it opens the drawer.
+
+    Exactly one hx-get per row: if the inner buttons kept their own, a click
+    would fire the button's request AND bubble to the row's, issuing two.
+    """
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **kw: {"count": 2, "staff": STAFF_FIXTURE})
+    body = frontend_client.get("/partials/staff-table").data.decode()
+
+    assert 'class="staff-row"' in body
+    assert body.count('hx-get="/partials/staff/1"') == 1
+    # Two rows in the fixture -> exactly two hx-get attributes in the table.
+    assert body.count("hx-get=") == 2
+    # Buttons remain focusable controls but carry no request of their own.
+    assert '<button type="button" class="staff-identity staff-identity--action">' in body
+    assert "button" in body and "hx-get" not in body.split("<button")[1].split(">")[0]
+
+
+def test_staff_name_cell_is_keyboard_operable(frontend_client, fe_api_client, monkeypatch):
+    """It must be a <button>, not a click-handler on a <td>."""
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **kw: {"count": 1, "staff": STAFF_FIXTURE[:1]})
+    body = frontend_client.get("/partials/staff-table").data.decode()
+    assert '<td onclick' not in body and '<tr onclick' not in body
+    assert 'open staff detail' in body                     # accessible name
+
+
+def test_view_button_still_present(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **kw: {"count": 1, "staff": STAFF_FIXTURE[:1]})
+    body = frontend_client.get("/partials/staff-table").data.decode()
+    assert "View" in body and "table__actions" in body
+
+
+def test_weekly_editor_still_has_21_slots_and_colgroup(frontend_client, fe_api_client, monkeypatch):
+    import re
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")))
+    body = frontend_client.get(
+        "/partials/staff/1/weekly-availability/edit").data.decode()
+    assert len(set(re.findall(r'value="([0-6]-[0-2])"', body))) == 21
+    assert 'weekly-grid__labels' in body

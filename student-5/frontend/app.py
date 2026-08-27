@@ -453,13 +453,22 @@ def _build_weekly_grid(periods, assignments, week_start):
         for day in range(7):
             band = _week_segments(day, start, end)
             is_available = any(_overlaps(band, seg) for seg in available)
-            is_rostered = is_available and any(_overlaps(band, seg) for seg in rostered)
+            has_shift = any(_overlaps(band, seg) for seg in rostered)
+            # A real assignment with no stored availability covering it is a
+            # conflict worth surfacing. Derived only — nothing extra persisted.
+            if has_shift and not is_available:
+                state = "conflict"
+            elif has_shift:
+                state = "rostered"
+            elif is_available:
+                state = "available"
+            else:
+                state = "unavailable"
             cells.append({
                 "day": day,
                 "day_label": DAY_LABELS[day],
                 "day_name": DAY_NAMES[day],
-                "state": "rostered" if is_rostered
-                          else "available" if is_available else "unavailable",
+                "state": state,
                 "available": is_available,
             })
         grid.append({"band": label, "start": start, "end": end, "cells": cells})
@@ -940,6 +949,9 @@ def create_app() -> Flask:
             current_assignment=current, upcoming_shifts=upcoming,
             shifts_error=shifts_error,
             weekly_grid=weekly_grid, weekly_error=weekly_error,
+            weekly_has_conflict=any(c["state"] == "conflict"
+                                     for row in (weekly_grid or [])
+                                     for c in row["cells"]),
             week_start=_week_start().isoformat(),
         ), status_code
 

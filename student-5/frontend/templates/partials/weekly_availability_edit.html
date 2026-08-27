@@ -32,6 +32,10 @@
         <caption class="visually-hidden">
           Weekly availability editor for {{ person.name }}
         </caption>
+        <colgroup>
+          <col class="weekly-grid__labels">
+          {% for _ in range(7) %}<col>{% endfor %}
+        </colgroup>
         <thead>
           <tr>
             <th scope="col"><span class="visually-hidden">Time band</span></th>

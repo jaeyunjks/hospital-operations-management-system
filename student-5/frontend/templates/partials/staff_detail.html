@@ -159,6 +159,10 @@
         <caption class="visually-hidden">
           Recurring weekly availability for {{ person.name }}
         </caption>
+        <colgroup>
+          <col class="weekly-grid__labels">
+          {% for _ in range(7) %}<col>{% endfor %}
+        </colgroup>
         <thead>
           <tr>
             <th scope="col"><span class="visually-hidden">Time band</span></th>
@@ -175,16 +179,25 @@
               <span class="weekly-grid__band-time u-mono">{{ row.start }}–{{ row.end }}</span>
             </th>
             {% for cell in row.cells %}
-            {#- State is conveyed by glyph AND text, never colour alone. -#}
-            <td class="weekly-grid__cell weekly-cell--{{ cell.state }}">
-              <span aria-hidden="true">
-                {%- if cell.state == 'rostered' %}R{% elif cell.state == 'available' %}✓{% else %}—{% endif -%}
-              </span>
-              <span class="visually-hidden">
-                {{ row.band }} on {{ cell.day_name }}:
-                {%- if cell.state == 'rostered' %} rostered
-                {%- elif cell.state == 'available' %} available
-                {%- else %} not available{% endif %}
+            {#- The state class goes on an inner span, never the <td>: the
+                state rule sets display, and a <td> with display:block drops
+                out of table layout, collapsing all seven columns into one.
+                State is conveyed by glyph AND text, never colour alone. -#}
+            <td class="weekly-grid__cell">
+              <span class="weekly-cell weekly-cell--{{ cell.state }}">
+                <span aria-hidden="true">
+                  {%- if cell.state == 'rostered' %}R
+                  {%- elif cell.state == 'conflict' %}!
+                  {%- elif cell.state == 'available' %}✓
+                  {%- else %}—{% endif -%}
+                </span>
+                <span class="visually-hidden">
+                  {{ row.band }} on {{ cell.day_name }}:
+                  {%- if cell.state == 'rostered' %} rostered
+                  {%- elif cell.state == 'conflict' %} rostered outside availability
+                  {%- elif cell.state == 'available' %} available
+                  {%- else %} not available{% endif %}
+                </span>
               </span>
             </td>
             {% endfor %}
@@ -198,6 +211,9 @@
       <li><span class="weekly-legend__key weekly-cell--available" aria-hidden="true">✓</span>Available</li>
       <li><span class="weekly-legend__key weekly-cell--rostered" aria-hidden="true">R</span>Rostered</li>
       <li><span class="weekly-legend__key weekly-cell--unavailable" aria-hidden="true">—</span>Not available</li>
+      {% if weekly_has_conflict %}
+      <li><span class="weekly-legend__key weekly-cell--conflict" aria-hidden="true">!</span>Rostered outside availability</li>
+      {% endif %}
     </ul>
 
     {% if person.availability_status != 'Available' %}

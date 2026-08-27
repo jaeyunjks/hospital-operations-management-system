@@ -46,16 +46,28 @@
       {% set avail = 'success' if person.availability_status == 'Available'
                 else 'danger' if person.availability_status == 'Unavailable'
                 else 'neutral' %}
-      <tr id="staff-row-{{ person.staff_id }}">
+      {#- The row owns the hx-get, so clicking anywhere in it opens the
+          drawer. The buttons inside stay real <button>s for keyboard use but
+          carry no hx-* of their own: their click bubbles up to this row, so
+          any single interaction issues exactly one request. -#}
+      <tr id="staff-row-{{ person.staff_id }}" class="staff-row"
+          hx-get="/partials/staff/{{ person.staff_id }}"
+          hx-target="#staff-drawer" hx-swap="innerHTML"
+          hx-indicator="#loading-indicator">
         <td class="staff-table__id u-mono">{{ display_id(person.staff_id) }}</td>
         <td>
-          <div class="staff-identity">
+          {#- The identity cell is a real <button> so the record can be opened
+              by click or keyboard, styled as plain table content. It is a
+              sibling of the View button, not a wrapper around it, so a single
+              interaction always issues exactly one request. -#}
+          <button type="button" class="staff-identity staff-identity--action">
             <span class="staff-avatar" aria-hidden="true">{{ initials(person.name) }}</span>
             <span class="staff-identity__text">
               <span class="staff-identity__name">{{ person.name }}</span>
               <span class="staff-identity__role">{{ person.role }}</span>
             </span>
-          </div>
+            <span class="visually-hidden">— open staff detail</span>
+          </button>
         </td>
         <td class="table__muted">{{ person.department }}</td>
         <td class="table__muted">
@@ -64,10 +76,7 @@
         <td><span class="badge-{{ avail }}">{{ person.availability_status }}</span></td>
         <td class="table__muted">{{ person.employment_status }}</td>
         <td class="table__actions">
-          <button class="btn-secondary btn-compact" type="button"
-                  hx-get="/partials/staff/{{ person.staff_id }}"
-                  hx-target="#staff-drawer" hx-swap="innerHTML"
-                  hx-indicator="#loading-indicator">
+          <button class="btn-secondary btn-compact" type="button">
             View<span class="visually-hidden"> details for {{ person.name }}</span>
           </button>
         </td>
