@@ -899,13 +899,13 @@ def test_shift_detail_lists_active_assignments_and_candidates(
         frontend_client, fe_api_client, monkeypatch):
     assignments = [
         {"staff_id": 1, "name": "Amara Okafor", "role": "Registered Nurse",
-         "department": "Emergency", "assignment_status": "Assigned"},
+         "department": "Intensive Care", "assignment_status": "Assigned"},
         {"staff_id": 12, "name": "Chloe Bennett", "role": "Registered Nurse",
          "department": "Intensive Care", "assignment_status": "Cancelled"},
     ]
     candidates = [
         {"staff_id": 1, "name": "Amara Okafor", "role": "Registered Nurse",
-         "department": "Emergency", "availability_status": "Available",
+         "department": "Intensive Care", "availability_status": "Available",
          "specialisation": "Triage"},
         {"staff_id": 12, "name": "Chloe Bennett", "role": "Registered Nurse",
          "department": "Intensive Care", "availability_status": "Available",
@@ -916,7 +916,10 @@ def test_shift_detail_lists_active_assignments_and_candidates(
     assert "Amara Okafor" in body
     assert "Gap 1" in body
     assert "Chloe Bennett" in body
-    assert "Cross-department" in body
+    # One active assignment plus both listed candidates are from another
+    # department. Department remains context, never an eligibility block.
+    assert body.count("Cross-department") == 3
+    assert 'value="12"' in body and ">Assign</button>" in body
     assert "deterministic rules, not an AI" in body
 
 

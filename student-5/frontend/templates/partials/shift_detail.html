@@ -100,7 +100,12 @@
         <span class="assignment-person__main">
           <strong>{{ person.name }}</strong>
           <span>{{ person.role }} · {{ person.department }}</span>
-          <span class="u-label">{{ person.assignment_status }}</span>
+          <span class="candidate-flags">
+            <span class="u-label">{{ person.assignment_status }}</span>
+            {% if person.department != shift.department %}
+            <span class="badge-neutral">Cross-department</span>
+            {% endif %}
+          </span>
           {#- Labelled in words, not by colour alone. -#}
           {% if unavailable %}
           <span class="conflict-flag">
