@@ -24,7 +24,7 @@
   </div>
 </div>
 {% else %}
-{% set shift_badge = 'success' if shift.shift_status in ('Filled', 'Completed')
+{% set shift_badge = 'success' if shift.shift_status == 'Completed'
                      else 'danger' if shift.shift_status == 'Cancelled'
                      else 'info' if shift.shift_status == 'Open'
                      else 'neutral' %}
@@ -41,7 +41,10 @@
     <h3 class="drawer__name">{{ shift.department }}</h3>
     <p class="drawer__role">{{ shift.required_role }}</p>
   </div>
-  <span class="badge-{{ shift_badge }}">{{ shift.shift_status }}</span>
+  <span class="shift-detail__lifecycle">
+    <span class="u-label">Lifecycle</span>
+    <span class="badge-{{ shift_badge }}">{{ shift.shift_status }}</span>
+  </span>
 </div>
 
 <div class="drawer__body stack">
@@ -147,6 +150,9 @@
           {% if person.specialisation %}<span>{{ person.specialisation }}</span>{% endif %}
           <span class="candidate-flags">
             <span class="badge-neutral">{{ person.employment_status }}</span>
+            {% if person.department != shift.department %}
+            <span class="badge-neutral">Cross-department</span>
+            {% endif %}
             {#- Weekly availability is ADVISORY: the backend permits assignment
                 outside it, so it is shown as a warning, never a block. -#}
             {% for note in person.notes %}

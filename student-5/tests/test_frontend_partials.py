@@ -600,6 +600,19 @@ COVERAGE_FIXTURE = {
     }],
 }
 
+SHIFT_FORM_STAFF = [
+    {"staff_id": 1, "role": "Registered Nurse", "department": "Emergency"},
+    {"staff_id": 2, "role": "Doctor", "department": "General Ward"},
+    {"staff_id": 3, "role": "Registered Nurse", "department": "Emergency"},
+    {"staff_id": 4, "role": "Pharmacist", "department": "Pharmacy"},
+]
+
+
+def _stub_shift_form_options(monkeypatch, fe_api_client):
+    monkeypatch.setattr(
+        fe_api_client, "list_staff",
+        lambda **kwargs: {"count": len(SHIFT_FORM_STAFF), "staff": SHIFT_FORM_STAFF})
+
 
 def _stub_shift_detail(monkeypatch, fe_api_client, assignments=None, candidates=None):
     monkeypatch.setattr(fe_api_client, "get_shift", lambda shift_id: {"shift": SHIFT_FIXTURE})
@@ -709,12 +722,40 @@ def test_shift_list_database_unavailable_message_is_isolated(
     assert "Database service unreachable" in body
 
 
-def test_new_shift_form_uses_selected_date(frontend_client):
+def test_new_shift_form_uses_selected_date(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_form_options(monkeypatch, fe_api_client)
     body = frontend_client.get(
         "/partials/shifts/new?shift_date=2026-08-29").data.decode()
     assert "Create shift" in body
     assert 'value="2026-08-29"' in body
     assert 'min="1"' in body
+
+
+def test_shift_form_options_are_real_distinct_sorted_selects(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_form_options(monkeypatch, fe_api_client)
+    body = frontend_client.get("/partials/shifts/new").data.decode()
+
+    assert '<select class="select" name="department" required>' in body
+    assert '<select class="select" name="required_role" required>' in body
+    assert 'input class="input" name="department"' not in body
+    assert 'input class="input" name="required_role"' not in body
+    assert body.count('value="Emergency"') == 1
+    assert body.count('value="Registered Nurse"') == 1
+    assert body.index('value="Emergency"') < body.index('value="General Ward"')
+    assert body.index('value="General Ward"') < body.index('value="Pharmacy"')
+    assert body.index('value="Doctor"') < body.index('value="Pharmacist"')
+    assert body.index('value="Pharmacist"') < body.index('value="Registered Nurse"')
+
+
+def test_shift_form_reference_failure_is_isolated_and_submit_is_disabled(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_staff", _raise_unavailable)
+    body = frontend_client.get("/partials/shifts/new").data.decode()
+    assert "Shift options are unavailable" in body
+    assert UNAVAILABLE_MESSAGE_HTML in body
+    assert 'type="submit" disabled' in body
 
 
 def test_create_shift_success_emits_single_refresh_event(
@@ -741,6 +782,7 @@ def test_create_shift_success_emits_single_refresh_event(
 
 def test_create_shift_validation_preserves_values(
         frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_form_options(monkeypatch, fe_api_client)
     monkeypatch.setattr(
         fe_api_client, "create_shift",
         lambda payload: (_ for _ in ()).throw(AssertionError("must not be called")))
@@ -752,11 +794,14 @@ def test_create_shift_validation_preserves_values(
     }).data.decode()
     assert "greater than zero" in body
     assert "Keep this note" in body
+    assert 'value="Emergency" selected' in body
+    assert 'value="Registered Nurse" selected' in body
 
 
 def test_create_shift_surfaces_backend_validation(
         frontend_client, fe_api_client, monkeypatch):
     import api_client
+    _stub_shift_form_options(monkeypatch, fe_api_client)
     monkeypatch.setattr(
         fe_api_client, "create_shift",
         lambda payload: (_ for _ in ()).throw(
@@ -772,9 +817,14 @@ def test_create_shift_surfaces_backend_validation(
 
 
 def test_edit_shift_form_and_update(frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_form_options(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_shift", lambda sid: {"shift": SHIFT_FIXTURE})
     form = frontend_client.get("/partials/shifts/11/edit").data.decode()
     assert "Edit shift" in form and "Night shift." in form
+    assert 'value="Emergency" selected' in form
+    assert 'value="Registered Nurse" selected' in form
+    assert 'value="Planned" selected' in form
+    assert "Lifecycle state of the shift" in form
 
     updated = {}
     monkeypatch.setattr(fe_api_client, "update_shift",
@@ -789,6 +839,49 @@ def test_edit_shift_form_and_update(frontend_client, fe_api_client, monkeypatch)
     assert response.headers["HX-Trigger"] == "shifts-updated"
     assert updated["required_staff_count"] == 3 and updated["shift_status"] == "Open"
     assert "Shift updated." in response.data.decode()
+
+
+def test_editing_only_required_count_preserves_all_select_values(
+        frontend_client, fe_api_client, monkeypatch):
+    updated = {}
+    monkeypatch.setattr(
+        fe_api_client, "update_shift",
+        lambda sid, payload: updated.update(payload) or {"shift": SHIFT_FIXTURE})
+    _stub_shift_detail(monkeypatch, fe_api_client)
+
+    response = frontend_client.post("/partials/shifts/11", data={
+        "department": "Emergency", "shift_date": "2026-08-27",
+        "start_time": "23:00", "end_time": "07:00",
+        "required_role": "Registered Nurse", "required_staff_count": "4",
+        "shift_status": "Filled", "notes": "Night shift.",
+    })
+
+    assert response.status_code == 200
+    assert updated["required_staff_count"] == 4
+    assert updated["department"] == "Emergency"
+    assert updated["required_role"] == "Registered Nurse"
+    assert updated["shift_status"] == "Filled"
+
+
+def test_invalid_submitted_role_is_preserved_in_validation_form(
+        frontend_client, fe_api_client, monkeypatch):
+    import api_client
+    _stub_shift_form_options(monkeypatch, fe_api_client)
+    monkeypatch.setattr(
+        fe_api_client, "create_shift",
+        lambda payload: (_ for _ in ()).throw(
+            api_client.ValidationFailed("Required role is not recognised: 'Super Nurse'.")))
+
+    body = frontend_client.post("/partials/shifts", data={
+        "department": "Emergency", "shift_date": "2026-08-27",
+        "start_time": "07:00", "end_time": "15:00",
+        "required_role": "Super Nurse", "required_staff_count": "2",
+        "shift_status": "Planned",
+    }).data.decode()
+
+    assert "Required role is not recognised" in body
+    assert 'value="Super Nurse" selected' in body
+    assert "Staff &amp; Shift service returned" not in body
 
 
 def test_delete_shift_uses_hard_delete_and_refreshes(
@@ -823,6 +916,7 @@ def test_shift_detail_lists_active_assignments_and_candidates(
     assert "Amara Okafor" in body
     assert "Gap 1" in body
     assert "Chloe Bennett" in body
+    assert "Cross-department" in body
     assert "deterministic rules, not an AI" in body
 
 
@@ -1468,6 +1562,18 @@ def test_candidate_role_mismatch_is_blocked():
     assert result["blocked_reason"] == "Role mismatch"
 
 
+def test_matching_role_in_another_department_remains_assignable():
+    """Department is a sorting preference, never a hard eligibility rule."""
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(dept="Intensive Care"),
+        _planner_shift(dept="Emergency"), set(), [],
+        [{"day_of_week": 0, "start_time": "07:00", "end_time": "15:00"}])
+    assert result["eligible"] is True
+    assert result["department"] == "Intensive Care"
+    assert result["blocked_reason"] is None
+
+
 def test_candidate_already_assigned_to_this_shift_is_blocked():
     fe = _fe()
     result = fe._evaluate_candidate(_person(), _planner_shift(), {1}, [], [])
@@ -1827,6 +1933,37 @@ def test_requirement_non_numeric_is_rejected(frontend_client, fe_api_client, mon
         "required_role": "Registered Nurse", "required_staff_count": "abc",
         "shift_status": "Filled"}).data.decode()
     assert "whole number" in body
+
+
+def test_filled_lifecycle_badge_is_neutral_and_gap_remains_authoritative(
+        frontend_client, fe_api_client, monkeypatch):
+    filled = {**SHIFT_FIXTURE, "shift_status": "Filled"}
+    monkeypatch.setattr(fe_api_client, "get_shift", lambda sid: {"shift": filled})
+    monkeypatch.setattr(
+        fe_api_client, "list_shift_assignments",
+        lambda sid: {"assignments": [_assignment_row()]})
+    monkeypatch.setattr(fe_api_client, "list_staff", lambda **kwargs: {"staff": []})
+
+    body = frontend_client.get("/partials/shifts/11").data.decode()
+    assert "Lifecycle" in body
+    assert '<span class="badge-neutral">Filled</span>' in body
+    assert '<span class="badge-success">Filled</span>' not in body
+    assert "Gap 1" in body
+
+
+def test_filled_shift_list_keeps_lifecycle_separate_from_coverage(
+        frontend_client, fe_api_client, monkeypatch):
+    filled = {**SHIFT_FIXTURE, "shift_status": "Filled"}
+    monkeypatch.setattr(
+        fe_api_client, "list_shifts", lambda **kwargs: {"shifts": [filled]})
+    monkeypatch.setattr(
+        fe_api_client, "get_coverage", lambda **kwargs: COVERAGE_FIXTURE)
+
+    body = frontend_client.get(
+        "/partials/shifts?shift_date=2026-08-27").data.decode()
+    assert "Lifecycle · Filled" in body
+    assert "Gap 1" in body
+    assert '<span class="badge-success">Lifecycle · Filled</span>' not in body
 
 
 def test_requirement_change_does_not_touch_assignments(frontend_client, fe_api_client, monkeypatch):

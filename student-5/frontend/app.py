@@ -1361,10 +1361,50 @@ def create_app() -> Flask:
         return {**values, "required_staff_count": count,
                 "notes": values["notes"] or None}
 
+    def _shift_form_reference_options(values):
+        """Return current department/role vocabularies from real staff data.
+
+        The frontend intentionally offers the departments already represented
+        in the workforce, while the backend continues to accept any non-empty
+        department so a new service area can be planned before it has staff.
+        Roles are different: the backend authoritatively requires one that a
+        current staff record actually holds.
+
+        A submitted or persisted value is retained if it is absent from the
+        latest lookup. That preserves form context after a validation error and
+        protects edit forms from silently changing a legacy value.
+        """
+        try:
+            staff = api_client.list_staff().get("staff", [])
+        except (BackendUnavailableError, BackendError) as lookup_error:
+            departments = [values["department"]] if values.get("department") else []
+            roles = [values["required_role"]] if values.get("required_role") else []
+            return departments, roles, str(lookup_error)
+
+        def vocabulary(field, current):
+            options = {(row.get(field) or "").strip() for row in staff}
+            options.discard("")
+            if current:
+                options.add(current)
+            return sorted(options, key=str.casefold)
+
+        departments = vocabulary("department", values.get("department"))
+        roles = vocabulary("role", values.get("required_role"))
+        reference_error = None
+        if not departments or not roles:
+            reference_error = (
+                "Known department and role options are unavailable because "
+                "the current staff records did not provide them."
+            )
+        return departments, roles, reference_error
+
     def _render_shift_form(values, mode, shift_id=None, error=None):
+        departments, roles, reference_error = _shift_form_reference_options(values)
         return render_template(
             "partials/shift_form.html", values=values, mode=mode,
-            shift_id=shift_id, statuses=api_client.SHIFT_STATUSES, error=error)
+            shift_id=shift_id, statuses=api_client.SHIFT_STATUSES, error=error,
+            departments=departments, roles=roles,
+            reference_error=reference_error)
 
     @app.get("/partials/roster-status")
     def roster_status_partial():

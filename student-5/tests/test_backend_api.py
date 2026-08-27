@@ -97,6 +97,36 @@ class TestShiftEndpoints:
         assert response.status_code == 201
         assert response.get_json()["shift"]["department"] == "Emergency"
 
+    def test_create_shift_rejects_role_outside_current_staff_vocabulary(
+            self, client, stub_database):
+        before = len(stub_database.shifts)
+        response = client.post(
+            "/api/shifts", json={**self.VALID, "required_role": "Super Nurse"})
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "validation_error"
+        assert response.get_json()["details"]["field"] == "required_role"
+        assert "not recognised" in response.get_json()["message"]
+        assert len(stub_database.shifts) == before
+
+    def test_create_shift_accepts_real_role_and_filled_lifecycle(self, client):
+        response = client.post(
+            "/api/shifts", json={**self.VALID, "shift_status": "Filled"})
+        assert response.status_code == 201
+        assert response.get_json()["shift"]["required_role"] == "Registered Nurse"
+        assert response.get_json()["shift"]["shift_status"] == "Filled"
+
+    def test_create_shift_keeps_department_backend_flexible(self, client):
+        response = client.post(
+            "/api/shifts", json={**self.VALID, "department": "New Clinical Unit"})
+        assert response.status_code == 201
+        assert response.get_json()["shift"]["department"] == "New Clinical Unit"
+
+    def test_role_vocabulary_is_distinct_sorted_live_staff_data(
+            self, stub_database):
+        from services.shift_service import staff_role_vocabulary
+
+        assert staff_role_vocabulary() == ["Doctor", "Registered Nurse"]
+
     def test_create_shift_requires_fields(self, client):
         response = client.post("/api/shifts", json={"department": "Emergency"})
         assert response.status_code == 400
@@ -122,6 +152,25 @@ class TestShiftEndpoints:
         response = client.put("/api/shifts/1", json={"shift_status": "Open"})
         assert response.status_code == 200
         assert response.get_json()["shift"]["shift_status"] == "Open"
+
+    def test_update_shift_rejects_role_outside_current_staff_vocabulary(
+            self, client, stub_database):
+        response = client.put(
+            "/api/shifts/1", json={"required_role": "Super Nurse"})
+        assert response.status_code == 400
+        assert stub_database.shifts[1]["required_role"] == "Registered Nurse"
+
+    def test_role_lookup_failure_uses_database_service_error_convention(
+            self, client, stub_database, monkeypatch):
+        from errors import DatabaseServiceError
+
+        def unavailable(*args, **kwargs):
+            raise DatabaseServiceError("Database service unreachable.")
+
+        monkeypatch.setattr(stub_database, "list_staff", unavailable)
+        response = client.post("/api/shifts", json=self.VALID)
+        assert response.status_code == 503
+        assert response.get_json()["error"] == "database_service_unavailable"
 
     def test_update_shift_rejects_invalid_status(self, client):
         assert client.put("/api/shifts/1", json={"shift_status": "Bogus"}).status_code == 400

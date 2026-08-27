@@ -23,7 +23,7 @@
 {% else %}
 <ol class="planner-list" aria-label="Shifts scheduled for {{ selected_date }}">
   {% for shift in shifts %}
-  {% set shift_badge = 'success' if shift.shift_status in ('Filled', 'Completed')
+  {% set shift_badge = 'success' if shift.shift_status == 'Completed'
                        else 'danger' if shift.shift_status == 'Cancelled'
                        else 'info' if shift.shift_status == 'Open'
                        else 'neutral' %}
@@ -38,7 +38,7 @@
       {% if shift.notes %}<p class="planner-shift__notes">{{ shift.notes }}</p>{% endif %}
     </div>
     <div class="planner-shift__status">
-      <span class="badge-{{ shift_badge }}">{{ shift.shift_status }}</span>
+      <span class="badge-{{ shift_badge }}">Lifecycle · {{ shift.shift_status }}</span>
       <span class="badge-{{ shift.coverage.badge }}">{{ shift.coverage.label }}</span>
     </div>
     <div class="planner-shift__coverage">

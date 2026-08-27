@@ -16,22 +16,32 @@
   </div>
   {% endif %}
 
+  {% if reference_error %}
+  <div class="alert alert--danger" role="alert">
+    <div>
+      <p class="alert__title">Shift options are unavailable</p>
+      <p class="alert__body">{{ reference_error }}</p>
+    </div>
+  </div>
+  {% endif %}
+
   <p class="drawer__muted">
     Use the operational fields accepted by the Staff &amp; Shift API. Shift IDs are assigned by the service.
   </p>
 
   <div class="shift-form__grid">
-    <label class="filter shift-form__wide">
+    <label class="filter">
       <span class="filter__label">Department</span>
-      <input class="input" name="department" value="{{ values.department }}" required>
+      <select class="select" name="department" required>
+        <option value="" {% if not values.department %}selected{% endif %} disabled>Select department</option>
+        {% for department in departments %}
+        <option value="{{ department }}" {% if values.department == department %}selected{% endif %}>{{ department }}</option>
+        {% endfor %}
+      </select>
     </label>
     <label class="filter">
       <span class="filter__label">Shift date</span>
       <input class="input" name="shift_date" type="date" value="{{ values.shift_date }}" required>
-    </label>
-    <label class="filter">
-      <span class="filter__label">Required role</span>
-      <input class="input" name="required_role" value="{{ values.required_role }}" required>
     </label>
     <label class="filter">
       <span class="filter__label">Start time</span>
@@ -42,17 +52,32 @@
       <input class="input" name="end_time" type="time" value="{{ values.end_time }}" required>
     </label>
     <label class="filter">
+      <span class="filter__label">Required role</span>
+      <select class="select" name="required_role" required>
+        <option value="" {% if not values.required_role %}selected{% endif %} disabled>Select required role</option>
+        {% for role in roles %}
+        <option value="{{ role }}" {% if values.required_role == role %}selected{% endif %}>{{ role }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="filter">
       <span class="filter__label">Required staff count</span>
       <input class="input" name="required_staff_count" type="number" min="1" step="1"
              value="{{ values.required_staff_count }}" required>
     </label>
-    <label class="filter">
+    <label class="filter shift-form__wide shift-form__status" for="shift-status">
       <span class="filter__label">Shift status</span>
-      <select class="select" name="shift_status">
-        {% for status in statuses %}
-        <option value="{{ status }}" {% if values.shift_status == status %}selected{% endif %}>{{ status }}</option>
-        {% endfor %}
-      </select>
+      <span class="shift-form__status-row">
+        <select class="select" id="shift-status" name="shift_status"
+                aria-describedby="shift-status-help">
+          {% for status in statuses %}
+          <option value="{{ status }}" {% if values.shift_status == status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+        <span class="shift-form__help" id="shift-status-help">
+          Lifecycle state of the shift; coverage comes from assignments.
+        </span>
+      </span>
     </label>
     <label class="filter shift-form__wide">
       <span class="filter__label">Notes <span class="u-muted">(optional)</span></span>
@@ -61,7 +86,7 @@
   </div>
 
   <div class="drawer-actions">
-    <button class="btn-primary" type="submit">{{ 'Create shift' if mode == 'create' else 'Save changes' }}</button>
+    <button class="btn-primary" type="submit" {% if reference_error %}disabled{% endif %}>{{ 'Create shift' if mode == 'create' else 'Save changes' }}</button>
     <button class="btn-secondary" type="button" data-drawer-close>Cancel</button>
   </div>
 </form>
