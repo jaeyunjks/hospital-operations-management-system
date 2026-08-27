@@ -101,6 +101,55 @@ def _raise_unavailable(*args, **kwargs):
     raise api_client.BackendUnavailableError(UNAVAILABLE_MESSAGE)
 
 
+# ------------------------------------------------- coverage response fixtures
+# The frontend now CONSUMES the coverage service's per-shift arithmetic instead
+# of recomputing it, so these fixtures derive their figures from that service's
+# own helpers. A fixture that invented its own numbers could let a frontend
+# regression pass by agreeing with the wrong answer.
+
+def _complete_coverage_row(row, required=None):
+    """Fill in the derived fields GET /api/shifts/coverage returns."""
+    from services import coverage_service as backend_coverage
+    required = int(row.get("required_staff_count", required if required is not None else 0))
+    assigned = int(row.get("assigned_staff_count", 0))
+    return {**row, "required_staff_count": required,
+            **backend_coverage.shift_totals(required, assigned),
+            "coverage_status": backend_coverage._classify(assigned, required)}
+
+
+def _coverage_body(shifts):
+    """A faithful coverage response, summary included.
+
+    Every total is a sum over the per-shift rows, exactly as the backend does
+    it, so no fixture can express a roster where surplus cancels a gap.
+    """
+    from services import coverage_service as backend_coverage
+    shifts = [_complete_coverage_row(row) for row in shifts]
+    required = sum(row["required_staff_count"] for row in shifts)
+    filled = sum(row["filled_staff_count"] for row in shifts)
+
+    def count(status):
+        return sum(1 for row in shifts if row["coverage_status"] == status)
+
+    return {
+        "filters": {},
+        "shifts": shifts,
+        "summary": {
+            "total_shifts": len(shifts),
+            "fully_staffed": count(backend_coverage.STATUS_FULLY_STAFFED),
+            "understaffed": sum(1 for row in shifts if row["shortfall"] > 0),
+            "unstaffed": count(backend_coverage.STATUS_UNSTAFFED),
+            "overstaffed": count(backend_coverage.STATUS_OVERSTAFFED),
+            "total_shortfall": sum(row["shortfall"] for row in shifts),
+            "total_surplus": sum(row["surplus"] for row in shifts),
+            "required_positions": required,
+            "assigned_positions": sum(row["assigned_staff_count"] for row in shifts),
+            "filled_positions": filled,
+            "coverage_pct": backend_coverage.coverage_percentage(filled, required),
+        },
+    }
+
+
 # ------------------------------------------------------------------- shell
 def test_index_renders_shell_without_calling_backend(frontend_client, fe_api_client, monkeypatch):
     """The page shell must render even if every backend call would fail —
@@ -124,18 +173,12 @@ def test_index_renders_shell_without_calling_backend(frontend_client, fe_api_cli
 # -------------------------------------------------------------------- kpis
 def test_kpis_partial_renders_real_data(frontend_client, fe_api_client, monkeypatch):
     def fake_get_coverage(shift_date=None, department=None):
-        return {
-            "summary": {"total_shifts": 2, "fully_staffed": 2, "understaffed": 0,
-                        "unstaffed": 0, "total_shortfall": 0},
-            "shifts": [
-                {"shift_id": 1, "department": "Pharmacy", "required_staff_count": 1,
-                 "assigned_staff_count": 1, "shortfall": 0, "coverage_status": "Fully staffed",
-                 "start_time": "08:00", "end_time": "16:00", "required_role": "Pharmacist"},
-                {"shift_id": 2, "department": "Rehabilitation", "required_staff_count": 1,
-                 "assigned_staff_count": 1, "shortfall": 0, "coverage_status": "Fully staffed",
-                 "start_time": "09:00", "end_time": "17:00", "required_role": "Physiotherapist"},
-            ],
-        }
+        return _coverage_body([
+            _cov(1, "Pharmacy", start="08:00", end="16:00", role="Pharmacist",
+                 required=1, assigned=1),
+            _cov(2, "Rehabilitation", start="09:00", end="17:00",
+                 role="Physiotherapist", required=1, assigned=1),
+        ])
 
     def fake_list_staff(availability_status=None, department=None):
         return {"count": 10, "staff": []} if availability_status == "Available" \
@@ -160,8 +203,7 @@ def test_kpis_partial_handles_no_shifts_today(frontend_client, fe_api_client, mo
     """required_staff_count totals to zero -> coverage_pct must be None (—),
     never a ZeroDivisionError or NaN."""
     def fake_get_coverage(shift_date=None, department=None):
-        return {"summary": {"total_shifts": 0, "fully_staffed": 0, "understaffed": 0,
-                             "unstaffed": 0, "total_shortfall": 0}, "shifts": []}
+        return _coverage_body([])
 
     monkeypatch.setattr(fe_api_client, "get_coverage", fake_get_coverage)
     monkeypatch.setattr(fe_api_client, "list_staff",
@@ -201,14 +243,9 @@ def test_demand_partial_empty_state(frontend_client, fe_api_client, monkeypatch)
 
 def test_demand_partial_flags_top_gap(frontend_client, fe_api_client, monkeypatch):
     def fake_get_coverage(shift_date=None, department=None):
-        return {
-            "summary": {"total_shifts": 1},
-            "shifts": [{
-                "shift_id": 9, "department": "Radiology", "required_staff_count": 2,
-                "assigned_staff_count": 0, "shortfall": 2, "coverage_status": "Unstaffed",
-                "start_time": "23:00", "end_time": "07:00", "required_role": "Radiographer",
-            }],
-        }
+        return _coverage_body([
+            _cov(9, "Radiology", start="23:00", end="07:00",
+                 role="Radiographer", required=2, assigned=0)])
 
     monkeypatch.setattr(fe_api_client, "get_coverage", fake_get_coverage)
 
@@ -590,18 +627,12 @@ SHIFT_FIXTURE = {
     "shift_status": "Planned", "notes": "Night shift.",
 }
 
-COVERAGE_FIXTURE = {
-    "filters": {},
-    "summary": {"total_shifts": 1, "fully_staffed": 0, "understaffed": 1,
-                "unstaffed": 0, "total_shortfall": 1},
-    "shifts": [{
-        "shift_id": 11, "department": "Emergency", "shift_date": "2026-08-27",
-        "start_time": "23:00", "end_time": "07:00",
-        "required_role": "Registered Nurse", "required_staff_count": 2,
-        "assigned_staff_count": 1, "shortfall": 1,
-        "coverage_status": "Understaffed",
-    }],
-}
+COVERAGE_FIXTURE = _coverage_body([{
+    "shift_id": 11, "department": "Emergency", "shift_date": "2026-08-27",
+    "start_time": "23:00", "end_time": "07:00",
+    "required_role": "Registered Nurse", "required_staff_count": 2,
+    "assigned_staff_count": 1,
+}])
 
 SHIFT_FORM_STAFF = [
     {"staff_id": 1, "role": "Registered Nurse", "department": "Emergency"},
@@ -718,9 +749,8 @@ def test_shift_list_coverage_derives_overstaffed_state(
         frontend_client, fe_api_client, monkeypatch):
     monkeypatch.setattr(fe_api_client, "list_shifts",
                         lambda **kwargs: {"count": 1, "shifts": [SHIFT_FIXTURE]})
-    coverage = {**COVERAGE_FIXTURE, "shifts": [
-        {**COVERAGE_FIXTURE["shifts"][0], "assigned_staff_count": 3, "shortfall": 0,
-         "coverage_status": "Overstaffed"}]}
+    coverage = _coverage_body([
+        {**COVERAGE_FIXTURE["shifts"][0], "assigned_staff_count": 3}])
     monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kwargs: coverage)
     body = frontend_client.get("/partials/shifts?shift_date=2026-08-27").data.decode()
     assert "3 / 2" in body
@@ -1124,15 +1154,14 @@ WEEK_SHIFTS = [
     },
 ]
 
-WEEK_COVERAGE = {
-    "summary": {"total_shifts": 4, "total_shortfall": 4},
-    "shifts": [
-        {"shift_id": 20, "assigned_staff_count": 1},
-        {"shift_id": 21, "assigned_staff_count": 2},
-        {"shift_id": 22, "assigned_staff_count": 0},
-        {"shift_id": 23, "assigned_staff_count": 2},
-    ],
-}
+#: Assigned headcount per WEEK_SHIFTS entry. The coverage rows are built from
+#: the shifts themselves so required counts can never drift apart.
+WEEK_ASSIGNED = {20: 1, 21: 2, 22: 0, 23: 2}
+
+WEEK_COVERAGE = _coverage_body([
+    {**shift, "assigned_staff_count": WEEK_ASSIGNED[shift["shift_id"]]}
+    for shift in WEEK_SHIFTS
+])
 
 
 def _stub_week_planner(monkeypatch, fe_api_client):
@@ -1590,10 +1619,11 @@ def _fe():
 def _planner_shift(shift_id=1, date="2026-08-31", start="07:00", end="15:00",
            dept="Emergency", role="Registered Nurse", required=2, assigned=0,
            status="Assigned"):
-    return {"shift_id": shift_id, "department": dept, "shift_date": date,
-            "start_time": start, "end_time": end, "required_role": role,
-            "required_staff_count": required, "assigned_staff_count": assigned,
-            "shift_status": "Planned", "assignment_status": status}
+    return _complete_coverage_row({
+        "shift_id": shift_id, "department": dept, "shift_date": date,
+        "start_time": start, "end_time": end, "required_role": role,
+        "required_staff_count": required, "assigned_staff_count": assigned,
+        "shift_status": "Planned", "assignment_status": status})
 
 
 def _person(staff_id=1, name="Amara Okafor", role="Registered Nurse",
@@ -1782,18 +1812,22 @@ def test_roster_status_backend_unavailable(frontend_client, fe_api_client, monke
 # ==========================================================================
 def _cov(shift_id=1, dept="Emergency", date="2026-08-27", start="07:00",
          end="15:00", role="Registered Nurse", required=2, assigned=1):
-    return {"shift_id": shift_id, "department": dept, "shift_date": date,
-            "start_time": start, "end_time": end, "required_role": role,
-            "required_staff_count": required, "assigned_staff_count": assigned,
-            "shortfall": max(required - assigned, 0),
-            "coverage_status": ("Fully staffed" if assigned >= required
-                                 else "Unstaffed" if assigned == 0 else "Understaffed")}
+    """One row as GET /api/shifts/coverage returns it.
+
+    The derived fields come from the backend's own helpers rather than being
+    restated here. The frontend now consumes those fields instead of
+    recomputing them, so a fixture that invented its own arithmetic could let
+    a frontend regression pass by agreeing with the wrong answer.
+    """
+    return _complete_coverage_row({
+        "shift_id": shift_id, "department": dept, "shift_date": date,
+        "start_time": start, "end_time": end, "required_role": role,
+        "required_staff_count": required, "assigned_staff_count": assigned})
 
 
 def _daily_stubs(monkeypatch, client_module, shifts):
     monkeypatch.setattr(client_module, "get_coverage",
-                        lambda **kw: {"shifts": shifts,
-                                      "summary": {"total_shifts": len(shifts)}})
+                        lambda **kw: _coverage_body(shifts))
 
 
 # ------------------------------------------------- daily calculations
@@ -1837,9 +1871,7 @@ def test_no_shifts_today_is_reported_truthfully(frontend_client, fe_api_client, 
 def test_empty_day_coverage_is_dash_not_full(frontend_client, fe_api_client, monkeypatch):
     """Zero required positions must not render as 100% coverage."""
     monkeypatch.setattr(fe_api_client, "get_coverage",
-                        lambda **kw: {"shifts": [], "summary": {
-                            "total_shifts": 0, "fully_staffed": 0,
-                            "understaffed": 0, "unstaffed": 0, "total_shortfall": 0}})
+                        lambda **kw: _coverage_body([]))
     monkeypatch.setattr(fe_api_client, "list_staff", lambda **kw: {"count": 0, "staff": []})
     body = frontend_client.get("/partials/kpis?date=2030-01-01").data.decode()
     assert "—" in body
@@ -1919,10 +1951,17 @@ def test_coverage_helper_reports_overstaffed():
 
 
 def test_planner_grid_distinguishes_overstaffed_from_covered():
+    """Arguments are (gap, surplus, required) — the backend's own figures."""
     fe = _fe()
-    assert fe._planning_coverage(3, 3)["label"] == "Covered"
-    assert fe._planning_coverage(4, 3)["label"] == "Over 1"
-    assert fe._planning_coverage(4, 3)["gap"] == 0
+    assert fe._planning_coverage(0, 0, 3)["label"] == "Covered"
+    assert fe._planning_coverage(0, 1, 3)["label"] == "Over 1"
+    assert fe._planning_coverage(0, 1, 3)["gap"] == 0
+
+
+def test_planner_label_reports_a_gap_even_alongside_a_surplus():
+    """A slice with both must read as short; no netted 'assigned' can say so."""
+    fe = _fe()
+    assert fe._planning_coverage(1, 1, 4)["label"] == "Short 1"
 
 
 # ------------------------------------------- aggregation safety
@@ -1950,9 +1989,8 @@ def test_weekly_summary_not_ready_when_gap_hidden_behind_surplus():
 # ----------------------------------------------- coverage cap
 def test_daily_coverage_cannot_exceed_100_percent(frontend_client, fe_api_client, monkeypatch):
     """An overstaffed shift must not inflate coverage above 100%."""
-    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kw: {
-        "shifts": [_cov(1, required=2, assigned=3)],
-        "summary": {"total_shifts": 1, "total_shortfall": 0}})
+    monkeypatch.setattr(fe_api_client, "get_coverage",
+                        lambda **kw: _coverage_body([_cov(1, required=2, assigned=3)]))
     monkeypatch.setattr(fe_api_client, "list_staff", lambda **kw: {"count": 5, "staff": []})
     body = frontend_client.get("/partials/kpis?date=2026-08-24").data.decode()
     assert "150%" not in body
@@ -1962,10 +2000,9 @@ def test_daily_coverage_cannot_exceed_100_percent(frontend_client, fe_api_client
 
 def test_daily_coverage_uses_filled_positions(frontend_client, fe_api_client, monkeypatch):
     """Surplus on one shift must not mask a shortage on another in the %."""
-    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kw: {
-        "shifts": [_cov(1, "Emergency", required=2, assigned=4),
-                   _cov(2, "Radiology", required=2, assigned=0)],
-        "summary": {"total_shifts": 2, "total_shortfall": 2}})
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kw: _coverage_body([
+        _cov(1, "Emergency", required=2, assigned=4),
+        _cov(2, "Radiology", required=2, assigned=0)]))
     monkeypatch.setattr(fe_api_client, "list_staff", lambda **kw: {"count": 5, "staff": []})
     body = frontend_client.get("/partials/kpis").data.decode()
     # filled = min(4,2) + min(0,2) = 2 of 4 required = 50%, not 100%.
@@ -2074,7 +2111,8 @@ def _agg(*pairs):
     """pairs of (required, assigned)."""
     fe = _fe()
     return fe._aggregate_shifts([
-        {"required_staff_count": r, "assigned_staff_count": a} for r, a in pairs])
+        _complete_coverage_row({"required_staff_count": r, "assigned_staff_count": a})
+        for r, a in pairs])
 
 
 def test_case_a_normal_shortage():
@@ -2123,6 +2161,62 @@ def test_aggregate_status_label_reflects_true_gap_not_netted_total():
 
 def test_aggregate_reports_over_when_only_surplus_exists():
     assert _agg((2, 3))["state"]["label"] == "Over 1"
+
+
+# ------------------------------------------- the frontend does not re-derive
+# Deliberately inconsistent rows: the derived fields contradict what naive
+# arithmetic over required/assigned would produce. The frontend must report
+# the backend's figures, so these fail the moment it starts recomputing them.
+# The arithmetic itself is proved in test_backend_coverage.py.
+
+def _contradictory_row(shift_id=1, dept="Emergency", required=2, assigned=1,
+                       filled=2, shortfall=0, surplus=0):
+    return {"shift_id": shift_id, "department": dept,
+            "shift_date": "2026-08-27", "start_time": "07:00",
+            "end_time": "15:00", "required_role": "Registered Nurse",
+            "required_staff_count": required, "assigned_staff_count": assigned,
+            "filled_staff_count": filled, "shortfall": shortfall,
+            "surplus": surplus, "coverage_status": "Fully staffed"}
+
+
+def test_aggregate_reports_backend_figures_not_its_own():
+    fe = _fe()
+    a = fe._aggregate_shifts([_contradictory_row()])
+    assert a["filled"] == 2          # naive min(1, 2) would be 1
+    assert a["gap"] == 0             # naive max(2 - 1, 0) would be 1
+    assert a["coverage_pct"] == 100  # naive would be 50
+
+
+def test_aggregate_uses_backend_surplus_verbatim():
+    fe = _fe()
+    a = fe._aggregate_shifts([
+        _contradictory_row(required=2, assigned=2, filled=2, surplus=3)])
+    assert a["surplus"] == 3         # naive max(2 - 2, 0) would be 0
+
+
+def test_kpi_row_reports_backend_figures_not_its_own(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kw: {
+        "shifts": [_contradictory_row()],
+        "summary": {"total_shifts": 1, "fully_staffed": 1, "understaffed": 0,
+                    "unstaffed": 0, "overstaffed": 0, "total_shortfall": 0,
+                    "total_surplus": 4, "required_positions": 2,
+                    "assigned_positions": 1, "filled_positions": 2,
+                    "coverage_pct": 100}})
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **kw: {"count": 0, "staff": []})
+    body = frontend_client.get("/partials/kpis").data.decode()
+    assert "100%" in body        # not the 50% naive arithmetic would give
+    assert "4 surplus" in body   # taken from total_surplus, not recomputed
+
+
+def test_department_rollup_reports_backend_surplus(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kw: {
+        "shifts": [_contradictory_row(required=2, assigned=2, filled=2, surplus=5)],
+        "summary": {"total_shifts": 1}})
+    body = frontend_client.get("/partials/demand").data.decode()
+    assert "Overstaffed by 5" in body
 
 
 def test_backend_total_shortfall_is_per_shift(client):
@@ -2690,8 +2784,7 @@ def test_terminal_state_refusal_is_shown_to_the_manager(frontend_client, fe_api_
 # ------------------------------------------------------- overview link
 def test_overview_surfaces_the_pending_request_count(frontend_client, fe_api_client,
                                                      monkeypatch):
-    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **k: {
-        "shifts": [], "summary": {"total_shortfall": 0, "total_shifts": 0}})
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **k: _coverage_body([]))
     monkeypatch.setattr(fe_api_client, "list_staff", lambda **k: {"staff": [], "count": 0})
     monkeypatch.setattr(fe_api_client, "list_unavailability_requests",
                         lambda **k: {"requests": [_req(1), _req(2)]})
@@ -2703,8 +2796,8 @@ def test_overview_surfaces_the_pending_request_count(frontend_client, fe_api_cli
 def test_overview_survives_the_request_queue_being_unavailable(frontend_client,
                                                                fe_api_client, monkeypatch):
     """A request-queue outage must not blank the coverage figures."""
-    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **k: {
-        "shifts": [], "summary": {"total_shortfall": 0, "total_shifts": 3}})
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **k: _coverage_body(
+        [_cov(n, required=1, assigned=1) for n in (1, 2, 3)]))
     monkeypatch.setattr(fe_api_client, "list_staff", lambda **k: {"staff": [], "count": 7})
     monkeypatch.setattr(fe_api_client, "list_unavailability_requests",
                         _raise_unavailable)
@@ -3056,8 +3149,9 @@ def _week_shift(shift_id, dept, date="2026-08-25", required=2, assigned=2,
 
 
 def _coverage_row(shift_id, required=2, assigned=2):
-    return {"shift_id": shift_id, "required_staff_count": required,
-            "assigned_staff_count": assigned}
+    return _complete_coverage_row({
+        "shift_id": shift_id, "required_staff_count": required,
+        "assigned_staff_count": assigned})
 
 
 def _planner_model(shifts, coverage, department=None, week="2026-08-24",
@@ -3417,9 +3511,9 @@ def test_gap_rail_is_hidden_when_the_summary_already_shows_it(frontend_client,
 def test_gap_rail_remains_for_a_single_department(frontend_client, fe_api_client,
                                                   monkeypatch):
     """With one department selected the rail is the only cross-department view."""
-    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **k: {"shifts": [
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **k: _coverage_body([
         {"shift_id": 1, "department": "Emergency", "shift_date": "2026-08-25",
-         "required_staff_count": 2, "assigned_staff_count": 1}]})
+         "required_staff_count": 2, "assigned_staff_count": 1}]))
     monkeypatch.setattr(fe_api_client, "list_staff", lambda **k: {"staff": []})
     monkeypatch.setattr(fe_api_client, "list_shift_assignments",
                         lambda sid: {"assignments": []})

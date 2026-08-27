@@ -101,6 +101,29 @@ cannot be used. `suggest-staff` returns the eligible only.
 |--------|------|---------|
 | GET | `/api/shifts/coverage` | Required vs assigned staffing, per shift and overall |
 
+`coverage_service` is the single source of truth for coverage arithmetic. Each
+shift carries `required_staff_count`, `assigned_staff_count`, `filled_staff_count`
+(`min(assigned, required)`), `shortfall` (`max(required - assigned, 0)`),
+`surplus` (`max(assigned - required, 0)`) and `coverage_status`. The summary
+sums those per-shift figures: `total_shifts`, `fully_staffed`, `understaffed`,
+`unstaffed`, `overstaffed`, `total_shortfall`, `total_surplus`,
+`required_positions`, `assigned_positions`, `filled_positions` and
+`coverage_pct`.
+
+Gap and surplus are floored **per shift** before being summed, so extra staff
+on one shift can never cancel a shortage on another — A(required 2, assigned 3)
+plus B(required 2, assigned 1) reports a gap of 1, not none. Coverage counts
+filled positions, so the percentage cannot exceed 100%; surplus is reported
+separately rather than folded in. `coverage_pct` is `null` when nothing is
+required, because a day with no shifts has no coverage to report.
+
+`understaffed` counts every shift carrying a gap, including the `unstaffed`
+ones counted separately. `overstaffed` counts SHIFTS; `total_surplus` counts
+POSITIONS.
+
+The frontend consumes these fields rather than recomputing them, so a KPI tile,
+a planner roll-up and the API cannot disagree about the same roster.
+
 ### AI-ready (structure only)
 
 | Method | Path | Purpose |

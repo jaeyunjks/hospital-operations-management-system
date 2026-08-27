@@ -96,15 +96,21 @@ def _coverage(assigned: int, required: int):
             "difference": difference}
 
 
-def _planning_coverage(assigned: int, required: int):
-    """Return the planner's compact status from assignment arithmetic."""
+def _planning_coverage(gap: int, surplus: int, required: int):
+    """The planner's compact status label, from authoritative per-shift figures.
+
+    Takes the coverage service's gap and surplus rather than re-deriving them
+    from assigned and required. That distinction matters for an aggregate: a
+    slice holding both a shortage and a surplus must read as short, and there
+    is no single "assigned" number that expresses it — netting the two back
+    together is exactly what loses the shortage.
+    """
     if required <= 0:
         return {"label": "No demand", "tone": "neutral", "gap": 0}
-    gap = max(required - assigned, 0)
     if gap == 0:
-        if assigned > required:
-            return {"label": f"Over {assigned - required}", "tone": "covered",
-                    "gap": 0, "overstaffed": assigned - required}
+        if surplus:
+            return {"label": f"Over {surplus}", "tone": "covered",
+                    "gap": 0, "overstaffed": surplus}
         return {"label": "Covered", "tone": "covered", "gap": 0}
     if gap == 1:
         return {"label": "Short 1", "tone": "short-one", "gap": 1}
@@ -144,30 +150,30 @@ def _week_start_for(value: str) -> datetime.date:
 
 
 def _aggregate_shifts(rows):
-    """Aggregate staffing across shifts.
+    """Aggregate staffing across an arbitrary slice of shifts.
 
-    Gap and surplus are computed PER SHIFT and only then summed. Aggregating
-    the totals first and subtracting would let extra staff on one shift cancel
-    a shortage on another — e.g. A(req 2, asg 3) + B(req 2, asg 1) would report
-    no gap at all, hiding a real shortage.
+    SUMS the per-shift figures the coverage service already calculated; it
+    derives none of them. `filled`, `shortfall` and `surplus` arrive from the
+    backend already floored PER SHIFT, which is what stops extra staff on one
+    shift cancelling a shortage on another — A(req 2, asg 3) + B(req 2, asg 1)
+    still reports a gap of 1, not none. Those semantics are owned and tested
+    in backend/services/coverage_service.py.
 
-    Coverage counts FILLED positions, min(assigned, required), so an
-    overstaffed shift cannot push the figure past 100%.
+    The percentage is still computed here because the backend reports one
+    figure for the whole filtered set, while the planner needs it per
+    department, per day and per grid cell. It inherits the 100% cap rather
+    than re-establishing it: `filled` can never exceed `required`, because the
+    backend capped it before this function ever saw it.
     """
     required = sum(int(row.get("required_staff_count", 0)) for row in rows)
     assigned = sum(int(row.get("assigned_staff_count", 0)) for row in rows)
-    filled = sum(min(int(row.get("assigned_staff_count", 0)),
-                     int(row.get("required_staff_count", 0))) for row in rows)
-    gap = sum(max(int(row.get("required_staff_count", 0))
-                   - int(row.get("assigned_staff_count", 0)), 0) for row in rows)
-    surplus = sum(max(int(row.get("assigned_staff_count", 0))
-                       - int(row.get("required_staff_count", 0)), 0) for row in rows)
+    filled = sum(int(row.get("filled_staff_count", 0)) for row in rows)
+    gap = sum(int(row.get("shortfall", 0)) for row in rows)
+    surplus = sum(int(row.get("surplus", 0)) for row in rows)
 
-    # Derive the status label from the true per-shift gap. When a gap exists,
-    # feed the equivalent assigned count so the label reflects the real
-    # shortage rather than the netted total.
-    state = (_planning_coverage(required - gap, required) if gap
-             else _planning_coverage(assigned, required))
+    # The label is told the real gap and surplus directly, so a slice with
+    # both reads as short rather than as covered.
+    state = _planning_coverage(gap, surplus, required)
 
     return {
         "shift_count": len(rows),
@@ -253,10 +259,26 @@ def _build_planner_model(shifts, coverage_rows, week_start_value, selected_date_
             continue
         row = dict(source)
         counts = coverage_by_id.get(int(row["shift_id"]), {})
-        row["assigned_staff_count"] = int(counts.get("assigned_staff_count", 0))
-        row["required_staff_count"] = int(row.get("required_staff_count", 0))
+        row["required_staff_count"] = required = int(row.get("required_staff_count", 0))
+        if counts:
+            # The backend owns the coverage rule; these are carried through
+            # unchanged so every planner roll-up sums the same numbers the
+            # KPI row and the API report.
+            row["assigned_staff_count"] = int(counts["assigned_staff_count"])
+            row["filled_staff_count"] = int(counts["filled_staff_count"])
+            row["shortfall"] = int(counts["shortfall"])
+            row["surplus"] = int(counts["surplus"])
+        else:
+            # A shift the coverage response does not describe — created
+            # between the two calls behind this page. Nobody is recorded on
+            # it, so the whole requirement is a gap. That is the only shape
+            # this case can take, not a second copy of the rule.
+            row["assigned_staff_count"] = 0
+            row["filled_staff_count"] = 0
+            row["shortfall"] = required
+            row["surplus"] = 0
         row["planning_state"] = _planning_coverage(
-            row["assigned_staff_count"], row["required_staff_count"])
+            row["shortfall"], row["surplus"], required)
         row["period"] = _shift_period(row.get("start_time", ""))
         records.append(row)
 
@@ -777,14 +799,10 @@ def _week_roster_summary(week_shifts, conflicts):
     """
     required = sum(int(row.get("required_staff_count", 0)) for row in week_shifts)
     assigned = sum(int(row.get("assigned_staff_count", 0)) for row in week_shifts)
-    # Unfilled and surplus are both accumulated PER SHIFT: extra staff on one
-    # shift does not satisfy a shortage on a different shift.
-    unfilled = sum(max(int(row.get("required_staff_count", 0))
-                        - int(row.get("assigned_staff_count", 0)), 0)
-                    for row in week_shifts)
-    overstaffed = sum(max(int(row.get("assigned_staff_count", 0))
-                           - int(row.get("required_staff_count", 0)), 0)
-                       for row in week_shifts)
+    # Unfilled and surplus come from the coverage service already floored PER
+    # SHIFT, so extra staff on one shift cannot satisfy a shortage on another.
+    unfilled = sum(int(row.get("shortfall", 0)) for row in week_shifts)
+    overstaffed = sum(int(row.get("surplus", 0)) for row in week_shifts)
     # An empty week is not a completed roster — nothing has been planned yet.
     empty = len(week_shifts) == 0
     ready = (not empty) and unfilled == 0 and not conflicts
@@ -1364,8 +1382,7 @@ def create_app() -> Flask:
         for row in week_shifts:
             entry = departments.setdefault(row["department"],
                                             {"department": row["department"], "gap": 0})
-            entry["gap"] += max(int(row.get("required_staff_count", 0))
-                                 - int(row.get("assigned_staff_count", 0)), 0)
+            entry["gap"] += int(row.get("shortfall", 0))
 
         # The planner state rides along in the query string. When the
         # All-departments summary is on screen it already shows every
@@ -1729,25 +1746,21 @@ def create_app() -> Flask:
             return render_template("partials/kpis.html", today=today,
                                     kpis=None, error=str(error))
 
-        shifts = coverage["shifts"]
-        # Operational coverage counts FILLED positions, so a shift with more
-        # staff than it requires cannot push the figure above 100% or mask a
-        # shortage elsewhere. Surplus staffing is reported separately.
-        total_required = sum(int(row["required_staff_count"]) for row in shifts)
-        filled_positions = sum(min(int(row["assigned_staff_count"]),
-                                    int(row["required_staff_count"])) for row in shifts)
-        overstaffed_positions = sum(max(int(row["assigned_staff_count"])
-                                         - int(row["required_staff_count"]), 0)
-                                     for row in shifts)
-        coverage_pct = round(filled_positions / total_required * 100) if total_required else None
-
+        # Every coverage figure is read from the backend summary rather than
+        # recomputed here. The backend counts FILLED positions per shift, so a
+        # shift with more staff than it requires cannot push the figure above
+        # 100% or mask a shortage elsewhere; surplus is reported separately.
+        # Recomputing any of it would be a second definition of coverage that
+        # could drift from the one the planner and the API already use.
+        summary = coverage["summary"]
         kpis = {
-            "coverage_pct": coverage_pct,
-            "overstaffed": overstaffed_positions,
-            "gap": coverage["summary"]["total_shortfall"],
+            "coverage_pct": summary["coverage_pct"],
+            # POSITIONS of spare staffing, not the count of overstaffed shifts.
+            "overstaffed": summary["total_surplus"],
+            "gap": summary["total_shortfall"],
             "roster_total": roster["count"],
             "available_count": available["count"],
-            "shifts_today": coverage["summary"]["total_shifts"],
+            "shifts_today": summary["total_shifts"],
         }
 
         # Fetched separately and tolerated failing: a request-queue outage
@@ -1786,11 +1799,11 @@ def create_app() -> Flask:
             entry["shift_count"] += 1
             entry["required"] += int(row["required_staff_count"])
             entry["assigned"] += int(row["assigned_staff_count"])
-            # Gap and surplus are accumulated PER SHIFT, so a surplus on one
-            # shift can never cancel a shortage on another.
+            # Both come from the backend already floored PER SHIFT, so a
+            # surplus on one shift can never cancel a shortage on another.
+            # Accumulating them is all this loop does; it derives neither.
             entry["gap"] += int(row["shortfall"])
-            entry["overstaffed"] += max(int(row["assigned_staff_count"])
-                                         - int(row["required_staff_count"]), 0)
+            entry["overstaffed"] += int(row["surplus"])
 
         # Presentation ordering only: departments needing attention first.
         department_rows = sorted(departments.values(),
