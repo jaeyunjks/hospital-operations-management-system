@@ -511,9 +511,15 @@
   overflow-y: auto;
 }
 
+/* The drawer is a tabindex="-1" dialog container that receives focus
+   programmatically when it opens, purely so screen readers land inside it.
+   It is not keyboard-reachable, so it needs no focus ring of its own — and
+   some browsers (Safari) paint their default blue ring on it, which reads as
+   a stray blue line down the panel's edge. Suppressed here only for this
+   container; every real control inside keeps its own visible focus ring. */
+.drawer:focus,
 .drawer:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: -2px;
+  outline: none;
 }
 
 .drawer__header {
