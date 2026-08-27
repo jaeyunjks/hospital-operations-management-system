@@ -1120,6 +1120,26 @@ def test_planner_role_and_status_filters_are_server_derived(
     assert '<option value="Open" selected>' in body
 
 
+def test_planner_controls_group_filters_notice_and_clear_week_navigation(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+    body = frontend_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=Emergency").data.decode()
+
+    department_section = body[body.index('<section class="department-strip"'):
+                              body.index("</section>", body.index('<section class="department-strip"'))]
+    assert 'class="planner-secondary-filters"' in department_section
+    assert 'name="required_role"' in department_section
+    assert 'name="shift_status"' in department_section
+    assert 'class="department-strip__notice"' in department_section
+    assert "unfilled position" in department_section
+    assert '‹</span> Previous week' in body
+    assert 'class="btn-secondary btn-compact week-nav__reset"' in body
+    assert "This week" in body
+    assert 'Next week <span aria-hidden="true">›</span>' in body
+
+
 def test_day_timeline_renders_real_positions_and_overnight_tail(
         frontend_client, fe_api_client, monkeypatch):
     _stub_week_planner(monkeypatch, fe_api_client)

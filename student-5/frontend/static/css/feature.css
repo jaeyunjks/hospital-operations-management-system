@@ -1058,8 +1058,7 @@
 .planner-state--initial { display: none; }
 
 .planner-commandbar,
-.department-strip,
-.planner-secondary-filters {
+.department-strip {
   border: var(--border-hair);
   background: var(--color-surface);
 }
@@ -1093,7 +1092,20 @@
   gap: var(--space-2);
 }
 
-.week-nav { margin-top: var(--space-3); }
+.week-nav {
+  margin-top: var(--space-3);
+  gap: var(--space-1);
+}
+
+.week-nav__step,
+.week-nav__reset {
+  min-height: 32px;
+}
+
+.week-nav__step span {
+  font-size: var(--size-ui-lg);
+  line-height: 0;
+}
 
 .view-toggle {
   gap: 0;
@@ -1122,17 +1134,7 @@
 .department-strip { padding: var(--space-4) var(--space-5); }
 
 .department-strip__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-5);
-  margin-bottom: var(--space-3);
-}
-
-.department-strip__head p {
-  margin: 0;
-  color: var(--color-text-label);
-  font-size: var(--size-ui-xs);
+  margin-bottom: var(--space-2);
 }
 
 .department-tabs {
@@ -1179,14 +1181,30 @@
   color: var(--color-accent-ink);
 }
 
+.department-strip__controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-5);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: var(--border-hair);
+}
+
 .planner-secondary-filters {
   display: flex;
-  justify-content: flex-end;
+  align-items: flex-end;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-5);
 }
 
 .planner-secondary-filters .filter { min-width: 190px; }
+
+.department-strip__notice {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-label);
+  font-size: var(--size-ui-xs);
+  text-align: right;
+}
 
 .planner-layout {
   display: grid;
@@ -1680,13 +1698,14 @@
   .planner-commandbar { align-items: flex-start; flex-direction: column; }
   .planner-commandbar__actions { width: 100%; justify-content: space-between; }
   .distribution-grid { grid-template-columns: minmax(0, 1fr); }
+  .department-strip__controls { align-items: stretch; flex-direction: column; gap: var(--space-3); }
   .planner-secondary-filters { justify-content: stretch; }
   .planner-secondary-filters .filter { flex: 1; min-width: 0; }
+  .department-strip__notice { margin: 0; text-align: left; }
   .planner-rail { display: flex; }
 }
 
 @media (max-width: 620px) {
-  .department-strip__head,
   .planning-board__header,
   .demand-panel__heading,
   .planner-commandbar__actions {

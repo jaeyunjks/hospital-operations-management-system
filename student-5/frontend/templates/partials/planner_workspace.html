@@ -27,20 +27,20 @@
       <span class="u-label">Planning period</span>
       <h2>Week of {{ week_start.strftime('%-d %B') }} – {{ week_end.strftime('%-d %B %Y') }}</h2>
       <div class="week-nav" aria-label="Week navigation">
-        <button class="btn-ghost btn-compact" type="button"
+        <button class="btn-ghost btn-compact week-nav__step" type="button"
                 hx-get="/partials/planner" hx-include="#planner-state"
                 hx-vals='{"week_start":"{{ (week_start - timedelta(days=7)).isoformat() }}","selected_date":"{{ (selected_date - timedelta(days=7)).isoformat() }}","selected_shift_id":""}'>
-          Previous week
+          <span aria-hidden="true">‹</span> Previous week
         </button>
-        <button class="btn-ghost btn-compact" type="button"
+        <button class="btn-secondary btn-compact week-nav__reset" type="button"
                 hx-get="/partials/planner" hx-include="#planner-state"
                 hx-vals='{"week_start":"{{ today_week_start }}","selected_date":"{{ today_iso }}","selected_shift_id":""}'>
           This week
         </button>
-        <button class="btn-ghost btn-compact" type="button"
+        <button class="btn-ghost btn-compact week-nav__step" type="button"
                 hx-get="/partials/planner" hx-include="#planner-state"
                 hx-vals='{"week_start":"{{ (week_start + timedelta(days=7)).isoformat() }}","selected_date":"{{ (selected_date + timedelta(days=7)).isoformat() }}","selected_shift_id":""}'>
-          Next week
+          Next week <span aria-hidden="true">›</span>
         </button>
       </div>
     </div>
@@ -65,9 +65,6 @@
   <section class="department-strip" aria-labelledby="department-heading">
     <div class="department-strip__head">
       <h2 class="u-label" id="department-heading">Department</h2>
-      <p>
-        {% if unfilled %}{{ unfilled }} unfilled position{{ '' if unfilled == 1 else 's' }} across {{ gap_departments }} department{{ '' if gap_departments == 1 else 's' }} on {{ selected_date.strftime('%-d %b') }}{% else %}No unfilled positions on {{ selected_date.strftime('%-d %b') }}{% endif %}
-      </p>
     </div>
     {% if departments %}
     <div class="department-tabs" role="list" aria-label="Departments">
@@ -95,26 +92,30 @@
     {% else %}
     <p class="u-muted">No departments match the current filters.</p>
     {% endif %}
+    <div class="department-strip__controls">
+      <div class="planner-secondary-filters" aria-label="Shift filters">
+        <label class="filter">
+          <span class="filter__label">Required role</span>
+          <select class="select" name="required_role" hx-trigger="change" hx-get="/partials/planner"
+                  hx-include="#planner-state" hx-vals='{"selected_shift_id":""}'>
+            <option value="">All roles</option>
+            {% for role in roles %}<option value="{{ role }}"{{ ' selected' if role == required_role else '' }}>{{ role }}</option>{% endfor %}
+          </select>
+        </label>
+        <label class="filter">
+          <span class="filter__label">Shift status</span>
+          <select class="select" name="shift_status" hx-trigger="change" hx-get="/partials/planner"
+                  hx-include="#planner-state" hx-vals='{"selected_shift_id":""}'>
+            <option value="">All statuses</option>
+            {% for status in statuses %}<option value="{{ status }}"{{ ' selected' if status == shift_status else '' }}>{{ status }}</option>{% endfor %}
+          </select>
+        </label>
+      </div>
+      <p class="department-strip__notice" role="status">
+        {% if unfilled %}{{ unfilled }} unfilled position{{ '' if unfilled == 1 else 's' }} across {{ gap_departments }} department{{ '' if gap_departments == 1 else 's' }} on {{ selected_date.strftime('%-d %b') }}{% else %}No unfilled positions on {{ selected_date.strftime('%-d %b') }}{% endif %}
+      </p>
+    </div>
   </section>
-
-  <div class="planner-secondary-filters">
-    <label class="filter">
-      <span class="filter__label">Required role</span>
-      <select class="select" name="required_role" hx-trigger="change" hx-get="/partials/planner"
-              hx-include="#planner-state" hx-vals='{"selected_shift_id":""}'>
-        <option value="">All roles</option>
-        {% for role in roles %}<option value="{{ role }}"{{ ' selected' if role == required_role else '' }}>{{ role }}</option>{% endfor %}
-      </select>
-    </label>
-    <label class="filter">
-      <span class="filter__label">Shift status</span>
-      <select class="select" name="shift_status" hx-trigger="change" hx-get="/partials/planner"
-              hx-include="#planner-state" hx-vals='{"selected_shift_id":""}'>
-        <option value="">All statuses</option>
-        {% for status in statuses %}<option value="{{ status }}"{{ ' selected' if status == shift_status else '' }}>{{ status }}</option>{% endfor %}
-      </select>
-    </label>
-  </div>
 </form>
 
 <div class="planner-layout" hx-target="#planner-workspace" hx-swap="innerHTML">
