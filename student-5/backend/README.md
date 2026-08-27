@@ -109,18 +109,51 @@ cannot be used. `suggest-staff` returns the eligible only.
 | POST | `/api/shifts/coverage-summary` | Coverage shaped for LLM summarisation |
 
 Both are **manager-only**, like every other workforce-wide read.
+`coverage-summary` is still structure-only and makes no LLM call.
 
-**No LLM call is made yet.** Both endpoints return `"ai_enabled": false`,
-`"mode": "rule-based"`, a deterministic result, and a `context` block holding
-the payload the model will receive. Ollama and the approved open-source model
-are connected during the AI integration task (`S5-AI-001`).
+### Suggest Staff ranking
+
+    eligibility_service -> eligible only -> optional Ollama -> manager assigns
 
 `suggest-staff` returns only candidates that passed the deterministic hard
-rules; ineligible staff are excluded outright rather than ranked low. When the
-model is connected it will re-order and explain that shortlist without changing
-who is on it — the LLM never decides eligibility and never assigns anyone. The
-`context.candidates` projection deliberately withholds names and free-text
-notes: ranking needs role, department and specialisation, not identity.
+rules; ineligible staff are excluded outright rather than ranked low. When
+`AI_ENABLED` is true and the shortlist is non-empty, that shortlist is sent to
+Ollama, which re-orders it and adds a short `rationale` per candidate.
+
+The model **cannot change who is on the list**. `ai_service._merge_ranking`
+discards any `staff_id` that was not in the shortlist, takes a repeated id
+once, and appends anyone the model omitted in the deterministic order they
+already had. The model is asked politely in the prompt and prevented in code;
+the code is what makes it true. Nothing in this path assigns anyone.
+
+Ranking happens *after* `limit` is applied, so the model reorders the same
+people a manager would already have seen rather than choosing who appears.
+
+| Field | Meaning |
+|-------|---------|
+| `mode` | `"ai"` when the model ranked the list, `"rule-based"` otherwise |
+| `ranking.source` | `"ollama"` or `"deterministic"` |
+| `ranking.fallback_reason` | `null`, or one of the codes below |
+| `note` | Plain-English explanation of what happened to the ranking |
+
+Fallback reasons: `ai_disabled`, `no_candidates` (nothing eligible, so no call
+was made), `model_unavailable` (unreachable, refused, or timed out), and
+`invalid_model_output` (unusable JSON, or no recognisable `staff_id`). Every
+one serves the same deterministic ordering the caller would otherwise have got
+— a missing or broken model costs the rationales and the ordering, never the
+shortlist, and never an HTTP error. Notes and reason codes never carry an
+exception message, host, or stack trace.
+
+**Data sent to the model is minimised.** Candidates are identified by
+`staff_id` only — never by name, which the backend re-joins itself after the
+model replies. `staff.notes`, shift `notes`, and unavailability request
+`reason`/`notes` are excluded outright: free text is where clinical and
+personal detail ends up, and none of it bears on which of two eligible nurses
+to offer first. Department, specialisation, employment status and the advisory
+`weekly_availability_matches` flag are sent, as ranking context only.
+
+The prompt lives in `prompts/suggest_staff.py` rather than inline in the
+service, so it is reviewable and citable as an artefact in its own right.
 
 ### Service
 
@@ -171,9 +204,10 @@ curl -s http://127.0.0.1:5500/health
 | `BACKEND_PORT` | `5500` | Port this service listens on |
 | `DATABASE_SERVICE_URL` | `http://127.0.0.1:6500` | Database microservice base URL |
 | `DATABASE_SERVICE_TIMEOUT` | `5` | Seconds before a database call times out |
-| `AI_ENABLED` | `false` | Reserved for AI-Mode; no LLM call while false |
-| `OLLAMA_URL` | `http://127.0.0.1:11434` | Reserved for AI integration |
-| `OLLAMA_MODEL` | `llama3` | Reserved for AI integration |
+| `AI_ENABLED` | `false` | AI-Mode switch; no LLM call is attempted while false |
+| `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama runtime base URL |
+| `OLLAMA_MODEL` | `llama3` | Model used to rank suggested staff |
+| `OLLAMA_TIMEOUT` | `8` | Seconds before abandoning ranking and serving the deterministic order |
 
 ## Error responses
 

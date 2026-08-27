@@ -20,9 +20,16 @@ class Config:
     #: Port this backend listens on.
     PORT = int(os.environ.get("BACKEND_PORT", "5500"))
 
-    #: Reserved for Release 0 AI-Mode. No LLM call is made while this is false.
+    #: AI-Mode master switch. While false no LLM call is attempted at all and
+    #: every AI-ready endpoint serves its deterministic result.
     AI_ENABLED = os.environ.get("AI_ENABLED", "false").lower() == "true"
     OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
     OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3")
+
+    #: Seconds to wait on Ollama before abandoning the call and serving the
+    #: deterministic ordering instead. Deliberately short: ranking is an
+    #: enhancement to a list the manager already has, so a slow model must
+    #: never hold up the roster. A miss costs the rationales, nothing more.
+    OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "8"))
 
     JSON_SORT_KEYS = False
