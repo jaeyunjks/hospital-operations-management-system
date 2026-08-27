@@ -269,32 +269,81 @@ class TestCoverageEndpoint:
 
 # ------------------------------------------------------------- AI-ready
 class TestAiReadyEndpoints:
-    def test_suggest_staff_returns_ranked_candidates(self, client):
-        response = client.post("/api/shifts/suggest-staff", json={"shift_id": 1})
+    """suggest-staff returns ELIGIBLE candidates only.
+
+    Eligibility itself is proved in test_backend_eligibility.py; these tests
+    cover what this endpoint adds on top — filtering to the eligible, the
+    shortlist cap, what the LLM context may carry, and who may call it.
+
+    Fixture shape: shift 2 requires a Doctor. Staff 2 is Available, staff 3 is
+    On Leave — so exactly one of the two is eligible. Shift 1 requires a
+    Registered Nurse, and the only one is already assigned to it.
+    """
+
+    def test_suggest_staff_returns_eligible_candidates(self, client):
+        response = client.post("/api/shifts/suggest-staff", json={"shift_id": 2})
         assert response.status_code == 200
         body = response.get_json()
         assert body["ai_enabled"] is False
         assert body["mode"] == "rule-based"
-        assert len(body["suggestions"]) > 0
+        assert [row["staff_id"] for row in body["suggestions"]] == [2]
+        assert body["eligible_count"] == 1
 
-    def test_suggest_staff_ranks_role_match_highest(self, client):
-        body = client.post("/api/shifts/suggest-staff", json={"shift_id": 1}).get_json()
-        scores = [s["score"] for s in body["suggestions"]]
-        assert scores == sorted(scores, reverse=True)
+    def test_suggest_staff_excludes_the_ineligible_rather_than_ranking_them(
+            self, client):
+        """An On Leave doctor must be absent, not merely last."""
+        body = client.post("/api/shifts/suggest-staff",
+                           json={"shift_id": 2}).get_json()
+        assert 3 not in [row["staff_id"] for row in body["suggestions"]]
+        assert all(row["eligible"] for row in body["suggestions"])
+
+    def test_suggest_staff_carries_no_score(self, client):
+        """The additive shortlist score is gone and must not come back."""
+        body = client.post("/api/shifts/suggest-staff",
+                           json={"shift_id": 2}).get_json()
+        assert all("score" not in row for row in body["suggestions"])
+
+    def test_suggest_staff_is_empty_when_nobody_is_eligible(self, client):
+        """A shift whose only qualified nurse is already on it offers nobody."""
+        body = client.post("/api/shifts/suggest-staff",
+                           json={"shift_id": 1}).get_json()
+        assert body["suggestions"] == []
+        assert body["eligible_count"] == 0
 
     def test_suggest_staff_excludes_already_assigned(self, client):
-        body = client.post("/api/shifts/suggest-staff", json={"shift_id": 1}).get_json()
-        assert 1 not in [s["staff_id"] for s in body["suggestions"]]
+        body = client.post("/api/shifts/suggest-staff",
+                           json={"shift_id": 1}).get_json()
+        assert 1 not in [row["staff_id"] for row in body["suggestions"]]
+        assert body["already_assigned_staff_ids"] == [1]
 
     def test_suggest_staff_prepares_llm_context(self, client):
-        body = client.post("/api/shifts/suggest-staff", json={"shift_id": 1}).get_json()
+        body = client.post("/api/shifts/suggest-staff",
+                           json={"shift_id": 2}).get_json()
         assert body["context"]["task"] == "suggest_staff_for_shift"
         assert "model" in body["context"]
+        assert body["context"]["candidate_count"] == 1
+
+    def test_llm_context_withholds_names_and_free_text(self, client):
+        """Ranking needs role and department, never identity or free text."""
+        body = client.post("/api/shifts/suggest-staff",
+                           json={"shift_id": 2}).get_json()
+        candidate = body["context"]["candidates"][0]
+        assert candidate["staff_id"] == 2
+        assert "name" not in candidate
+        assert "notes" not in candidate
+        assert candidate["role"] == "Doctor"
 
     def test_suggest_staff_respects_limit(self, client):
         body = client.post("/api/shifts/suggest-staff",
-                           json={"shift_id": 1, "limit": 1}).get_json()
+                           json={"shift_id": 2, "limit": 1}).get_json()
         assert len(body["suggestions"]) == 1
+
+    def test_limit_caps_the_shortlist_without_hiding_the_eligible_total(
+            self, client):
+        """A short list and a scarce one must remain distinguishable."""
+        body = client.post("/api/shifts/suggest-staff",
+                           json={"shift_id": 2, "limit": 1}).get_json()
+        assert body["eligible_count"] == 1
 
     def test_suggest_staff_requires_shift_id(self, client):
         assert client.post("/api/shifts/suggest-staff", json={}).status_code == 400
@@ -307,6 +356,13 @@ class TestAiReadyEndpoints:
     def test_suggest_staff_unknown_shift(self, client):
         assert client.post("/api/shifts/suggest-staff",
                            json={"shift_id": 999}).status_code == 404
+
+    def test_suggest_staff_requires_the_manager_role(self, client):
+        """Rostering suggestions are a manager workflow, not self-service."""
+        response = client.post("/api/shifts/suggest-staff", json={"shift_id": 2},
+                               headers={"X-HOMS-Role": "Employee",
+                                        "X-HOMS-Staff-Id": "2"})
+        assert response.status_code == 403
 
     def test_coverage_summary_returns_headline(self, client):
         response = client.post("/api/shifts/coverage-summary", json={})
@@ -323,6 +379,13 @@ class TestAiReadyEndpoints:
         response = client.post("/api/shifts/coverage-summary",
                                json={"shift_date": "tomorrow"})
         assert response.status_code == 400
+
+    def test_coverage_summary_requires_the_manager_role(self, client):
+        """Roster-wide coverage is workforce data, like every other read."""
+        response = client.post("/api/shifts/coverage-summary", json={},
+                               headers={"X-HOMS-Role": "Employee",
+                                        "X-HOMS-Staff-Id": "2"})
+        assert response.status_code == 403
 
 
 # ------------------------------------------------- staff detail & filters

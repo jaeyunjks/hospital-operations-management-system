@@ -622,11 +622,6 @@ def _week_start(today=None):
     return today - datetime.timedelta(days=today.weekday())
 
 
-#: Employment groupings used only to order candidates in the list. This is a
-#: presentation aid, not a policy rule — the manager still decides.
-_EMPLOYMENT_PRIORITY = {"Full-Time": 0, "Part-Time": 0, "Casual": 1, "Contract": 1}
-
-
 def _shift_minutes_on(shift):
     """Absolute (start, end) minutes for a shift, from its own date.
 
@@ -716,12 +711,6 @@ def _weekly_availability_conflicts(periods, assignments):
                                    row.get("shift_id", 0)))
 
 
-#: Only an APPROVED request blocks assignment. A Pending one is still a
-#: question, not an answer; Rejected and Cancelled ones were resolved without
-#: granting time off. This is the whole rule, in one place.
-_BLOCKING_REQUEST_STATUS = "Approved"
-
-
 def _date_compact(value):
     """e.g. "1 Sep" — for period labels where the year is already obvious."""
     try:
@@ -736,30 +725,6 @@ def _request_period_label(record):
     start = _date_compact(record.get("start_date"))
     end = _date_compact(record.get("end_date"))
     return start if start == end else f"{start} – {end}"
-
-
-def _blocking_request(requests, shift_date):
-    """The approved request covering `shift_date`, or None.
-
-    Dates are inclusive at both ends and compare correctly as ISO strings,
-    so no parsing is needed to decide containment.
-    """
-    if not requests or not shift_date:
-        return None
-    for record in requests:
-        if record.get("request_status") != _BLOCKING_REQUEST_STATUS:
-            continue
-        if record.get("start_date") <= shift_date <= record.get("end_date"):
-            return record
-    return None
-
-
-def _requests_by_staff(records):
-    """Group request records by staff_id for per-candidate lookup."""
-    grouped = {}
-    for record in records or []:
-        grouped.setdefault(record.get("staff_id"), []).append(record)
-    return grouped
 
 
 #: Status -> badge class. Presentation only; the backend owns the lifecycle.
@@ -796,58 +761,6 @@ def _decorate_request(record):
 
 def _decorate_requests(records):
     return [_decorate_request(row) for row in records or []]
-
-
-def _evaluate_candidate(person, shift, assigned_ids, their_shifts, weekly_periods,
-                        approved_requests=()):
-    """Deterministic eligibility for manual assignment. No scoring, no AI.
-
-    Returns the blocking reason (if any) plus advisory notes. Blocking states
-    are those the backend itself would reject or that are plainly wrong;
-    weekly-availability mismatch is ADVISORY — the backend permits it, so the
-    manager may still assign with the mismatch shown.
-    """
-    notes, blocked = [], None
-    approved = _blocking_request(approved_requests, shift.get("shift_date"))
-
-    if person["staff_id"] in assigned_ids:
-        blocked = "Already assigned to this shift"
-    elif person.get("availability_status") == "On Leave":
-        blocked = "On Leave"
-    elif person.get("availability_status") == "Unavailable":
-        blocked = "Unavailable"
-    elif approved is not None:
-        blocked = "Temporarily unavailable " + _request_period_label(approved)
-    elif person.get("role") != shift.get("required_role"):
-        blocked = "Role mismatch"
-    else:
-        clash = next((row for row in their_shifts
-                      if row.get("shift_id") != shift.get("shift_id")
-                      and row.get("assignment_status") not in _INACTIVE_ASSIGNMENT
-                      and _shifts_overlap(row, shift)), None)
-        if clash:
-            blocked = ("Already rostered " + clash.get("shift_date", "") + " "
-                       + clash.get("start_time", "") + "-" + clash.get("end_time", ""))
-
-    covered = _weekly_covers_shift(weekly_periods, shift)
-    notes.append({"ok": covered,
-                  "text": "Weekly availability matches" if covered
-                          else "Outside weekly availability"})
-
-    return {
-        "staff_id": person["staff_id"],
-        "name": person.get("name"),
-        "role": person.get("role"),
-        "specialisation": person.get("specialisation"),
-        "department": person.get("department"),
-        "employment_status": person.get("employment_status"),
-        "availability_status": person.get("availability_status"),
-        "eligible": blocked is None,
-        "blocked_reason": blocked,
-        "weekly_ok": covered,
-        "notes": notes,
-        "approved_request": approved,
-    }
 
 
 def _week_label(start, end):
@@ -1286,48 +1199,13 @@ def create_app() -> Flask:
                 "Candidate assignment is unavailable until current assignments can be loaded.")
         else:
             try:
-                # Fetch by required role only. Operational status and conflicts
-                # are ANNOTATED rather than filtered out, so the manager can
-                # see why someone is unavailable instead of them silently
-                # vanishing from the list.
-                candidate_records = api_client.list_staff(
-                    role=shift["required_role"])["staff"]
-                active_ids = {row["staff_id"] for row in assignments}
-
-                # One grouped fetch rather than a call per candidate. An
-                # approved temporary-unavailability request covering this
-                # shift's date makes that person unassignable.
-                try:
-                    approved_by_staff = _requests_by_staff(
-                        api_client.list_unavailability_requests(
-                            request_status="Approved")["requests"])
-                except (BackendUnavailableError, BackendError):
-                    approved_by_staff = {}
-
-                evaluated = []
-                for person in candidate_records:
-                    staff_id = person["staff_id"]
-                    try:
-                        their_shifts = api_client.list_staff_shifts(staff_id)["shifts"]
-                    except (BackendUnavailableError, BackendError):
-                        their_shifts = []
-                    try:
-                        periods = api_client.get_weekly_availability(staff_id)["periods"]
-                    except (BackendUnavailableError, BackendError):
-                        periods = []
-                    evaluated.append(_evaluate_candidate(
-                        person, shift, active_ids, their_shifts, periods,
-                        approved_by_staff.get(staff_id, ())))
-
-                # Eligible first, then weekly-availability match, then the
-                # employment ordering aid, then name. Ordering only.
-                evaluated.sort(key=lambda row: (
-                    not row["eligible"],
-                    not row["weekly_ok"],
-                    _EMPLOYMENT_PRIORITY.get(row.get("employment_status"), 2),
-                    row.get("department") != shift["department"],
-                    row.get("name") or ""))
-                candidates = evaluated
+                # Eligibility is decided by the backend and rendered here as
+                # given: each candidate already carries `eligible`, its
+                # `blocked_reason` and the advisory `weekly_ok`, in the order
+                # the backend chose. Blocked staff are ANNOTATED rather than
+                # filtered out, so a manager sees why someone cannot be used
+                # instead of them silently vanishing from the list.
+                candidates = api_client.list_shift_candidates(shift_id)["candidates"]
             except (BackendUnavailableError, BackendError) as error:
                 candidate_error = str(error)
 

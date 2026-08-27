@@ -14,97 +14,79 @@ Each function returns:
   in the meantime
 
 Recommendations are decision support only and require human review before any
-rostering decision is made.
+rostering decision is made. Nothing here assigns anyone.
+
+Eligibility is NOT decided in this module. ``eligibility_service`` is the
+single source of truth, and it is the same module the manual candidate list
+uses, so the shortlist offered here can never contain someone the drawer would
+refuse to assign. The model, once connected, re-orders and explains an
+already-vetted list — it is never shown the ineligible and never gets a vote
+on who is eligible.
 """
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from config import Config
-from database_client import database_client
-from services import assignment_service, coverage_service
-
-#: Reason codes explaining why a candidate was ranked as they were.
-REASON_AVAILABLE = "Marked Available"
-REASON_ROLE_MATCH = "Role matches shift requirement"
-REASON_DEPARTMENT_MATCH = "Already works in this department"
-REASON_NO_CLASH = "No other assignment on this date"
+from services import coverage_service, eligibility_service
 
 
-def _score_candidate(staff: Dict[str, Any], shift: Dict[str, Any],
-                     same_day_shift_ids: set) -> Dict[str, Any]:
-    """Score one staff member against one shift, recording why."""
-    reasons: List[str] = []
-    score = 0
+def _llm_candidate(candidate: Dict[str, Any]) -> Dict[str, Any]:
+    """Project one eligible candidate down to what a model may be told.
 
-    if staff["availability_status"] == "Available":
-        score += 3
-        reasons.append(REASON_AVAILABLE)
-    if staff["role"] == shift["required_role"]:
-        score += 3
-        reasons.append(REASON_ROLE_MATCH)
-    if staff["department"] == shift["department"]:
-        score += 2
-        reasons.append(REASON_DEPARTMENT_MATCH)
-    if staff["staff_id"] not in same_day_shift_ids:
-        score += 1
-        reasons.append(REASON_NO_CLASH)
+    Names are withheld: ranking needs role, department, specialisation and the
+    advisory availability flag, never identity, and the backend re-joins the
+    staff_id to a name itself. Free-text ``notes`` on the staff record and the
+    ``reason`` on an absence request are excluded outright — they can carry
+    medical or personal detail that has no business in a prompt.
 
+    ``blocked_reason`` is omitted because it is null for everything sent: only
+    eligible candidates reach this function.
+    """
     return {
-        "staff_id": staff["staff_id"],
-        "name": staff["name"],
-        "role": staff["role"],
-        "department": staff["department"],
-        "specialisation": staff.get("specialisation"),
-        "availability_status": staff["availability_status"],
-        "score": score,
-        "reasons": reasons,
+        "staff_id": candidate["staff_id"],
+        "role": candidate["role"],
+        "department": candidate["department"],
+        "specialisation": candidate["specialisation"],
+        "employment_status": candidate["employment_status"],
+        "weekly_availability_matches": candidate["weekly_ok"],
     }
 
 
 def suggest_staff(shift_id: int, limit: int = 5) -> Dict[str, Any]:
-    """Return ranked candidate staff for a shift, with the LLM context prepared.
+    """Return the ELIGIBLE staff for a shift, ordered, with the LLM context.
 
-    The ranking below is a transparent rule-based shortlist. When AI-Mode is
-    enabled this same ``context`` block is sent to the model, which will
-    re-rank and explain the recommendation.
+    Every candidate returned has passed the deterministic hard rules in
+    ``eligibility_service``. Ineligible staff are excluded outright rather than
+    ranked low: a shortlist is a list of people who can actually work the
+    shift, and demoting a blocked candidate still invites a manager to pick
+    them. The manual candidate list, by contrast, deliberately shows blocked
+    staff with their reason — that is a different question, asked in a
+    different place.
+
+    ``limit`` caps the shortlist only. ``eligible_count`` reports how many
+    passed the rules, so a manager can tell a short list from a scarce one.
     """
-    shift = database_client.get_shift(shift_id)                 # raises NotFoundError
-    already_assigned = {
-        row["staff_id"] for row in assignment_service.active_assignments(shift_id)
-    }
-
-    # Staff already rostered elsewhere on the same date.
-    same_day = set()
-    for other in database_client.list_shifts(shift_date=shift["shift_date"]):
-        if other["shift_id"] == shift_id:
-            continue
-        for row in assignment_service.active_assignments(other["shift_id"]):
-            same_day.add(row["staff_id"])
-
-    candidates = [
-        _score_candidate(staff, shift, same_day)
-        for staff in database_client.list_staff()
-        if staff["staff_id"] not in already_assigned
-        and staff["availability_status"] != "Unavailable"
-    ]
-    candidates.sort(key=lambda candidate: (-candidate["score"], candidate["name"]))
-    shortlist = candidates[:limit]
+    result = eligibility_service.eligible_candidates(shift_id)
+    eligible = result["candidates"]
+    shortlist = eligible[:limit]
 
     return {
         "ai_enabled": Config.AI_ENABLED,
         "mode": "rule-based",
-        "note": ("Rule-based shortlist. LLM re-ranking is added during the AI "
-                 "integration task; recommendations require human review."),
-        "shift": shift,
-        "already_assigned_staff_ids": sorted(already_assigned),
+        "note": ("Deterministic eligibility. LLM re-ranking is added during the "
+                 "AI integration task and will re-order this same shortlist "
+                 "without changing who is on it; the manager assigns."),
+        "shift": result["shift"],
+        "already_assigned_staff_ids": result["already_assigned_staff_ids"],
+        "eligible_count": result["eligible_count"],
         "suggestions": shortlist,
         "context": {
             "task": "suggest_staff_for_shift",
-            "shift": shift,
-            "candidate_count": len(candidates),
-            "candidates": shortlist,
+            "shift": result["shift"],
+            "candidate_count": len(eligible),
+            "candidates": [_llm_candidate(row) for row in shortlist],
             "model": Config.OLLAMA_MODEL,
         },
     }

@@ -617,14 +617,38 @@ def _stub_shift_form_options(monkeypatch, fe_api_client):
         lambda **kwargs: {"count": len(SHIFT_FORM_STAFF), "staff": SHIFT_FORM_STAFF})
 
 
+def _candidate(staff_id=1, name="Amara Okafor", role="Registered Nurse",
+               dept="Intensive Care", specialisation=None, employment="Full-Time",
+               availability="Available", eligible=True, blocked_reason=None,
+               weekly_ok=True):
+    """A candidate in the shape the BACKEND returns.
+
+    Eligibility is decided server-side now, so these fixtures carry the verdict
+    rather than the raw staff record the frontend used to evaluate itself. The
+    rules behind the verdict are tested in test_backend_eligibility.py.
+    """
+    return {"staff_id": staff_id, "name": name, "role": role, "department": dept,
+            "specialisation": specialisation, "employment_status": employment,
+            "availability_status": availability, "eligible": eligible,
+            "blocked_reason": blocked_reason, "weekly_ok": weekly_ok,
+            "notes": [{"ok": weekly_ok,
+                       "text": "Weekly availability matches" if weekly_ok
+                               else "Outside weekly availability"}],
+            "approved_request": None}
+
+
 def _stub_shift_detail(monkeypatch, fe_api_client, assignments=None, candidates=None):
     monkeypatch.setattr(fe_api_client, "get_shift", lambda shift_id: {"shift": SHIFT_FIXTURE})
     monkeypatch.setattr(
         fe_api_client, "list_shift_assignments",
         lambda shift_id: {"count": len(assignments or []), "assignments": assignments or []})
     monkeypatch.setattr(
-        fe_api_client, "list_staff",
-        lambda **kwargs: {"count": len(candidates or []), "staff": candidates or []})
+        fe_api_client, "list_shift_candidates",
+        lambda shift_id: {
+            "shift_id": shift_id, "count": len(candidates or []),
+            "eligible_count": sum(1 for row in (candidates or []) if row["eligible"]),
+            "already_assigned_staff_ids": [],
+            "candidates": candidates or []})
 
 
 def test_shift_planner_shell_and_navigation(frontend_client, fe_api_client, monkeypatch):
@@ -935,12 +959,8 @@ def test_shift_detail_lists_active_assignments_and_candidates(
          "department": "Intensive Care", "assignment_status": "Cancelled"},
     ]
     candidates = [
-        {"staff_id": 1, "name": "Amara Okafor", "role": "Registered Nurse",
-         "department": "Intensive Care", "availability_status": "Available",
-         "specialisation": "Triage"},
-        {"staff_id": 12, "name": "Chloe Bennett", "role": "Registered Nurse",
-         "department": "Intensive Care", "availability_status": "Available",
-         "specialisation": "Critical Care"},
+        _candidate(1, "Amara Okafor", specialisation="Triage"),
+        _candidate(12, "Chloe Bennett", specialisation="Critical Care"),
     ]
     _stub_shift_detail(monkeypatch, fe_api_client, assignments, candidates)
     body = frontend_client.get("/partials/shifts/11").data.decode()
@@ -952,6 +972,61 @@ def test_shift_detail_lists_active_assignments_and_candidates(
     assert body.count("Cross-department") == 3
     assert 'value="12"' in body and ">Assign</button>" in body
     assert "deterministic rules, not an AI" in body
+
+
+def test_shift_detail_renders_the_backend_block_reason(
+        frontend_client, fe_api_client, monkeypatch):
+    """A blocked candidate is shown with their reason, not hidden."""
+    _stub_shift_detail(monkeypatch, fe_api_client, [], [
+        _candidate(7, "Mei Lin Tan", availability="On Leave",
+                   eligible=False, blocked_reason="On Leave"),
+    ])
+    body = frontend_client.get("/partials/shifts/11").data.decode()
+    assert "Mei Lin Tan" in body
+    assert "On Leave" in body
+    assert "Not assignable" in body
+    assert ">Assign</button>" not in body
+
+
+def test_shift_detail_does_not_re_decide_eligibility(
+        frontend_client, fe_api_client, monkeypatch):
+    """The frontend renders the backend's verdict and applies no rule of its own.
+
+    This candidate is On Leave and outside their weekly availability — both of
+    which the OLD frontend implementation would have acted on — but the backend
+    called them eligible. The drawer must offer Assign regardless. If someone
+    reintroduces a rule on this side of the boundary, this test fails, which is
+    exactly what it is for.
+    """
+    _stub_shift_detail(monkeypatch, fe_api_client, [], [
+        _candidate(7, "Mei Lin Tan", availability="On Leave",
+                   eligible=True, weekly_ok=False),
+    ])
+    body = frontend_client.get("/partials/shifts/11").data.decode()
+    assert ">Assign</button>" in body
+    assert "Not assignable" not in body
+    assert "Outside weekly availability" in body
+
+
+def test_shift_detail_preserves_the_backend_candidate_order(
+        frontend_client, fe_api_client, monkeypatch):
+    """Ordering is decided once, server-side, and not re-sorted here."""
+    _stub_shift_detail(monkeypatch, fe_api_client, [], [
+        _candidate(3, "Zara Ahmed"),
+        _candidate(1, "Amara Okafor"),
+    ])
+    body = frontend_client.get("/partials/shifts/11").data.decode()
+    assert body.index("Zara Ahmed") < body.index("Amara Okafor")
+
+
+def test_shift_detail_counts_eligible_candidates_from_the_backend_verdict(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_detail(monkeypatch, fe_api_client, [], [
+        _candidate(1, "Amara Okafor"),
+        _candidate(7, "Mei Lin Tan", eligible=False, blocked_reason="On Leave"),
+    ])
+    body = frontend_client.get("/partials/shifts/11").data.decode()
+    assert "1 eligible" in body
 
 
 def test_shift_detail_not_found_state(frontend_client, fe_api_client, monkeypatch):
@@ -968,8 +1043,8 @@ def test_shift_detail_suppresses_candidates_when_assignments_unavailable(
     monkeypatch.setattr(fe_api_client, "get_shift", lambda sid: {"shift": SHIFT_FIXTURE})
     monkeypatch.setattr(fe_api_client, "list_shift_assignments", _raise_unavailable)
     monkeypatch.setattr(
-        fe_api_client, "list_staff",
-        lambda **kwargs: (_ for _ in ()).throw(AssertionError("must not be called")))
+        fe_api_client, "list_shift_candidates",
+        lambda shift_id: (_ for _ in ()).throw(AssertionError("must not be called")))
     body = frontend_client.get("/partials/shifts/11").data.decode()
     assert "Assignment data is unavailable" in body
     assert "until current assignments can be loaded" in body
@@ -1585,82 +1660,6 @@ def test_empty_weekly_availability_covers_nothing():
 
 
 # ----------------------------------------------------- eligibility
-def test_candidate_eligible_with_matching_availability():
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(), _planner_shift(), set(), [],
-        [{"day_of_week": 0, "start_time": "07:00", "end_time": "15:00"}])
-    assert result["eligible"] is True
-    assert result["weekly_ok"] is True
-
-
-def test_candidate_outside_weekly_availability_is_advisory_not_blocking():
-    """The backend permits this, so it must warn rather than block."""
-    fe = _fe()
-    result = fe._evaluate_candidate(_person(), _planner_shift(), set(), [], [])
-    assert result["eligible"] is True          # still assignable
-    assert result["weekly_ok"] is False
-    assert any("Outside weekly availability" in n["text"] for n in result["notes"])
-
-
-def test_candidate_on_leave_is_blocked():
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(availability="On Leave"), _planner_shift(), set(), [], [])
-    assert result["eligible"] is False
-    assert result["blocked_reason"] == "On Leave"
-
-
-def test_candidate_unavailable_is_blocked():
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(availability="Unavailable"), _planner_shift(), set(), [], [])
-    assert result["eligible"] is False
-    assert result["blocked_reason"] == "Unavailable"
-
-
-def test_candidate_role_mismatch_is_blocked():
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(role="Doctor"), _planner_shift(), set(), [], [])
-    assert result["eligible"] is False
-    assert result["blocked_reason"] == "Role mismatch"
-
-
-def test_matching_role_in_another_department_remains_assignable():
-    """Department is a sorting preference, never a hard eligibility rule."""
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(dept="Intensive Care"),
-        _planner_shift(dept="Emergency"), set(), [],
-        [{"day_of_week": 0, "start_time": "07:00", "end_time": "15:00"}])
-    assert result["eligible"] is True
-    assert result["department"] == "Intensive Care"
-    assert result["blocked_reason"] is None
-
-
-def test_candidate_already_assigned_to_this_shift_is_blocked():
-    fe = _fe()
-    result = fe._evaluate_candidate(_person(), _planner_shift(), {1}, [], [])
-    assert result["eligible"] is False
-    assert "Already assigned" in result["blocked_reason"]
-
-
-def test_candidate_with_overlapping_assignment_is_blocked():
-    fe = _fe()
-    target = _planner_shift(shift_id=5, start="07:00", end="15:00")
-    clash = _planner_shift(shift_id=9, start="08:00", end="16:00")
-    result = fe._evaluate_candidate(_person(), target, set(), [clash], [])
-    assert result["eligible"] is False
-    assert "Already rostered" in result["blocked_reason"]
-
-
-def test_cancelled_assignment_does_not_block_candidate():
-    fe = _fe()
-    target = _planner_shift(shift_id=5)
-    cancelled = _planner_shift(shift_id=9, start="08:00", end="16:00", status="Cancelled")
-    result = fe._evaluate_candidate(_person(), target, set(), [cancelled], [])
-    assert result["eligible"] is True
 
 
 # ------------------------------------------------- weekly summary
@@ -2151,73 +2150,6 @@ def _req(request_id=1, staff_id=1, start="2026-08-31", end="2026-09-02",
 
 
 # ------------------------------------------------- eligibility blocking
-def test_approved_request_covering_the_shift_blocks_the_candidate():
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(), _planner_shift(date="2026-09-01"), set(), [], [],
-        [_req(start="2026-08-31", end="2026-09-02")])
-    assert result["eligible"] is False
-    assert result["blocked_reason"] == "Temporarily unavailable 31 Aug – 2 Sep"
-
-
-def test_blocking_is_inclusive_of_the_first_day():
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(), _planner_shift(date="2026-08-31"), set(), [], [],
-        [_req(start="2026-08-31", end="2026-09-02")])
-    assert result["eligible"] is False
-
-
-def test_blocking_is_inclusive_of_the_last_day():
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(), _planner_shift(date="2026-09-02"), set(), [], [],
-        [_req(start="2026-08-31", end="2026-09-02")])
-    assert result["eligible"] is False
-
-
-def test_shift_outside_the_approved_period_is_not_blocked():
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(), _planner_shift(date="2026-09-03"), set(), [], [],
-        [_req(start="2026-08-31", end="2026-09-02")])
-    assert result["eligible"] is True
-    assert result["approved_request"] is None
-
-
-@pytest.mark.parametrize("status", ["Pending", "Rejected", "Cancelled"])
-def test_only_an_approved_request_blocks_assignment(status):
-    """A request that has not been granted must never affect the roster."""
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(), _planner_shift(date="2026-09-01"), set(), [], [],
-        [_req(start="2026-08-31", end="2026-09-02", status=status)])
-    assert result["eligible"] is True
-
-
-def test_single_day_request_label_does_not_repeat_the_date():
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(), _planner_shift(date="2026-09-01"), set(), [], [],
-        [_req(start="2026-09-01", end="2026-09-01")])
-    assert result["blocked_reason"] == "Temporarily unavailable 1 Sep"
-
-
-def test_candidate_evaluation_without_requests_is_unchanged():
-    """The parameter is optional: existing callers keep working."""
-    fe = _fe()
-    result = fe._evaluate_candidate(_person(), _planner_shift(), set(), [], [])
-    assert result["eligible"] is True
-    assert result["approved_request"] is None
-
-
-def test_blocking_request_helper_ignores_other_peoples_requests():
-    """Grouping is by staff_id, so a request list is never applied to the
-    wrong person."""
-    fe = _fe()
-    grouped = fe._requests_by_staff([_req(staff_id=2)])
-    assert grouped.get(1) is None
-    assert len(grouped[2]) == 1
 
 
 # --------------------------------------------------- the R0 demo gate
@@ -3025,13 +2957,13 @@ def shift_drawer(frontend_client, fe_api_client, monkeypatch):
                         lambda sid: {"shift": _planner_shift(shift_id=1, required=2)})
     monkeypatch.setattr(fe_api_client, "list_shift_assignments",
                         lambda sid: {"assignments": state["assignments"]})
-    monkeypatch.setattr(fe_api_client, "list_staff",
-                        lambda **k: {"staff": state["candidates"], "count": 0})
-    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
-    monkeypatch.setattr(fe_api_client, "get_weekly_availability",
-                        lambda sid: {"periods": []})
-    monkeypatch.setattr(fe_api_client, "list_unavailability_requests",
-                        lambda **k: {"requests": []})
+    # One call replaces the old per-candidate fan-out: the backend evaluates
+    # eligibility and returns the finished list.
+    monkeypatch.setattr(fe_api_client, "list_shift_candidates",
+                        lambda sid: {"shift_id": sid, "count": 0,
+                                     "eligible_count": 0,
+                                     "already_assigned_staff_ids": [],
+                                     "candidates": state["candidates"]})
     return frontend_client, state
 
 
@@ -3076,48 +3008,6 @@ def test_shift_still_reports_them_in_the_assigned_count(shift_drawer):
     assert "2 active" in body
     assert "still count towards the assigned total" in body
 
-
-# ------------------------------------------------------------- eligibility
-@pytest.mark.parametrize("status,reason", [
-    ("Unavailable", "Unavailable"),
-    ("On Leave", "On Leave"),
-])
-def test_operationally_unavailable_staff_are_not_assignable(status, reason):
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(availability=status), _planner_shift(), set(), [], [])
-    assert result["eligible"] is False
-    assert result["blocked_reason"] == reason
-
-
-def test_available_staff_continue_through_the_other_rules():
-    """Available is not a free pass — it just stops blocking at this step."""
-    fe = _fe()
-    clash = _planner_shift(shift_id=9, start="08:00", end="16:00")
-    result = fe._evaluate_candidate(
-        _person(availability="Available"), _planner_shift(shift_id=5), set(),
-        [clash], [])
-    assert result["eligible"] is False
-    assert "Already rostered" in result["blocked_reason"]
-
-
-def test_approved_temporary_unavailability_still_blocks_after_scenario_e():
-    """Scenario C's rule must survive Scenario E untouched."""
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(availability="Available"), _planner_shift(date="2026-09-01"),
-        set(), [], [], [_req(start="2026-08-31", end="2026-09-02")])
-    assert result["eligible"] is False
-    assert "Temporarily unavailable" in result["blocked_reason"]
-
-
-def test_unavailable_status_takes_precedence_over_a_role_mismatch():
-    """Ordering check: the reason shown should be the operational one."""
-    fe = _fe()
-    result = fe._evaluate_candidate(
-        _person(role="Doctor", availability="Unavailable"),
-        _planner_shift(), set(), [], [])
-    assert result["blocked_reason"] == "Unavailable"
 
 
 # ---------------------------------------------------------- authorization

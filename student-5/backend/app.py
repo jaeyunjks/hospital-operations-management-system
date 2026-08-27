@@ -96,6 +96,7 @@ def create_app(config_object: type = Config) -> Flask:
                 ],
                 "assignments": [
                     "GET    /api/shifts/<shift_id>/assignments",
+                    "GET    /api/shifts/<shift_id>/candidates",
                     "POST   /api/shifts/<shift_id>/assign",
                     "PUT    /api/shifts/<shift_id>/unassign",
                 ],

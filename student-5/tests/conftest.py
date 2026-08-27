@@ -301,14 +301,19 @@ def stub_database(monkeypatch):
     import services.ai_service as ai_service
     import services.assignment_service as assignment_service
     import services.coverage_service as coverage_service
+    import services.eligibility_service as eligibility_service
     import services.shift_service as shift_service
     import services.staff_service as staff_service
 
     import services.request_service as request_service
 
+    # Every module that binds `database_client` at import time must be listed.
+    # A module left out keeps whichever object it captured when it was first
+    # imported, which in a test run means the PREVIOUS test's stub — so state
+    # leaks between tests instead of the call simply failing.
     for module in (database_client, ai_service, assignment_service,
-                   coverage_service, shift_service, staff_service,
-                   request_service):
+                   coverage_service, eligibility_service, shift_service,
+                   staff_service, request_service):
         monkeypatch.setattr(module, "database_client", stub, raising=False)
     return stub
 

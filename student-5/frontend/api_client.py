@@ -190,6 +190,18 @@ def list_shift_assignments(shift_id: int) -> Dict[str, Any]:
     return _request("GET", f"/api/shifts/{shift_id}/assignments")
 
 
+def list_shift_candidates(shift_id: int) -> Dict[str, Any]:
+    """GET /api/shifts/<id>/candidates — staff evaluated against this shift.
+
+    The backend decides eligibility; this layer only renders the verdict.
+    Every candidate arrives already carrying ``eligible``, ``blocked_reason``
+    and the advisory ``weekly_ok``, in the order the backend chose. The rules
+    are deliberately NOT re-implemented here — two copies of a rostering rule
+    is two chances for the drawer to offer someone the API would refuse.
+    """
+    return _request("GET", f"/api/shifts/{shift_id}/candidates")
+
+
 def assign_staff(shift_id: int, staff_id: int,
                  approved_by: Optional[str] = None) -> Dict[str, Any]:
     """POST /api/shifts/<id>/assign — assign a real numeric staff ID."""

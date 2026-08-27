@@ -26,8 +26,9 @@ from validation import (validate_request_payload, validate_request_transition,
 _INACTIVE_ASSIGNMENT = ("Cancelled", "Declined")
 
 #: Only an Approved request restricts scheduling. Pending, Rejected and
-#: Cancelled requests must never block assignment.
-_BLOCKING_STATUS = "Approved"
+#: Cancelled requests must never block assignment. Public because
+#: eligibility_service filters the workforce-wide request list by it.
+BLOCKING_STATUS = "Approved"
 
 
 def _now() -> str:
@@ -122,15 +123,23 @@ def affected_assignments(request_id: int) -> List[Dict[str, Any]]:
     ]
 
 
-def blocking_requests_for_date(staff_id: int, shift_date: str) -> List[Dict[str, Any]]:
-    """Approved requests covering a given date, for candidate eligibility.
+def blocking_request_in(records: Any, shift_date: Optional[str]
+                        ) -> Optional[Dict[str, Any]]:
+    """The Approved request covering ``shift_date``, or None.
 
-    Only Approved requests restrict scheduling.
+    Pure, and takes the records rather than fetching them, so candidate
+    eligibility can group one workforce-wide query by staff member instead of
+    issuing a query per candidate. This function owns the rule that only an
+    Approved request restricts scheduling; nothing else re-states it.
+
+    Dates are inclusive at both ends and compare correctly as ISO strings,
+    so containment needs no parsing.
     """
-    if not shift_date:
-        return []
-    return [
-        row for row in database_client.list_unavailability_requests(
-            staff_id=staff_id, request_status=_BLOCKING_STATUS)
-        if row["start_date"] <= shift_date <= row["end_date"]
-    ]
+    if not records or not shift_date:
+        return None
+    for record in records:
+        if record.get("request_status") != BLOCKING_STATUS:
+            continue
+        if record.get("start_date") <= shift_date <= record.get("end_date"):
+            return record
+    return None
