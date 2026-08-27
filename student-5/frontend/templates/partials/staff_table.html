@@ -34,6 +34,7 @@
       <tr>
         <th scope="col">Staff ID</th>
         <th scope="col">Staff member</th>
+        <th scope="col">Role</th>
         <th scope="col">Department</th>
         <th scope="col">Specialisation</th>
         <th scope="col">Availability</th>
@@ -64,11 +65,11 @@
             <span class="staff-avatar" aria-hidden="true">{{ initials(person.name) }}</span>
             <span class="staff-identity__text">
               <span class="staff-identity__name">{{ person.name }}</span>
-              <span class="staff-identity__role">{{ person.role }}</span>
             </span>
             <span class="visually-hidden">— open staff detail</span>
           </button>
         </td>
+        <td class="table__muted">{{ person.role }}</td>
         <td class="table__muted">{{ person.department }}</td>
         <td class="table__muted">
           {%- if person.specialisation %}{{ person.specialisation }}{% else %}—{% endif -%}
