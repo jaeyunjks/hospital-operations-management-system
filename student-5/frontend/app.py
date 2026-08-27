@@ -99,6 +99,9 @@ def _planning_coverage(assigned: int, required: int):
         return {"label": "No demand", "tone": "neutral", "gap": 0}
     gap = max(required - assigned, 0)
     if gap == 0:
+        if assigned > required:
+            return {"label": f"Over {assigned - required}", "tone": "covered",
+                    "gap": 0, "overstaffed": assigned - required}
         return {"label": "Covered", "tone": "covered", "gap": 0}
     if gap == 1:
         return {"label": "Short 1", "tone": "short-one", "gap": 1}
@@ -616,9 +619,14 @@ def _week_roster_summary(week_shifts, conflicts):
     """
     required = sum(int(row.get("required_staff_count", 0)) for row in week_shifts)
     assigned = sum(int(row.get("assigned_staff_count", 0)) for row in week_shifts)
+    # Unfilled and surplus are both accumulated PER SHIFT: extra staff on one
+    # shift does not satisfy a shortage on a different shift.
     unfilled = sum(max(int(row.get("required_staff_count", 0))
                         - int(row.get("assigned_staff_count", 0)), 0)
                     for row in week_shifts)
+    overstaffed = sum(max(int(row.get("assigned_staff_count", 0))
+                           - int(row.get("required_staff_count", 0)), 0)
+                       for row in week_shifts)
     # An empty week is not a completed roster — nothing has been planned yet.
     empty = len(week_shifts) == 0
     ready = (not empty) and unfilled == 0 and not conflicts
@@ -627,6 +635,7 @@ def _week_roster_summary(week_shifts, conflicts):
         "required_positions": required,
         "assigned_positions": assigned,
         "unfilled_positions": unfilled,
+        "overstaffed_positions": overstaffed,
         "conflict_count": len(conflicts),
         "empty": empty,
         "ready": ready,
@@ -1370,12 +1379,20 @@ def create_app() -> Flask:
                                     kpis=None, error=str(error))
 
         shifts = coverage["shifts"]
-        total_required = sum(row["required_staff_count"] for row in shifts)
-        total_assigned = sum(row["assigned_staff_count"] for row in shifts)
-        coverage_pct = round(total_assigned / total_required * 100) if total_required else None
+        # Operational coverage counts FILLED positions, so a shift with more
+        # staff than it requires cannot push the figure above 100% or mask a
+        # shortage elsewhere. Surplus staffing is reported separately.
+        total_required = sum(int(row["required_staff_count"]) for row in shifts)
+        filled_positions = sum(min(int(row["assigned_staff_count"]),
+                                    int(row["required_staff_count"])) for row in shifts)
+        overstaffed_positions = sum(max(int(row["assigned_staff_count"])
+                                         - int(row["required_staff_count"]), 0)
+                                     for row in shifts)
+        coverage_pct = round(filled_positions / total_required * 100) if total_required else None
 
         kpis = {
             "coverage_pct": coverage_pct,
+            "overstaffed": overstaffed_positions,
             "gap": coverage["summary"]["total_shortfall"],
             "roster_total": roster["count"],
             "available_count": available["count"],
@@ -1403,11 +1420,15 @@ def create_app() -> Flask:
         for row in shifts:
             entry = departments.setdefault(row["department"], {
                 "department": row["department"], "shift_count": 0,
-                "required": 0, "assigned": 0, "gap": 0})
+                "required": 0, "assigned": 0, "gap": 0, "overstaffed": 0})
             entry["shift_count"] += 1
             entry["required"] += int(row["required_staff_count"])
             entry["assigned"] += int(row["assigned_staff_count"])
+            # Gap and surplus are accumulated PER SHIFT, so a surplus on one
+            # shift can never cancel a shortage on another.
             entry["gap"] += int(row["shortfall"])
+            entry["overstaffed"] += max(int(row["assigned_staff_count"])
+                                         - int(row["required_staff_count"]), 0)
 
         # Presentation ordering only: departments needing attention first.
         department_rows = sorted(departments.values(),

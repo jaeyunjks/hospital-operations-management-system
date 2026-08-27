@@ -37,6 +37,12 @@
       <dt class="roster-figure__label">Assigned</dt>
       <dd class="roster-figure__value" data-numeric>{{ summary.assigned_positions }}</dd>
     </div>
+    {% if summary.overstaffed_positions %}
+    <div class="roster-figure">
+      <dt class="roster-figure__label">Surplus</dt>
+      <dd class="roster-figure__value" data-numeric>{{ summary.overstaffed_positions }}</dd>
+    </div>
+    {% endif %}
     <div class="roster-figure">
       <dt class="roster-figure__label">Unfilled</dt>
       <dd class="roster-figure__value{% if summary.unfilled_positions %} roster-figure__value--gap{% endif %}"

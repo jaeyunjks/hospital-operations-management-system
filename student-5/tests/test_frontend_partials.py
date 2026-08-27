@@ -1672,3 +1672,140 @@ def test_planner_without_deep_link_uses_defaults(frontend_client, fe_api_client,
     assert 'name="department" value=""' in body
     assert 'name="selected_shift_id" value=""' in body
     assert 'name="view" value="week"' in body
+
+
+# ==========================================================================
+# Scenario D — shift requirement changes
+# ==========================================================================
+def test_coverage_helper_reports_gap():
+    fe = _fe()
+    assert fe._coverage(2, 3)["label"] == "Gap 1"
+
+
+def test_coverage_helper_reports_fully_staffed():
+    fe = _fe()
+    assert fe._coverage(3, 3)["label"] == "Fully staffed"
+
+
+def test_coverage_helper_reports_overstaffed():
+    """Requirement decreased below current assignments."""
+    fe = _fe()
+    assert fe._coverage(3, 2)["label"] == "Overstaffed by 1"
+
+
+def test_planner_grid_distinguishes_overstaffed_from_covered():
+    fe = _fe()
+    assert fe._planning_coverage(3, 3)["label"] == "Covered"
+    assert fe._planning_coverage(4, 3)["label"] == "Over 1"
+    assert fe._planning_coverage(4, 3)["gap"] == 0
+
+
+# ------------------------------------------- aggregation safety
+def test_surplus_on_one_shift_does_not_offset_shortage_on_another():
+    """The important case: extra staff on shift A cannot fill shift B."""
+    fe = _fe()
+    shifts = [_planner_shift(1, required=2, assigned=3),   # surplus 1
+              _planner_shift(2, required=2, assigned=1)]   # gap 1
+    summary = fe._week_roster_summary(shifts, [])
+    assert summary["unfilled_positions"] == 1        # not 0
+    assert summary["overstaffed_positions"] == 1
+    # A naive net would be zero; per-shift accounting must not do that.
+    assert summary["unfilled_positions"] != 0
+
+
+def test_weekly_summary_not_ready_when_gap_hidden_behind_surplus():
+    fe = _fe()
+    shifts = [_planner_shift(1, required=1, assigned=5),
+              _planner_shift(2, required=2, assigned=1)]
+    summary = fe._week_roster_summary(shifts, [])
+    assert summary["unfilled_positions"] == 1
+    assert summary["ready"] is False
+
+
+# ----------------------------------------------- coverage cap
+def test_daily_coverage_cannot_exceed_100_percent(frontend_client, fe_api_client, monkeypatch):
+    """An overstaffed shift must not inflate coverage above 100%."""
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kw: {
+        "shifts": [_cov(1, required=2, assigned=3)],
+        "summary": {"total_shifts": 1, "total_shortfall": 0}})
+    monkeypatch.setattr(fe_api_client, "list_staff", lambda **kw: {"count": 5, "staff": []})
+    body = frontend_client.get("/partials/kpis?date=2026-08-24").data.decode()
+    assert "150%" not in body
+    assert "100%" in body
+    assert "1 surplus" in body        # surplus reported separately
+
+
+def test_daily_coverage_uses_filled_positions(frontend_client, fe_api_client, monkeypatch):
+    """Surplus on one shift must not mask a shortage on another in the %."""
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kw: {
+        "shifts": [_cov(1, "Emergency", required=2, assigned=4),
+                   _cov(2, "Radiology", required=2, assigned=0)],
+        "summary": {"total_shifts": 2, "total_shortfall": 2}})
+    monkeypatch.setattr(fe_api_client, "list_staff", lambda **kw: {"count": 5, "staff": []})
+    body = frontend_client.get("/partials/kpis").data.decode()
+    # filled = min(4,2) + min(0,2) = 2 of 4 required = 50%, not 100%.
+    assert "50%" in body
+
+
+# --------------------------------------- department roll-up with surplus
+def test_department_rollup_reports_gap_and_surplus_independently(frontend_client, fe_api_client, monkeypatch):
+    _daily_stubs(monkeypatch, fe_api_client, [
+        _cov(1, "Emergency", required=2, assigned=3),                       # surplus
+        _cov(2, "Emergency", start="15:00", end="23:00", required=2, assigned=1),  # gap
+    ])
+    body = frontend_client.get("/partials/demand").data.decode()
+    rollup = body[body.index("daily-department-list"):body.index("table-wrap")]
+    assert "Gap 1" in rollup
+    assert "Overstaffed by 1" in rollup
+    # The department has both a shortage and a surplus, so it is neither.
+    assert "Fully staffed" not in rollup
+
+
+def test_department_fully_staffed_when_no_gap_and_no_surplus(frontend_client, fe_api_client, monkeypatch):
+    _daily_stubs(monkeypatch, fe_api_client, [_cov(1, required=2, assigned=2)])
+    body = frontend_client.get("/partials/demand").data.decode()
+    assert "Fully staffed" in body
+    assert "Overstaffed" not in body
+
+
+# ------------------------------------------------ requirement validation
+def test_requirement_zero_is_rejected(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "update_shift",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not be called")))
+    body = frontend_client.post("/partials/shifts/3", data={
+        "department": "Emergency", "shift_date": "2026-08-24",
+        "start_time": "07:00", "end_time": "15:00",
+        "required_role": "Registered Nurse", "required_staff_count": "0",
+        "shift_status": "Filled"}).data.decode()
+    assert "greater than zero" in body
+
+
+def test_requirement_non_numeric_is_rejected(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "update_shift",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not be called")))
+    body = frontend_client.post("/partials/shifts/3", data={
+        "department": "Emergency", "shift_date": "2026-08-24",
+        "start_time": "07:00", "end_time": "15:00",
+        "required_role": "Registered Nurse", "required_staff_count": "abc",
+        "shift_status": "Filled"}).data.decode()
+    assert "whole number" in body
+
+
+def test_requirement_change_does_not_touch_assignments(frontend_client, fe_api_client, monkeypatch):
+    """Editing the requirement must never add or remove staff."""
+    calls = []
+    monkeypatch.setattr(fe_api_client, "update_shift",
+                        lambda sid, payload: calls.append(("update", payload)) or {"shift": {}})
+    monkeypatch.setattr(fe_api_client, "assign_staff",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("auto-assign")))
+    monkeypatch.setattr(fe_api_client, "unassign_staff",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("auto-unassign")))
+    monkeypatch.setattr(fe_api_client, "get_shift", lambda sid: {"shift": _cov(3)})
+    monkeypatch.setattr(fe_api_client, "list_shift_assignments", lambda sid: {"assignments": []})
+    monkeypatch.setattr(fe_api_client, "list_staff", lambda **kw: {"staff": []})
+    frontend_client.post("/partials/shifts/3", data={
+        "department": "Emergency", "shift_date": "2026-08-24",
+        "start_time": "07:00", "end_time": "15:00",
+        "required_role": "Registered Nurse", "required_staff_count": "3",
+        "shift_status": "Filled"})
+    assert calls and calls[0][1]["required_staff_count"] == 3

@@ -27,7 +27,8 @@
       {%- if kpis.coverage_pct is none -%}
         No shifts scheduled today
       {%- else -%}
-        Assigned vs required headcount
+        Filled vs required positions
+        {%- if kpis.overstaffed %} · {{ kpis.overstaffed }} surplus{% endif -%}
       {%- endif -%}
     </span>
   </div>

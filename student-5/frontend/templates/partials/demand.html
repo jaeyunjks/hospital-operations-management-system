@@ -54,9 +54,15 @@
           <span class="daily-department__shifts">·
             {{ dept.shift_count }} shift{{ '' if dept.shift_count == 1 else 's' }}</span>
         </span>
+        {#- Gap and surplus are shown independently: a department can have
+            both if one shift is short while another is over. -#}
         {% if dept.gap %}
         <span class="badge-warning">Gap {{ dept.gap }}</span>
-        {% else %}
+        {% endif %}
+        {% if dept.overstaffed %}
+        <span class="badge-info">Overstaffed by {{ dept.overstaffed }}</span>
+        {% endif %}
+        {% if not dept.gap and not dept.overstaffed %}
         <span class="badge-success">Fully staffed</span>
         {% endif %}
       </li>
