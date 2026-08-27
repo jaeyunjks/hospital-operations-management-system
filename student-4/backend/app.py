@@ -17,6 +17,7 @@ from routes.arrangements import bp as arrangements_bp
 from routes.catalogue import bp as catalogue_bp
 from routes.shortages import bp as shortages_bp
 from routes.theatres import bp as theatres_bp
+from routes.wards import bp as wards_bp
 from services import database_client as dbc
 from services import ollama_client
 
@@ -24,7 +25,8 @@ from services import ollama_client
 def create_app():
     app = Flask(__name__)
 
-    for blueprint in (catalogue_bp, arrangements_bp, theatres_bp, shortages_bp, ai_bp):
+    for blueprint in (catalogue_bp, arrangements_bp, theatres_bp, wards_bp,
+                      shortages_bp, ai_bp):
         app.register_blueprint(blueprint, url_prefix="/api")
 
     @app.errorhandler(ApiError)

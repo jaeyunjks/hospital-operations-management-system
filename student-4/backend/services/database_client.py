@@ -68,6 +68,11 @@ def theatre_board():
     return _call("GET", "/db/views/theatre-board")
 
 
+def ward_occupancy(ward=None):
+    return _call("GET", "/db/views/ward-occupancy",
+                 params={"ward": ward} if ward else None)
+
+
 def occupancy_stats():
     return _call("GET", "/db/views/occupancy-stats")
 

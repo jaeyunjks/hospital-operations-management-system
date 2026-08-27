@@ -326,6 +326,37 @@ def overlapping_arrangements():
     """, (bed_id, exclude, end, start)))
 
 
+@app.get("/db/views/ward-occupancy")
+def ward_occupancy_view():
+    """Per-ward bed counts, published for other services as staffing context.
+
+    Kept separate from occupancy-stats so the shape other teams depend on
+    does not change when the AI summary's input is adjusted.
+    """
+    clauses, params = [], []
+    if request.args.get("ward"):
+        clauses.append("r.ward = ?")
+        params.append(request.args["ward"])
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+
+    return ok(db.query("""
+        SELECT r.ward,
+               COUNT(*)                                        AS total_beds,
+               SUM(b.status = 'occupied')                      AS occupied,
+               SUM(b.status = 'available')                     AS available,
+               SUM(b.status = 'reserved')                      AS reserved,
+               SUM(b.status = 'maintenance')                   AS maintenance,
+               SUM(rt.requires_monitoring)                     AS monitored_beds,
+               GROUP_CONCAT(DISTINCT rt.care_category)         AS care_categories
+        FROM beds b
+        JOIN rooms r       ON r.room_id = b.room_id
+        JOIN room_types rt ON rt.type_id = r.type_id
+        {}
+        GROUP BY r.ward
+        ORDER BY r.ward
+    """.format(where), tuple(params)))
+
+
 @app.get("/health")
 def health():
     counts = {t: db.query_one("SELECT COUNT(*) AS n FROM " + t)["n"]

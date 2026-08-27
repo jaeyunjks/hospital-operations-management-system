@@ -154,6 +154,7 @@ changes.
 | GET POST PUT DELETE | `/api/beds` | Bed CRUD (delete is soft) |
 | GET | `/api/rooms/availability` | Real-time availability by care category, status, ward |
 | GET | `/api/theatres/board` | Theatre states with current or next session |
+| GET | `/api/wards/occupancy` | Per-ward bed counts, published for other services |
 | GET POST PUT | `/api/arrangements` | Bed stays and theatre sessions |
 | PUT | `/api/arrangements/{id}/release` | Discharge or end a session |
 | PUT | `/api/arrangements/{id}/cancel` | Soft delete |
@@ -171,6 +172,37 @@ All responses use the team envelope:
 ```json
 {"success": true, "data": null, "error": null}
 ```
+
+## Published contract: ward occupancy
+
+`GET /api/wards/occupancy` (optional `?ward=`) is a read-only endpoint other
+services depend on. Staff & Shift Management consumes it for staffing context
+and later AI shift planning, so the field names below are a contract, not an
+internal detail. `tests/test_ward_occupancy.py` pins the names and the
+arithmetic so a breaking change fails a test first.
+
+```json
+{
+  "wards": [
+    {
+      "ward": "Critical Care",
+      "total_beds": 4,
+      "occupied": 2,
+      "available": 1,
+      "reserved": 1,
+      "maintenance": 0,
+      "monitored_beds": 4,
+      "occupancy_pct": 50.0,
+      "care_categories": ["Short-term"]
+    }
+  ],
+  "totals": { "total_beds": 25, "occupied": 9, "occupancy_pct": 36.0 }
+}
+```
+
+`occupied + available + reserved + maintenance == total_beds` always holds.
+No AI is involved, so the numbers are available whether or not Ollama is
+running.
 
 ## Cross-service notes
 
