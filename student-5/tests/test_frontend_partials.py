@@ -749,6 +749,20 @@ def test_shift_form_options_are_real_distinct_sorted_selects(
     assert body.index('value="Pharmacist"') < body.index('value="Registered Nurse"')
 
 
+def test_shift_templates_are_ui_only_and_create_defaults_to_morning(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_form_options(monkeypatch, fe_api_client)
+    body = frontend_client.get("/partials/shifts/new").data.decode()
+
+    assert 'data-shift-template' in body
+    assert 'name="shift_template"' not in body
+    assert 'value="Morning" selected' in body
+    assert 'Morning · 07:00–15:00' in body
+    assert 'Afternoon · 15:00–23:00' in body
+    assert 'Night · 23:00–07:00' in body
+    assert 'value="Custom"' in body
+
+
 def test_shift_form_reference_failure_is_isolated_and_submit_is_disabled(
         frontend_client, fe_api_client, monkeypatch):
     monkeypatch.setattr(fe_api_client, "list_staff", _raise_unavailable)
@@ -824,6 +838,7 @@ def test_edit_shift_form_and_update(frontend_client, fe_api_client, monkeypatch)
     assert 'value="Emergency" selected' in form
     assert 'value="Registered Nurse" selected' in form
     assert 'value="Planned" selected' in form
+    assert 'value="Night" selected' in form
     assert "Lifecycle state of the shift" in form
 
     updated = {}
@@ -839,6 +854,19 @@ def test_edit_shift_form_and_update(frontend_client, fe_api_client, monkeypatch)
     assert response.headers["HX-Trigger"] == "shifts-updated"
     assert updated["required_staff_count"] == 3 and updated["shift_status"] == "Open"
     assert "Shift updated." in response.data.decode()
+
+
+def test_edit_custom_shift_times_infer_custom_template(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_form_options(monkeypatch, fe_api_client)
+    custom_shift = {**SHIFT_FIXTURE, "start_time": "08:00", "end_time": "16:00"}
+    monkeypatch.setattr(fe_api_client, "get_shift", lambda sid: {"shift": custom_shift})
+
+    form = frontend_client.get("/partials/shifts/11/edit").data.decode()
+
+    assert 'value="Custom" selected' in form
+    assert 'name="start_time" type="time"\n             value="08:00"' in form
+    assert 'name="end_time" type="time"\n             value="16:00"' in form
 
 
 def test_editing_only_required_count_preserves_all_select_values(
@@ -1051,6 +1079,17 @@ def test_week_planner_aggregates_daily_demand_and_real_department_gaps(
     assert "<dt>Staffing gap</dt><dd>2</dd>" in body
     assert 'aria-label="2 unfilled"' in body
     assert "No shift" in body
+    assert "<strong>Morning</strong>" in body
+    assert "<strong>Afternoon</strong>" in body
+    assert "<strong>Night</strong>" in body
+    assert "<strong>Evening</strong>" not in body
+
+
+def test_custom_shift_times_map_to_the_three_presentation_bands():
+    fe = _fe()
+    assert fe._shift_period("08:00") == "Morning"
+    assert fe._shift_period("19:00") == "Afternoon"
+    assert fe._shift_period("22:00") == "Night"
 
 
 def test_week_grid_preserves_multiple_real_shifts_in_one_cell(

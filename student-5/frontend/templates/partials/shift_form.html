@@ -29,6 +29,10 @@
     Use the operational fields accepted by the Staff &amp; Shift API. Shift IDs are assigned by the service.
   </p>
 
+  {% set selected_template = 'Morning' if values.start_time == '07:00' and values.end_time == '15:00'
+                        else 'Afternoon' if values.start_time == '15:00' and values.end_time == '23:00'
+                        else 'Night' if values.start_time == '23:00' and values.end_time == '07:00'
+                        else 'Custom' %}
   <div class="shift-form__grid">
     <label class="filter">
       <span class="filter__label">Department</span>
@@ -43,13 +47,30 @@
       <span class="filter__label">Shift date</span>
       <input class="input" name="shift_date" type="date" value="{{ values.shift_date }}" required>
     </label>
+    <label class="filter shift-form__wide" for="shift-template">
+      <span class="filter__label">Shift template</span>
+      <span class="shift-form__status-row">
+        <select class="select" id="shift-template" data-shift-template
+                aria-describedby="shift-template-help">
+          <option value="Morning" {% if selected_template == 'Morning' %}selected{% endif %}>Morning · 07:00–15:00</option>
+          <option value="Afternoon" {% if selected_template == 'Afternoon' %}selected{% endif %}>Afternoon · 15:00–23:00</option>
+          <option value="Night" {% if selected_template == 'Night' %}selected{% endif %}>Night · 23:00–07:00</option>
+          <option value="Custom" {% if selected_template == 'Custom' %}selected{% endif %}>Custom</option>
+        </select>
+        <span class="shift-form__help" id="shift-template-help">
+          Prefills start and end; both times remain editable.
+        </span>
+      </span>
+    </label>
     <label class="filter">
       <span class="filter__label">Start time</span>
-      <input class="input" name="start_time" type="time" value="{{ values.start_time }}" required>
+      <input class="input" id="shift-start-time" name="start_time" type="time"
+             value="{{ values.start_time }}" data-shift-time required>
     </label>
     <label class="filter">
       <span class="filter__label">End time</span>
-      <input class="input" name="end_time" type="time" value="{{ values.end_time }}" required>
+      <input class="input" id="shift-end-time" name="end_time" type="time"
+             value="{{ values.end_time }}" data-shift-time required>
     </label>
     <label class="filter">
       <span class="filter__label">Required role</span>

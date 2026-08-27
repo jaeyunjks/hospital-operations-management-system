@@ -288,13 +288,12 @@
             <span>{{ day.strftime('%a') }}</span><strong>{{ day.strftime('%-d') }}</strong>
           </button>
           {% endfor %}
-          {% set required_bands = ['Morning', 'Evening', 'Night'] %}
-          {% set ordered_bands = ['Morning', 'Afternoon', 'Evening', 'Night'] %}
+          {% set ordered_bands = ['Morning', 'Afternoon', 'Night'] %}
           {% for band in ordered_bands %}
             {% set matches = grid_rows | selectattr('label', 'equalto', band) | list %}
             {% if matches %}
               {% for row in matches %}{{ render_week_row(row) }}{% endfor %}
-            {% elif band in required_bands %}
+            {% else %}
               {{ render_week_row(none, band) }}
             {% endif %}
           {% endfor %}

@@ -123,16 +123,14 @@ def _time_minutes(value: str) -> int:
 
 
 def _shift_period(start_time: str) -> str:
-    """Presentation-only period label; exact stored times stay visible."""
+    """Presentation-only three-band label; exact stored times stay visible."""
     minute = _time_minutes(start_time)
     if minute < 5 * 60:
         return "Night"
     if minute < 12 * 60:
         return "Morning"
-    if minute < 17 * 60:
-        return "Afternoon"
     if minute < 22 * 60:
-        return "Evening"
+        return "Afternoon"
     return "Night"
 
 
