@@ -27,12 +27,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from flask import (Flask, make_response, render_template,  # noqa: E402
-                   request, send_from_directory)
+from flask import (Flask, make_response, redirect, render_template,  # noqa: E402
+                   request, send_from_directory, url_for)
 
 import api_client  # noqa: E402
+import demo_identity  # noqa: E402
 from api_client import (BackendError, BackendUnavailableError,  # noqa: E402
-                        NotFoundError)
+                        ForbiddenError, NotFoundError)
+from demo_identity import ROLE_EMPLOYEE, ROLE_MANAGER  # noqa: E402
 
 DEFAULT_PORT = 3500
 BASE_DIR = Path(__file__).resolve().parent
@@ -583,7 +585,90 @@ def _weekly_covers_shift(periods, shift):
     return True
 
 
-def _evaluate_candidate(person, shift, assigned_ids, their_shifts, weekly_periods):
+#: Only an APPROVED request blocks assignment. A Pending one is still a
+#: question, not an answer; Rejected and Cancelled ones were resolved without
+#: granting time off. This is the whole rule, in one place.
+_BLOCKING_REQUEST_STATUS = "Approved"
+
+
+def _date_compact(value):
+    """e.g. "1 Sep" — for period labels where the year is already obvious."""
+    try:
+        return (datetime.datetime.strptime(value, "%Y-%m-%d")
+                .strftime("%-d %b"))
+    except (TypeError, ValueError):
+        return value
+
+
+def _request_period_label(record):
+    """"1 Sep – 3 Sep", collapsing a single-day request to just "1 Sep"."""
+    start = _date_compact(record.get("start_date"))
+    end = _date_compact(record.get("end_date"))
+    return start if start == end else f"{start} – {end}"
+
+
+def _blocking_request(requests, shift_date):
+    """The approved request covering `shift_date`, or None.
+
+    Dates are inclusive at both ends and compare correctly as ISO strings,
+    so no parsing is needed to decide containment.
+    """
+    if not requests or not shift_date:
+        return None
+    for record in requests:
+        if record.get("request_status") != _BLOCKING_REQUEST_STATUS:
+            continue
+        if record.get("start_date") <= shift_date <= record.get("end_date"):
+            return record
+    return None
+
+
+def _requests_by_staff(records):
+    """Group request records by staff_id for per-candidate lookup."""
+    grouped = {}
+    for record in records or []:
+        grouped.setdefault(record.get("staff_id"), []).append(record)
+    return grouped
+
+
+#: Status -> badge class. Presentation only; the backend owns the lifecycle.
+_REQUEST_BADGE = {
+    "Pending": "badge-warning",
+    "Approved": "badge-success",
+    "Rejected": "badge-danger",
+    "Cancelled": "badge-neutral",
+}
+
+
+def _request_days(record):
+    """Inclusive length of the requested period, in days."""
+    try:
+        start = datetime.datetime.strptime(record["start_date"], "%Y-%m-%d").date()
+        end = datetime.datetime.strptime(record["end_date"], "%Y-%m-%d").date()
+    except (KeyError, TypeError, ValueError):
+        return None
+    return (end - start).days + 1
+
+
+def _decorate_request(record):
+    """Add presentation fields to a request without altering stored values."""
+    row = dict(record)
+    row["badge_class"] = _REQUEST_BADGE.get(record.get("request_status"), "badge-neutral")
+    row["period_label"] = _request_period_label(record)
+    row["day_count"] = _request_days(record)
+    row["is_pending"] = record.get("request_status") == "Pending"
+    row["is_open"] = record.get("request_status") == "Pending"
+    row["reviewed_display"] = _format_timestamp(record.get("reviewed_at"))
+    row["submitted_display"] = _format_timestamp(record.get("created_at"))
+    return row
+
+
+def _decorate_requests(records):
+    return [_decorate_request(row) for row in records or []]
+
+
+def _evaluate_candidate(person, shift, assigned_ids, their_shifts, weekly_periods,
+                        approved_requests=()):
     """Deterministic eligibility for manual assignment. No scoring, no AI.
 
     Returns the blocking reason (if any) plus advisory notes. Blocking states
@@ -592,6 +677,7 @@ def _evaluate_candidate(person, shift, assigned_ids, their_shifts, weekly_period
     manager may still assign with the mismatch shown.
     """
     notes, blocked = [], None
+    approved = _blocking_request(approved_requests, shift.get("shift_date"))
 
     if person["staff_id"] in assigned_ids:
         blocked = "Already assigned to this shift"
@@ -599,6 +685,8 @@ def _evaluate_candidate(person, shift, assigned_ids, their_shifts, weekly_period
         blocked = "On Leave"
     elif person.get("availability_status") == "Unavailable":
         blocked = "Unavailable"
+    elif approved is not None:
+        blocked = "Temporarily unavailable " + _request_period_label(approved)
     elif person.get("role") != shift.get("required_role"):
         blocked = "Role mismatch"
     else:
@@ -627,6 +715,7 @@ def _evaluate_candidate(person, shift, assigned_ids, their_shifts, weekly_period
         "blocked_reason": blocked,
         "weekly_ok": covered,
         "notes": notes,
+        "approved_request": approved,
     }
 
 
@@ -725,6 +814,65 @@ def create_app() -> Flask:
         template_folder=str(BASE_DIR / "templates"),
     )
 
+    # Signs the session cookie that carries the DEMO identity. A generated
+    # per-process fallback is deliberate: without HOMS_SECRET_KEY set, demo
+    # sessions simply do not survive a restart, which is the right failure
+    # for a demo. It is not, and must not be mistaken for, a production
+    # secret-management strategy.
+    app.secret_key = os.environ.get("HOMS_SECRET_KEY") or os.urandom(32)
+
+    # Every backend call from this process carries the simulated role, so the
+    # backend guard decides permission rather than the template.
+    api_client.set_identity_provider(demo_identity.identity_headers)
+
+    # Paths reachable without choosing a demo role: the entry screen itself,
+    # static assets, and health. Everything else redirects to the entry
+    # screen — the application has no anonymous mode.
+    _OPEN_ENDPOINTS = {"demo_entry", "demo_enter", "demo_exit",
+                       "static", "shared_assets", "health"}
+
+    @app.before_request
+    def require_demo_identity():
+        if request.endpoint in _OPEN_ENDPOINTS or request.endpoint is None:
+            return None
+        if demo_identity.current_identity() is not None:
+            return None
+        # An HTMX fragment cannot usefully render a redirect, so tell the
+        # client to navigate the whole page instead of swapping the login
+        # screen into a panel.
+        if request.headers.get("HX-Request"):
+            response = make_response("", 204)
+            response.headers["HX-Redirect"] = url_for("demo_entry")
+            return response
+        return redirect(url_for("demo_entry"))
+
+    #: Endpoints an employee has no business on. This is a CONVENIENCE
+    #: redirect, not a security control — the backend refuses these calls on
+    #: its own, and would still refuse them if this list were empty or wrong.
+    #: Its only job is to send an employee somewhere useful instead of a page
+    #: full of "requires the Staff Manager role".
+    _MANAGER_ENDPOINTS = {
+        "workforce_overview", "staff_directory", "shift_planner", "requests_queue",
+    }
+
+    @app.before_request
+    def steer_employees_home():
+        if request.endpoint in _MANAGER_ENDPOINTS and demo_identity.is_employee():
+            return redirect(url_for("my_workforce"))
+        return None
+
+    @app.context_processor
+    def inject_identity():
+        """Identity is read-only context in the application chrome."""
+        identity = demo_identity.current_identity()
+        return {
+            "identity": identity,
+            "is_manager": demo_identity.is_manager(),
+            "is_employee": demo_identity.is_employee(),
+            "ROLE_MANAGER": ROLE_MANAGER,
+            "ROLE_EMPLOYEE": ROLE_EMPLOYEE,
+        }
+
     # Display helpers shared by the table and the drawer. Presentation only —
     # every API call still uses the real numeric primary key.
     app.jinja_env.globals["display_id"] = _display_id
@@ -760,6 +908,63 @@ def create_app() -> Flask:
             "backend_service": {"url": api_client.API_BASE_URL, "status": status,
                                 "detail": backend},
         }, (200 if status == "ok" else 503)
+
+    # ------------------------------------------------------ R0 demo identity
+    # DEMONSTRATION ONLY. This is a role SELECTOR, not a sign-in. It is kept
+    # deliberately separate from the application navigation and labelled as
+    # such, so it can never be mistaken for authentication. See
+    # demo_identity.py and backend/authorization.py.
+
+    @app.get("/demo")
+    def demo_entry():
+        """The demo role entry screen."""
+        if demo_identity.current_identity() is not None:
+            return redirect(url_for("workforce_overview"))
+
+        employees, error = [], None
+        try:
+            # Everyone on file may be acted as; the list is only there so the
+            # demo operator picks a real staff_id rather than typing one.
+            employees = sorted(api_client.list_staff()["staff"],
+                               key=lambda row: row.get("name") or "")
+        except (BackendUnavailableError, BackendError) as exc:
+            error = str(exc)
+
+        return render_template("demo_entry.html", employees=employees,
+                               error=error, today=_today(),
+                               selected_role=request.args.get("role"))
+
+    @app.post("/demo/enter")
+    def demo_enter():
+        role = request.form.get("role")
+        if role not in demo_identity.ROLES:
+            return redirect(url_for("demo_entry"))
+
+        if role == ROLE_MANAGER:
+            demo_identity.set_identity(ROLE_MANAGER, name="Demo Staff Manager")
+            return redirect(url_for("workforce_overview"))
+
+        raw_id = request.form.get("staff_id")
+        if not (raw_id or "").isdigit():
+            return redirect(url_for("demo_entry", role=ROLE_EMPLOYEE))
+
+        staff_id = int(raw_id)
+        # Resolve the name here so the chrome can show who is being simulated
+        # without a backend call on every page render.
+        try:
+            person = api_client.get_staff(staff_id)["staff"]
+        except (NotFoundError, BackendUnavailableError, BackendError):
+            return redirect(url_for("demo_entry", role=ROLE_EMPLOYEE))
+
+        demo_identity.set_identity(
+            ROLE_EMPLOYEE, staff_id=staff_id, name=person.get("name"),
+            role_title=person.get("role"), department=person.get("department"))
+        return redirect(url_for("my_workforce"))
+
+    @app.post("/demo/exit")
+    def demo_exit():
+        demo_identity.clear_identity()
+        return redirect(url_for("demo_entry"))
 
     # -------------------------------------------------------------------- page
     @app.get("/")
@@ -957,6 +1162,16 @@ def create_app() -> Flask:
                     role=shift["required_role"])["staff"]
                 active_ids = {row["staff_id"] for row in assignments}
 
+                # One grouped fetch rather than a call per candidate. An
+                # approved temporary-unavailability request covering this
+                # shift's date makes that person unassignable.
+                try:
+                    approved_by_staff = _requests_by_staff(
+                        api_client.list_unavailability_requests(
+                            request_status="Approved")["requests"])
+                except (BackendUnavailableError, BackendError):
+                    approved_by_staff = {}
+
                 evaluated = []
                 for person in candidate_records:
                     staff_id = person["staff_id"]
@@ -969,7 +1184,8 @@ def create_app() -> Flask:
                     except (BackendUnavailableError, BackendError):
                         periods = []
                     evaluated.append(_evaluate_candidate(
-                        person, shift, active_ids, their_shifts, periods))
+                        person, shift, active_ids, their_shifts, periods,
+                        approved_by_staff.get(staff_id, ())))
 
                 # Eligible first, then weekly-availability match, then the
                 # employment ordering aid, then name. Ordering only.
@@ -1423,6 +1639,17 @@ def create_app() -> Flask:
             "available_count": available["count"],
             "shifts_today": coverage["summary"]["total_shifts"],
         }
+
+        # Fetched separately and tolerated failing: a request-queue outage
+        # should not blank the coverage figures, which are the reason this
+        # row exists.
+        try:
+            kpis["pending_requests"] = sum(
+                1 for row in api_client.list_unavailability_requests(
+                    request_status="Pending")["requests"])
+        except (ForbiddenError, BackendUnavailableError, BackendError):
+            kpis["pending_requests"] = None
+
         return render_template("partials/kpis.html", today=today, kpis=kpis, error=None)
 
     @app.get("/partials/demand")
@@ -1462,6 +1689,251 @@ def create_app() -> Flask:
         return render_template("partials/demand.html", today=today,
                                 shifts=shifts, top_gap=top_gap, error=None,
                                 departments=department_rows)
+
+    # =================================================== employee: my workforce
+    # Every route below is scoped to the signed-in employee's own staff_id,
+    # taken from the session rather than the URL. There is no route by which
+    # an employee names a different staff member — and if one were added, the
+    # backend guard would refuse it anyway.
+
+    def _my_requests_model(staff_id, error=None, notice=None, form=None):
+        """Data for the My requests panel. Rendered on its own after any
+        change, so the panel stays consistent without reloading the page."""
+        requests, load_error = [], None
+        try:
+            requests = _decorate_requests(
+                api_client.list_staff_requests(staff_id)["requests"])
+        except (BackendUnavailableError, BackendError) as exc:
+            load_error = str(exc)
+
+        return {
+            "requests": requests,
+            "load_error": load_error,
+            "error": error,
+            "notice": notice,
+            "form": form or {},
+            "reasons": api_client.REQUEST_REASONS,
+            "today": _today(),
+            "staff_id": staff_id,
+            "has_pending": any(row["is_pending"] for row in requests),
+        }
+
+    @app.get("/me")
+    def my_workforce():
+        """The employee's own view: their shifts, availability, and requests."""
+        staff_id = demo_identity.current_staff_id()
+        if staff_id is None:
+            return redirect(url_for("workforce_overview"))
+
+        # Named page_error, not error: the requests panel model merged in
+        # below carries its own `error`, and the two must not collide.
+        person, page_error = None, None
+        try:
+            person = api_client.get_staff(staff_id)["staff"]
+        except (NotFoundError, BackendUnavailableError, BackendError) as exc:
+            page_error = str(exc)
+
+        current, upcoming, shifts_error = None, [], None
+        assignments = []
+        try:
+            assignments = api_client.list_staff_shifts(staff_id)["shifts"]
+            current, upcoming = _split_shifts(assignments)
+        except (BackendUnavailableError, BackendError) as exc:
+            shifts_error = str(exc)
+
+        weekly_grid, weekly_error = None, None
+        try:
+            periods = api_client.get_weekly_availability(staff_id)["periods"]
+            weekly_grid = _build_weekly_grid(periods, assignments, _week_start())
+        except (BackendUnavailableError, BackendError) as exc:
+            weekly_error = str(exc)
+
+        # The requests panel is included by this page AND rendered on its own
+        # after every change, so it owns its model. Merged rather than
+        # splatted alongside page keys: the two share names (`today`,
+        # `staff_id`) and duplicate keyword arguments are a TypeError.
+        model = _my_requests_model(staff_id)
+        model.update(
+            active="me", today=_today(), today_long=_today_long(),
+            person=person, page_error=page_error,
+            display_id=_display_id(staff_id),
+            initials=_initials(person["name"]) if person else "",
+            current_assignment=current, upcoming_shifts=upcoming,
+            shifts_error=shifts_error, weekly_grid=weekly_grid,
+            weekly_error=weekly_error,
+            weekly_has_conflict=any(cell["state"] == "conflict"
+                                     for row in (weekly_grid or [])
+                                     for cell in row["cells"]),
+            week_start=_week_start().isoformat(),
+        )
+        return render_template("my_workforce.html", **model)
+
+    @app.get("/partials/me/requests")
+    def my_requests_partial():
+        staff_id = demo_identity.current_staff_id()
+        if staff_id is None:
+            return "", 403
+        return render_template("partials/my_requests.html",
+                               **_my_requests_model(staff_id))
+
+    @app.post("/partials/me/requests")
+    def my_request_create():
+        """Submit a request. Validation errors re-render the panel with the
+        entered values intact, so nothing typed is ever thrown away."""
+        staff_id = demo_identity.current_staff_id()
+        if staff_id is None:
+            return "", 403
+
+        form = {
+            "start_date": (request.form.get("start_date") or "").strip(),
+            "end_date": (request.form.get("end_date") or "").strip(),
+            "reason": (request.form.get("reason") or "").strip(),
+            "notes": (request.form.get("notes") or "").strip(),
+        }
+
+        # Client-side checks are a courtesy; the backend re-validates all of
+        # this and is the authority on what is accepted.
+        error = None
+        if not _valid_iso_date(form["start_date"]) or not _valid_iso_date(form["end_date"]):
+            error = "Enter both a start and an end date."
+        elif form["start_date"] > form["end_date"]:
+            error = "The end date cannot fall before the start date."
+        elif not form["reason"]:
+            error = "Select a reason for the request."
+
+        if error is None:
+            payload = {k: v for k, v in form.items() if v}
+            try:
+                created = api_client.create_staff_request(staff_id, payload)["request"]
+                return render_template(
+                    "partials/my_requests.html",
+                    **_my_requests_model(
+                        staff_id,
+                        notice=("Request submitted for "
+                                + _request_period_label(created)
+                                + " — awaiting review.")))
+            except (ForbiddenError, BackendUnavailableError, BackendError) as exc:
+                error = str(exc)
+
+        return render_template("partials/my_requests.html",
+                               **_my_requests_model(staff_id, error=error, form=form))
+
+    @app.post("/partials/me/requests/<int:request_id>/cancel")
+    def my_request_cancel(request_id: int):
+        staff_id = demo_identity.current_staff_id()
+        if staff_id is None:
+            return "", 403
+
+        notice, error = None, None
+        try:
+            api_client.cancel_staff_request(staff_id, request_id)
+            notice = "Request withdrawn."
+        except (ForbiddenError, NotFoundError, BackendUnavailableError,
+                BackendError) as exc:
+            error = str(exc)
+
+        return render_template("partials/my_requests.html",
+                               **_my_requests_model(staff_id, error=error,
+                                                     notice=notice))
+
+    # ====================================================== manager: requests
+    # The queue is manager-only. These routes make no permission decision of
+    # their own — they call the backend and render whatever it returns,
+    # including its refusals.
+
+    @app.get("/requests")
+    def requests_queue():
+        return render_template("requests_queue.html", active="requests",
+                               today=_today(), today_long=_today_long(),
+                               statuses=api_client.REQUEST_STATUSES,
+                               selected_status=request.args.get("status") or "Pending",
+                               selected_id=request.args.get("request_id", type=int))
+
+    def _queue_model(status, selected_id=None, notice=None):
+        rows, error, counts = [], None, {}
+        try:
+            records = api_client.list_unavailability_requests()["requests"]
+            counts = {name: sum(1 for row in records
+                                if row.get("request_status") == name)
+                      for name in api_client.REQUEST_STATUSES}
+            if status and status != "All":
+                records = [row for row in records
+                           if row.get("request_status") == status]
+            # Pending first, then soonest start date: the queue is ordered by
+            # what needs a decision, not by when it was submitted.
+            rows = _decorate_requests(sorted(
+                records,
+                key=lambda row: (row.get("request_status") != "Pending",
+                                 row.get("start_date") or "")))
+        except (ForbiddenError, BackendUnavailableError, BackendError) as exc:
+            error = str(exc)
+
+        return {"requests": rows, "error": error, "counts": counts,
+                "statuses": api_client.REQUEST_STATUSES, "selected_status": status,
+                "selected_id": selected_id, "notice": notice}
+
+    @app.get("/partials/requests")
+    def requests_list_partial():
+        return render_template(
+            "partials/request_list.html",
+            **_queue_model(request.args.get("status") or "Pending",
+                           request.args.get("request_id", type=int)))
+
+    def _render_request_detail(request_id, notice=None, error=None, status_code=200):
+        try:
+            data = api_client.get_unavailability_request(request_id)
+        except NotFoundError:
+            return render_template("partials/request_detail.html", record=None,
+                                   not_found=True, error=None, notice=None), 404
+        except (ForbiddenError, BackendUnavailableError, BackendError) as exc:
+            return render_template("partials/request_detail.html", record=None,
+                                   not_found=False, error=str(exc),
+                                   notice=None), status_code
+
+        affected = data.get("affected_assignments") or []
+        return render_template(
+            "partials/request_detail.html",
+            record=_decorate_request(data["request"]),
+            affected=affected,
+            # Only a live request can still cost the roster something; a
+            # resolved one is shown for the record.
+            affected_active=[row for row in affected
+                             if row.get("assignment_status") not in _INACTIVE_ASSIGNMENT],
+            not_found=False, error=error, notice=notice,
+            initials=_initials(data["request"].get("staff_name") or ""),
+        ), status_code
+
+    @app.get("/partials/requests/<int:request_id>")
+    def request_detail_partial(request_id: int):
+        return _render_request_detail(request_id)
+
+    @app.post("/partials/requests/<int:request_id>/review")
+    def request_review_partial(request_id: int):
+        """Record a decision. Deliberately does nothing to the roster: any
+        reassignment is a separate, explicit action by the manager."""
+        decision = request.form.get("decision")
+        reviewed_by = (request.form.get("reviewed_by")
+                       or (demo_identity.current_identity() or {}).get("name")
+                       or "Staff Manager")
+
+        if decision not in ("Approved", "Rejected"):
+            return _render_request_detail(
+                request_id, error="Choose whether to approve or reject the request.")
+
+        try:
+            api_client.review_unavailability_request(request_id, decision, reviewed_by)
+        except (ForbiddenError, NotFoundError, BackendUnavailableError,
+                BackendError) as exc:
+            return _render_request_detail(request_id, error=str(exc))
+
+        body, code = _render_request_detail(
+            request_id,
+            notice=("Request " + decision.lower() + ". The roster is unchanged — "
+                    "reassign affected shifts from the shift planner if needed."))
+        response = make_response(body, code)
+        # Let the queue list refresh itself; the panel does not own that region.
+        response.headers["HX-Trigger"] = "requests-changed"
+        return response
 
     @app.get("/partials/summary")
     def summary_partial():

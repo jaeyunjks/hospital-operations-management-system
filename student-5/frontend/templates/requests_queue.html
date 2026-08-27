@@ -1,0 +1,47 @@
+{% extends "layout.html" %}
+{% block title %}Unavailability requests{% endblock %}
+{% block content %}
+
+  <div class="page-header">
+    <div>
+      <span class="page-header__eyebrow">Staff &amp; Shift Management</span>
+      <h1 class="page-header__title">Unavailability requests</h1>
+      <p class="page-header__description">
+        Employee requests to be unavailable for a period. Approving a request
+        records the decision and blocks future assignment — it does not remove
+        anyone from shifts they are already on.
+      </p>
+    </div>
+  </div>
+
+  {#- The wrapper owns the load trigger, and the response it swaps in never
+      declares one. This is the rule that keeps the panel from re-requesting
+      itself indefinitely; do not move the trigger into the partial. -#}
+  <div class="requests-layout">
+
+    <div class="requests-layout__queue"
+         id="requests-queue"
+         hx-get="/partials/requests?status={{ selected_status }}"
+         hx-trigger="load, requests-changed from:body"
+         hx-target="this"
+         hx-swap="innerHTML"
+         hx-indicator="#loading-indicator">
+      <div class="panel">
+        <div class="panel__body"><p class="u-muted">Loading requests…</p></div>
+      </div>
+    </div>
+
+    <div class="requests-layout__detail" id="request-detail">
+      <div class="panel">
+        <div class="panel__body">
+          <div class="empty">
+            <p class="empty__title">No request selected</p>
+            <p class="empty__body">Choose a request from the queue to review it.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+{% endblock %}

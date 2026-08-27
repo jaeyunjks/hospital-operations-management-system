@@ -1,0 +1,146 @@
+{% extends "layout.html" %}
+{% block title %}My workforce{% endblock %}
+{% block content %}
+
+  <div class="page-header">
+    <div>
+      <span class="page-header__eyebrow">Staff &amp; Shift Management</span>
+      <h1 class="page-header__title">My workforce</h1>
+      <p class="page-header__description">
+        Your own roster, recurring availability, and unavailability requests.
+        Only your records are shown — the service refuses requests for anyone else.
+      </p>
+    </div>
+  </div>
+
+  {% if page_error %}
+  <div class="alert alert--danger">
+    <div>
+      <p class="alert__title">Your record could not be loaded</p>
+      <p class="alert__body">{{ page_error }}</p>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if person %}
+  <div class="me-layout">
+
+    <!-- ============================================================ me -->
+    <section class="panel me-identity" aria-labelledby="me-title">
+      <div class="panel__body me-identity__body">
+        <span class="avatar" aria-hidden="true">{{ initials }}</span>
+        <div>
+          <h2 class="panel__title" id="me-title">{{ person.name }}</h2>
+          <p class="panel__meta">
+            {{ person.role }}{% if person.specialisation %} · {{ person.specialisation }}{% endif %}
+            · {{ person.department }}
+          </p>
+        </div>
+        <span class="spacer"></span>
+        <div class="me-identity__meta">
+          <span class="u-label">Employee</span>
+          <span class="u-mono">{{ display_id }}</span>
+        </div>
+        <div class="me-identity__meta">
+          <span class="u-label">Operational status</span>
+          <span class="status {{ 'status--success' if person.availability_status == 'Available'
+                                 else 'status--warning' }}">
+            <span class="status__dot"></span>{{ person.availability_status }}
+          </span>
+        </div>
+      </div>
+      <div class="panel__footer">
+        <p class="u-muted">
+          Operational status and reference details are maintained by your
+          manager and the HR system. They are read-only to you here.
+        </p>
+      </div>
+    </section>
+
+    <!-- ==================================================== my shifts -->
+    <section class="panel" aria-labelledby="my-shifts-title">
+      <div class="panel__header">
+        <div>
+          <h2 class="panel__title" id="my-shifts-title">My shifts</h2>
+          <p class="panel__meta">Currently rostered and the next seven days</p>
+        </div>
+      </div>
+      <div class="panel__body">
+        {% if shifts_error %}
+        <p class="u-muted">Your shifts could not be loaded. {{ shifts_error }}</p>
+
+        {% else %}
+        {% if current_assignment %}
+        <div class="me-current">
+          <span class="u-label">On shift now</span>
+          <p class="me-current__body">
+            <span class="u-strong">{{ current_assignment.department }}</span>
+            <span class="u-mono">{{ current_assignment.shift_date }}
+              {{ current_assignment.start_time }}–{{ current_assignment.end_time }}</span>
+          </p>
+        </div>
+        {% endif %}
+
+        {% if upcoming_shifts %}
+        <ul role="list" class="shift-list">
+          {% for shift in upcoming_shifts %}
+          <li class="shift-item">
+            <span class="shift-item__date u-mono">{{ shift.shift_date }}</span>
+            <span class="shift-item__main">
+              <span class="shift-item__dept">{{ shift.department }}</span>
+              <span class="shift-item__time u-mono">{{ shift.start_time }}–{{ shift.end_time }}</span>
+            </span>
+            <span class="badge-neutral">{{ shift.assignment_status }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+        {% elif not current_assignment %}
+        <p class="u-muted">No assigned shifts in the next seven days.</p>
+        {% endif %}
+        {% endif %}
+      </div>
+    </section>
+
+    <!-- ============================================== my availability -->
+    <section class="panel" aria-labelledby="my-availability-title">
+      <div class="panel__header">
+        <div>
+          <h2 class="panel__title" id="my-availability-title">My weekly availability</h2>
+          <p class="panel__meta">Week of {{ week_start }}</p>
+        </div>
+      </div>
+      <div class="panel__body">
+        {% if weekly_error %}
+        <p class="u-muted">Weekly availability is unavailable. {{ weekly_error }}</p>
+
+        {% elif weekly_grid %}
+        <p class="u-muted">
+          Your recurring pattern. Rostered cells are derived from real shift
+          assignments and are not stored as availability.
+        </p>
+
+        {% set grid_caption = "My recurring weekly availability" %}
+        {% include "partials/_weekly_grid.html" %}
+
+        <p class="u-muted me-availability__note">
+          To change your recurring pattern, speak to your manager. For a
+          one-off period away, submit an unavailability request below.
+        </p>
+        {% else %}
+        <p class="u-muted">No recurring availability recorded.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <!-- ================================================== my requests -->
+    {#- The panel owns its own region. Every action inside it targets this
+        wrapper, and nothing here declares a load trigger, so the panel can
+        never re-request itself. -#}
+    <div id="my-requests-panel">
+      {% include "partials/my_requests.html" %}
+    </div>
+
+  </div>
+  {% endif %}
+
+{% endblock %}

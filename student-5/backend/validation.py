@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, Iterable, Optional
 
-from errors import ValidationError
+from errors import ConflictError, ValidationError
 
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TIME_PATTERN = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -211,3 +211,52 @@ def validate_weekly_availability(periods: Any) -> List[Dict[str, Any]]:
         cleaned.append(entry)
 
     return cleaned
+
+
+# ==========================================================================
+# Unavailability requests
+# ==========================================================================
+REQUEST_STATUSES = ("Pending", "Approved", "Rejected", "Cancelled")
+
+#: Release 0 lifecycle is one-way: only a Pending request may transition, and
+#: the terminal states are final. No reopening or editing.
+REQUEST_TRANSITIONS = {
+    "Pending": ("Approved", "Rejected", "Cancelled"),
+    "Approved": (),
+    "Rejected": (),
+    "Cancelled": (),
+}
+
+
+def validate_request_payload(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate a new unavailability request."""
+    require_fields(payload, ("start_date", "end_date", "reason"))
+    start = validate_date(payload["start_date"], "start_date")
+    end = validate_date(payload["end_date"], "end_date")
+    if start > end:
+        raise ValidationError("'start_date' must be on or before 'end_date'.",
+                              {"start_date": start, "end_date": end})
+
+    cleaned = {
+        "start_date": start,
+        "end_date": end,
+        "reason": validate_non_empty_string(payload["reason"], "reason"),
+    }
+    notes = payload.get("notes")
+    cleaned["notes"] = validate_non_empty_string(notes, "notes") if notes else None
+    return cleaned
+
+
+def validate_request_transition(current_status: str, new_status: str) -> str:
+    """Reject any transition the one-way Release 0 lifecycle disallows."""
+    validate_choice(new_status, REQUEST_STATUSES, "request_status")
+    allowed = REQUEST_TRANSITIONS.get(current_status, ())
+    if new_status not in allowed:
+        # Phrased without an article: "A Approved request" is wrong, and
+        # picking a/an per status is more trouble than the sentence is worth.
+        raise ConflictError(
+            f"This request is {current_status} and cannot become {new_status}. "
+            f"Decisions in Release 0 are final.",
+            {"current_status": current_status, "requested_status": new_status,
+             "allowed": list(allowed)})
+    return new_status

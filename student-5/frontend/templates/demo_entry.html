@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Release 0 demo — choose a role — HOMS</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23222938'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='serif' font-size='20' fill='white'%3EH%3C/text%3E%3C/svg%3E">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+
+  <link rel="stylesheet" href="/shared/css/main.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/feature.css') }}">
+</head>
+{#- No application chrome here on purpose. This screen sits OUTSIDE the
+    product so it cannot be mistaken for a sign-in page belonging to it. -#}
+<body class="demo-entry">
+  <main class="demo-entry__panel" id="main">
+
+    <div class="demo-entry__mark">
+      <span class="demo-entry__brand">HOMS</span>
+      <span class="demo-entry__module">Staff &amp; Shift Management</span>
+    </div>
+
+    <div class="demo-entry__banner">
+      <p class="demo-entry__banner-title">Release&nbsp;0 demonstration mode</p>
+      <p class="demo-entry__banner-body">
+        This screen is <strong>not a login</strong> and performs
+        <strong>no authentication</strong>. Choose a role to demonstrate
+        role-based behaviour. Nothing is verified — there is no password and
+        no identity check. Permission itself is enforced by the backend
+        service, which is why choosing a role here changes what you are
+        allowed to do, not merely what you can see.
+      </p>
+    </div>
+
+    {% if error %}
+    <div class="alert alert--danger">
+      <div>
+        <p class="alert__title">Staff records unavailable</p>
+        <p class="alert__body">{{ error }} You can still continue as Staff Manager.</p>
+      </div>
+    </div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('demo_enter') }}" class="demo-entry__form">
+      <p class="demo-entry__prompt" id="role-prompt">Continue as</p>
+
+      <div class="demo-roles" role="radiogroup" aria-labelledby="role-prompt">
+
+        <label class="demo-role">
+          <input type="radio" name="role" value="{{ ROLE_MANAGER }}" class="demo-role__input"
+                 {% if selected_role != ROLE_EMPLOYEE %}checked{% endif %}>
+          <span class="demo-role__body">
+            <span class="demo-role__name">Staff Manager</span>
+            <span class="demo-role__detail">
+              Plans the roster, assigns staff, and reviews unavailability
+              requests across all departments.
+            </span>
+          </span>
+        </label>
+
+        <label class="demo-role">
+          <input type="radio" name="role" value="{{ ROLE_EMPLOYEE }}" class="demo-role__input"
+                 {% if selected_role == ROLE_EMPLOYEE %}checked{% endif %}>
+          <span class="demo-role__body">
+            <span class="demo-role__name">Employee</span>
+            <span class="demo-role__detail">
+              Sees only their own shifts, availability, and requests.
+              Everything else is refused by the backend.
+            </span>
+          </span>
+        </label>
+
+      </div>
+
+      {#- Always present and always submitted; it is simply ignored when the
+          Manager role is chosen. Keeping it out of JS entirely means the
+          screen works with scripting disabled. -#}
+      <div class="field demo-entry__employee">
+        <label class="field__label" for="staff_id">Simulated employee</label>
+        <select class="select" name="staff_id" id="staff_id">
+          {% for person in employees %}
+          <option value="{{ person.staff_id }}">
+            {{ person.name }} — {{ person.role }}, {{ person.department }}
+          </option>
+          {% else %}
+          <option value="">No staff records available</option>
+          {% endfor %}
+        </select>
+        <p class="field__hint">
+          Applies only to the Employee role. Acting as a staff member does not
+          prove you are them — it asserts it, and the backend takes the
+          assertion at face value for this demonstration.
+        </p>
+      </div>
+
+      <button type="submit" class="btn-primary btn-lg btn-block">Enter demonstration</button>
+    </form>
+
+    <p class="demo-entry__foot">
+      Release&nbsp;0 · {{ today }} · Replaced by the shared HOMS authentication
+      service in a later release.
+    </p>
+
+  </main>
+</body>
+</html>

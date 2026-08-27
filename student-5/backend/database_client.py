@@ -108,6 +108,32 @@ class DatabaseClient:
         return self._request("PUT", f"/staff/{staff_id}/weekly-availability",
                               payload={"periods": periods})
 
+    # ------------------------------------------ unavailability requests
+    def list_unavailability_requests(self, staff_id: Optional[int] = None,
+                                     request_status: Optional[str] = None
+                                     ) -> List[Dict[str, Any]]:
+        return self._request("GET", "/unavailability-requests", params={
+            "staff_id": staff_id, "request_status": request_status})
+
+    def get_unavailability_request(self, request_id: int) -> Dict[str, Any]:
+        return self._request("GET", f"/unavailability-requests/{request_id}")
+
+    def list_overlapping_requests(self, staff_id: int, start_date: str,
+                                  end_date: str,
+                                  exclude_request_id: Optional[int] = None
+                                  ) -> List[Dict[str, Any]]:
+        return self._request("GET", "/unavailability-requests/overlapping", params={
+            "staff_id": staff_id, "start_date": start_date, "end_date": end_date,
+            "exclude_request_id": exclude_request_id})
+
+    def create_unavailability_request(self, **fields: Any) -> Dict[str, Any]:
+        return self._request("POST", "/unavailability-requests", payload=fields)
+
+    def update_unavailability_request(self, request_id: int,
+                                      **fields: Any) -> Dict[str, Any]:
+        return self._request("PATCH", f"/unavailability-requests/{request_id}",
+                              payload=fields)
+
     def list_shifts_for_staff(self, staff_id: int) -> List[Dict[str, Any]]:
         return self._request("GET", f"/staff/{staff_id}/shifts")
 

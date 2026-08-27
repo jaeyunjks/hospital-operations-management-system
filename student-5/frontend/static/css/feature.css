@@ -232,7 +232,7 @@
    ========================================================================== */
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: var(--space-4);
   align-items: stretch;
 }
@@ -383,10 +383,8 @@
 }
 
 @media (max-width: 1080px) {
-  /* 5 -> 3 + 2: both rows stay full-width, so no empty trailing cell. */
-  .kpi-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
-  .kpi-grid > :nth-child(-n+3) { grid-column: span 2; }
-  .kpi-grid > :nth-child(n+4) { grid-column: span 3; }
+  /* 6 -> 3 + 3: both rows stay full-width, so no empty trailing cell. */
+  .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 820px) {
@@ -398,11 +396,8 @@
 }
 
 @media (max-width: 620px) {
+  /* Six cells divide evenly in two columns — no trailing hole to patch. */
   .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .kpi-grid > :nth-child(-n+3),
-  .kpi-grid > :nth-child(n+4) { grid-column: auto; }
-  /* Odd count: let the last card run full width instead of leaving a hole. */
-  .kpi-grid > :nth-child(5) { grid-column: 1 / -1; }
   .topnav { gap: var(--space-3); padding: 0 var(--space-5); }
   .syncstrip { align-items: flex-start; flex-wrap: wrap; }
 }
@@ -1957,3 +1952,439 @@
 }
 
 .daily-department__shifts { color: var(--color-text-label); }
+
+/* ==========================================================================
+   9. Employee unavailability requests (Scenario C)
+   --------------------------------------------------------------------------
+   Four surfaces: the R0 demo role entry screen, the read-only identity
+   marker in the context bar, the employee's own view, and the manager's
+   review queue. Every value below is a shared token — no literal colours.
+   ========================================================================== */
+
+/* -------------------------------------------------- 9.1 demo entry screen */
+/* Sits outside the application shell on purpose. It is styled as a utility
+   screen, not as a product page, so it cannot be mistaken for a sign-in. */
+.demo-entry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: var(--space-6);
+  background: var(--color-surface-alt);
+}
+
+.demo-entry__panel {
+  width: 100%;
+  max-width: 34rem;
+  padding: var(--space-7);
+  background: var(--color-surface);
+  border: var(--border-strong);
+}
+
+.demo-entry__mark {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-5);
+  border-bottom: var(--border-hair);
+}
+
+.demo-entry__brand {
+  font-family: var(--font-display);
+  font-size: var(--size-ui-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.demo-entry__module {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+/* Deliberately prominent: the demo disclaimer is the most important text on
+   this screen, not fine print. */
+.demo-entry__banner {
+  margin-top: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-warning-soft);
+  border-left: var(--border-accent);
+  border-left-color: var(--color-warning);
+}
+
+.demo-entry__banner-title {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-warning-mark);
+}
+
+.demo-entry__banner-body {
+  margin-top: var(--space-2);
+  font-size: var(--size-ui-sm);
+  line-height: var(--leading-ui);
+  color: var(--color-text-secondary);
+}
+
+.demo-entry__form { margin-top: var(--space-6); }
+
+.demo-entry__prompt {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+.demo-roles {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.demo-role {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: var(--border-strong);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.demo-role:hover { background: var(--color-surface-hover); }
+
+.demo-role__input {
+  margin-top: 0.15em;
+  accent-color: var(--color-accent);
+  flex-shrink: 0;
+}
+
+/* Keeps the selected role obvious without relying on colour alone — the
+   radio itself remains the accessible state. */
+.demo-role:has(.demo-role__input:checked) {
+  background: var(--color-accent-soft);
+  border-color: var(--color-accent);
+}
+
+.demo-role:has(.demo-role__input:focus-visible) { outline: var(--focus-ring); }
+
+.demo-role__body { display: flex; flex-direction: column; gap: var(--space-1); }
+
+.demo-role__name {
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.demo-role__detail {
+  font-size: var(--size-ui-xs);
+  line-height: var(--leading-ui-tight);
+  color: var(--color-text-muted);
+}
+
+.demo-entry__employee { margin-top: var(--space-5); }
+
+.demo-entry__foot {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: var(--border-hair);
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-muted);
+}
+
+/* ------------------------------------------ 9.2 identity in the context bar */
+.contextbar__demo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.contextbar__demo-tag {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-warning-mark);
+  background: var(--color-warning-soft);
+  padding: var(--space-1) var(--space-3);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------ 9.3 KPI cell as a link */
+.kpi--link {
+  text-decoration: none;
+  color: inherit;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.kpi--link:hover { background: var(--color-surface-hover); }
+.kpi--link:focus-visible { outline: var(--focus-ring); }
+
+/* --------------------------------------------- 9.4 employee: my workforce */
+.me-layout { display: grid; gap: var(--space-5); }
+
+.me-identity__body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.me-identity__meta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.me-current {
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-4);
+  background: var(--color-accent-soft);
+  border-left: var(--border-accent);
+}
+
+.me-current__body {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-top: var(--space-2);
+}
+
+.me-availability__note { margin-top: var(--space-4); }
+
+/* --------------------------------------------------- 9.5 request lists */
+.request-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.request-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border: var(--border-hair);
+  background: var(--color-surface);
+}
+
+.request-item__main { flex: 1; min-width: 0; }
+
+.request-item__period {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: var(--size-data);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-data);
+}
+
+.request-item__meta {
+  display: block;
+  margin-top: var(--space-1);
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-muted);
+}
+
+.request-item__notes {
+  margin-top: var(--space-2);
+  font-size: var(--size-ui-sm);
+  line-height: var(--leading-ui-tight);
+  color: var(--color-text-secondary);
+}
+
+.request-item__outcome {
+  margin-top: var(--space-2);
+  font-size: var(--size-ui-xs);
+  line-height: var(--leading-ui-tight);
+  color: var(--color-text-muted);
+}
+
+.request-item__side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+/* ---------------------------------------------------- 9.6 request form */
+.request-form {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: var(--border-hair);
+  display: grid;
+  gap: var(--space-4);
+}
+
+.request-form__row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.request-form__note {
+  max-width: var(--prose-max);
+  text-align: right;
+  font-size: var(--size-ui-xs);
+}
+
+/* ------------------------------------------------ 9.7 manager: the queue */
+.requests-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+
+.queue-list { display: block; }
+
+/* The whole row is the control, so a request opens from anywhere in the
+   field rather than from a small target at its edge. */
+.queue-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-4) var(--space-5);
+  text-align: left;
+  background: var(--color-surface);
+  border: 0;
+  border-bottom: var(--border-hair);
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.queue-row:hover { background: var(--color-surface-hover); }
+.queue-row:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+
+/* Selection is marked by a border as well as a tint, so it does not depend
+   on colour perception alone. */
+.queue-row--active {
+  background: var(--color-accent-soft);
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+.queue-row__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.queue-row__name {
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.queue-row__meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--size-ui-sm);
+  color: var(--color-text-secondary);
+}
+
+.queue-row__dot { color: var(--color-text-muted); }
+
+.queue-row__sub {
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-muted);
+}
+
+/* ----------------------------------------------- 9.8 request detail panel */
+.request-detail__identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.request-facts {
+  display: grid;
+  gap: var(--space-4);
+  padding-bottom: var(--space-5);
+  border-bottom: var(--border-hair);
+}
+
+.request-facts__item { display: grid; gap: var(--space-1); }
+
+.request-facts__item dd {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  color: var(--color-text-primary);
+}
+
+.request-detail__section { padding-top: var(--space-5); }
+
+.affected-list {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.affected-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-hair);
+  background: var(--color-surface-alt);
+}
+
+.affected-item__when {
+  font-size: var(--size-data-sm);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-data);
+}
+
+.affected-item__dept { flex: 1; min-width: 0; color: var(--color-text-secondary); }
+
+.request-detail__caution {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-warning-soft);
+  border-left: var(--border-accent);
+  border-left-color: var(--color-warning);
+  font-size: var(--size-ui-xs);
+  line-height: var(--leading-ui-tight);
+}
+
+.request-decision {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: var(--border-hair);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.request-decision__actions { gap: var(--space-3); }
+
+.request-detail__closed {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: var(--border-hair);
+}
+
+/* --------------------------------------------------- 9.9 responsive */
+@media (max-width: 1080px) {
+  .requests-layout { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 820px) {
+  .request-form__row { grid-template-columns: minmax(0, 1fr); }
+  .request-form__note { text-align: left; }
+  .request-item { flex-direction: column; gap: var(--space-3); }
+  .request-item__side { align-items: flex-start; flex-direction: row; }
+  .contextbar__demo { width: 100%; }
+}

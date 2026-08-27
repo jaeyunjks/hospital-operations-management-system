@@ -62,6 +62,31 @@ class StubDatabaseClient:
                 "start_time": "07:00", "end_time": "15:00", "notes": None},
         }
         self._next_weekly_id = 2
+        # Temporary unavailability requests, one per lifecycle state so a
+        # test can reach any transition without first building it up.
+        self.requests = {
+            1: {"request_id": 1, "staff_id": 1, "start_date": "2026-09-01",
+                "end_date": "2026-09-03", "reason": "Personal", "notes": None,
+                "request_status": "Pending", "reviewed_by": None,
+                "reviewed_at": None, "created_at": "2026-08-20 09:00",
+                "updated_at": "2026-08-20 09:00"},
+            2: {"request_id": 2, "staff_id": 2, "start_date": "2026-08-24",
+                "end_date": "2026-08-24", "reason": "Personal", "notes": None,
+                "request_status": "Approved", "reviewed_by": "Nadia Whitfield",
+                "reviewed_at": "2026-08-21 10:00", "created_at": "2026-08-19 09:00",
+                "updated_at": "2026-08-21 10:00"},
+            3: {"request_id": 3, "staff_id": 3, "start_date": "2026-09-10",
+                "end_date": "2026-09-11", "reason": "Vacation", "notes": None,
+                "request_status": "Rejected", "reviewed_by": "Nadia Whitfield",
+                "reviewed_at": "2026-08-22 10:00", "created_at": "2026-08-18 09:00",
+                "updated_at": "2026-08-22 10:00"},
+            4: {"request_id": 4, "staff_id": 1, "start_date": "2026-09-20",
+                "end_date": "2026-09-21", "reason": "Study leave", "notes": None,
+                "request_status": "Cancelled", "reviewed_by": None,
+                "reviewed_at": None, "created_at": "2026-08-17 09:00",
+                "updated_at": "2026-08-23 10:00"},
+        }
+        self._next_request_id = 5
 
     # -- health ----------------------------------------------------------
     def health(self):
@@ -196,6 +221,58 @@ class StubDatabaseClient:
     def delete_assignment(self, assignment_id):
         self.assignments.pop(assignment_id, None)
 
+    # -- unavailability requests -----------------------------------------
+    def _join_staff(self, record):
+        """Mirror the repository join so a stubbed row has the same fields as
+        a real one — a test passing against a thinner stub would prove
+        nothing about the real query."""
+        person = self.staff.get(record["staff_id"], {})
+        return {**record,
+                "staff_name": person.get("name"),
+                "staff_role": person.get("role"),
+                "staff_department": person.get("department")}
+
+    def list_unavailability_requests(self, staff_id=None, request_status=None):
+        rows = [r for r in self.requests.values()
+                if (staff_id is None or r["staff_id"] == staff_id)
+                and (not request_status or r["request_status"] == request_status)]
+        rows.sort(key=lambda r: (r["start_date"], r["request_id"]))
+        return [self._join_staff(r) for r in rows]
+
+    def get_unavailability_request(self, request_id):
+        record = self.requests.get(request_id)
+        if not record:
+            raise NotFoundError(f"Request {request_id} not found.")
+        return self._join_staff(record)
+
+    def create_unavailability_request(self, **fields):
+        request_id = self._next_request_id
+        self._next_request_id += 1
+        record = {"request_id": request_id, "request_status": "Pending",
+                  "reviewed_by": None, "reviewed_at": None, "notes": None,
+                  "created_at": "2026-08-27 09:00", "updated_at": "2026-08-27 09:00",
+                  **fields}
+        self.requests[request_id] = record
+        return self._join_staff(record)
+
+    def update_unavailability_request(self, request_id, **fields):
+        record = self.requests.get(request_id)
+        if not record:
+            raise NotFoundError(f"Request {request_id} not found.")
+        record.update(fields)
+        return self._join_staff(record)
+
+    def list_overlapping_requests(self, staff_id, start_date, end_date,
+                                  exclude_request_id=None):
+        """Inclusive overlap. Only Pending and Approved requests block —
+        a Rejected or Cancelled one leaves the period free again."""
+        return [self._join_staff(r) for r in self.requests.values()
+                if r["staff_id"] == staff_id
+                and r["request_id"] != exclude_request_id
+                and r["request_status"] in ("Pending", "Approved")
+                and r["start_date"] <= end_date
+                and r["end_date"] >= start_date]
+
 
 @pytest.fixture
 def stub_database(monkeypatch):
@@ -208,8 +285,11 @@ def stub_database(monkeypatch):
     import services.shift_service as shift_service
     import services.staff_service as staff_service
 
+    import services.request_service as request_service
+
     for module in (database_client, ai_service, assignment_service,
-                   coverage_service, shift_service, staff_service):
+                   coverage_service, shift_service, staff_service,
+                   request_service):
         monkeypatch.setattr(module, "database_client", stub, raising=False)
     return stub
 

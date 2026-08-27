@@ -178,6 +178,57 @@ def create_app() -> Flask:
         with db.get_connection() as connection:
             return jsonify(repository.list_staff_for_shift(connection, shift_id))
 
+    # ------------------------------------------ unavailability requests
+    @app.get("/unavailability-requests")
+    def list_unavailability_requests():
+        staff_id = request.args.get("staff_id", type=int)
+        with db.get_connection() as connection:
+            return jsonify(repository.list_unavailability_requests(
+                connection, staff_id=staff_id,
+                request_status=request.args.get("request_status")))
+
+    @app.get("/unavailability-requests/<int:request_id>")
+    def get_unavailability_request(request_id: int):
+        with db.get_connection() as connection:
+            record = repository.get_unavailability_request(connection, request_id)
+        if record is None:
+            return jsonify({"error": "not_found",
+                            "message": f"Request {request_id} not found."}), 404
+        return jsonify(record)
+
+    @app.get("/unavailability-requests/overlapping")
+    def overlapping_unavailability_requests():
+        with db.get_connection() as connection:
+            return jsonify(repository.list_active_requests_overlapping(
+                connection,
+                request.args.get("staff_id", type=int),
+                request.args.get("start_date"),
+                request.args.get("end_date"),
+                exclude_request_id=request.args.get("exclude_request_id", type=int)))
+
+    @app.post("/unavailability-requests")
+    def create_unavailability_request():
+        payload = request.get_json(silent=True) or {}
+        with db.get_connection() as connection:
+            request_id = repository.create_unavailability_request(connection, **payload)
+            record = repository.get_unavailability_request(connection, request_id)
+        return jsonify(record), 201
+
+    @app.patch("/unavailability-requests/<int:request_id>")
+    def update_unavailability_request(request_id: int):
+        payload = request.get_json(silent=True) or {}
+        with db.get_connection() as connection:
+            if repository.get_unavailability_request(connection, request_id) is None:
+                return jsonify({"error": "not_found",
+                                "message": f"Request {request_id} not found."}), 404
+            repository.set_unavailability_request_status(
+                connection, request_id,
+                payload["request_status"],
+                reviewed_by=payload.get("reviewed_by"),
+                reviewed_at=payload.get("reviewed_at"))
+            record = repository.get_unavailability_request(connection, request_id)
+        return jsonify(record)
+
     # ----------------------------------------------------------- assignments
     @app.get("/assignments")
     def list_assignments():

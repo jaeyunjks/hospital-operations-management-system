@@ -1,0 +1,152 @@
+{#- My unavailability requests: list plus submission form.
+
+    Every action inside targets #my-requests-panel and swaps this same
+    partial back, so the panel is self-contained. It declares NO load
+    trigger — it is rendered by its parent page and re-rendered only in
+    response to a user action. -#}
+<section class="panel" aria-labelledby="my-requests-title">
+  <div class="panel__header">
+    <div>
+      <h2 class="panel__title" id="my-requests-title">My unavailability requests</h2>
+      <p class="panel__meta">
+        Ask to be unavailable for a period. Your manager reviews each request.
+      </p>
+    </div>
+    {% if has_pending %}<span class="badge-warning">Awaiting review</span>{% endif %}
+  </div>
+
+  <div class="panel__body">
+
+    {% if notice %}
+    <div class="alert alert--success" role="status">
+      <div><p class="alert__body">{{ notice }}</p></div>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert alert--danger" role="alert">
+      <div>
+        <p class="alert__title">Request not submitted</p>
+        <p class="alert__body">{{ error }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    {# --------------------------------------------------- existing requests #}
+    {% if load_error %}
+    <p class="u-muted">Your requests could not be loaded. {{ load_error }}</p>
+
+    {% elif requests %}
+    <ul role="list" class="request-list">
+      {% for row in requests %}
+      <li class="request-item">
+        <div class="request-item__main">
+          <span class="request-item__period">{{ row.period_label }}</span>
+          <span class="request-item__meta">
+            {{ row.reason }}
+            {%- if row.day_count %} · {{ row.day_count }} day{{ '' if row.day_count == 1 else 's' }}{% endif %}
+          </span>
+          {% if row.notes %}<p class="request-item__notes">{{ row.notes }}</p>{% endif %}
+
+          {#- The outcome, stated plainly. A rejected or withdrawn request is
+              kept visible rather than disappearing, so the record is honest. -#}
+          {% if row.request_status == 'Approved' %}
+          <p class="request-item__outcome">
+            Approved{% if row.reviewed_by %} by {{ row.reviewed_by }}{% endif %}
+            {%- if row.reviewed_display %} · {{ row.reviewed_display }}{% endif %}.
+            You are not assignable to shifts in this period.
+            Existing shifts are not cancelled automatically — check with your manager.
+          </p>
+          {% elif row.request_status == 'Rejected' %}
+          <p class="request-item__outcome">
+            Rejected{% if row.reviewed_by %} by {{ row.reviewed_by }}{% endif %}
+            {%- if row.reviewed_display %} · {{ row.reviewed_display }}{% endif %}.
+            You remain rostered as normal.
+          </p>
+          {% elif row.request_status == 'Cancelled' %}
+          <p class="request-item__outcome">Withdrawn by you.</p>
+          {% else %}
+          <p class="request-item__outcome">
+            Submitted {{ row.submitted_display }} · awaiting your manager's decision.
+          </p>
+          {% endif %}
+        </div>
+
+        <div class="request-item__side">
+          <span class="{{ row.badge_class }}">{{ row.request_status }}</span>
+
+          {#- Only a pending request can be withdrawn; the backend enforces
+              this too, so removing the button is convenience, not control. -#}
+          {% if row.is_pending %}
+          <button class="btn-ghost btn-compact" type="button"
+                  hx-post="/partials/me/requests/{{ row.request_id }}/cancel"
+                  hx-target="#my-requests-panel" hx-swap="innerHTML"
+                  hx-indicator="#loading-indicator"
+                  hx-confirm="Withdraw this request? This cannot be undone.">
+            Withdraw
+          </button>
+          {% endif %}
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+
+    {% else %}
+    <div class="empty">
+      <p class="empty__title">No requests yet</p>
+      <p class="empty__body">Submit one below when you need a period away.</p>
+    </div>
+    {% endif %}
+
+    {# ------------------------------------------------------- new request #}
+    <form class="request-form"
+          hx-post="/partials/me/requests"
+          hx-target="#my-requests-panel" hx-swap="innerHTML"
+          hx-indicator="#loading-indicator">
+      <h3 class="u-label">New request</h3>
+
+      <div class="request-form__row">
+        <div class="field">
+          <label class="field__label" for="start_date">From</label>
+          <input class="input" type="date" id="start_date" name="start_date"
+                 min="{{ today }}" value="{{ form.start_date or '' }}" required>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="end_date">To</label>
+          <input class="input" type="date" id="end_date" name="end_date"
+                 min="{{ today }}" value="{{ form.end_date or '' }}" required>
+          <p class="field__hint">Inclusive — both days count.</p>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="reason">Reason</label>
+          <select class="select" id="reason" name="reason" required>
+            <option value="">Select…</option>
+            {% for reason in reasons %}
+            <option value="{{ reason }}"
+              {% if form.reason == reason %}selected{% endif %}>{{ reason }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="notes">Notes <span class="u-muted">(optional)</span></label>
+        <textarea class="textarea" id="notes" name="notes" rows="2"
+                  placeholder="Anything your manager should know">{{ form.notes or '' }}</textarea>
+      </div>
+
+      <div class="row">
+        <button class="btn-primary btn-compact" type="submit">Submit request</button>
+        <span class="spacer"></span>
+        <p class="u-muted request-form__note">
+          Submitting does not book time off. It records a request for your
+          manager to decide on, and has no effect on pay or leave balances —
+          HOMS holds no leave records.
+        </p>
+      </div>
+    </form>
+
+  </div>
+</section>

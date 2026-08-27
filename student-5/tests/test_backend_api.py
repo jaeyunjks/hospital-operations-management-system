@@ -6,6 +6,8 @@ and error handling. Run with:  pytest student-5/tests -v
 
 from __future__ import annotations
 
+import pytest
+
 
 # ---------------------------------------------------------------- service
 class TestServiceEndpoints:
@@ -387,3 +389,285 @@ class TestWeeklyAvailability:
         client.put(self.URL, json=self._periods((0, "07:00", "15:00")))
         period = client.get(self.URL).get_json()["periods"][0]
         assert "availability_state" not in period
+
+
+# ==========================================================================
+# Scenario C — employee unavailability requests
+# ==========================================================================
+# Two things are being proved here: the lifecycle is genuinely one-way, and
+# a decision changes ONLY the request. Nothing in this feature is permitted
+# to move staff on or off shifts, or to alter operational availability.
+
+MANAGER = {"X-HOMS-Role": "Staff Manager"}
+
+
+def _employee(staff_id):
+    return {"X-HOMS-Role": "Employee", "X-HOMS-Staff-Id": str(staff_id)}
+
+
+class TestRequestCreation:
+    URL = "/api/staff/1/unavailability-requests"
+
+    def test_employee_creates_own_request(self, client):
+        response = client.post(self.URL, headers=_employee(1), json={
+            "start_date": "2026-10-01", "end_date": "2026-10-03",
+            "reason": "Vacation", "notes": "Away."})
+        assert response.status_code == 201
+        record = response.get_json()["request"]
+        assert record["request_status"] == "Pending"
+        assert record["staff_id"] == 1
+
+    def test_new_request_has_no_reviewer(self, client):
+        """A pending request has not been decided, so it must carry no
+        decision metadata — not an empty string, not a timestamp."""
+        record = client.post(self.URL, headers=_employee(1), json={
+            "start_date": "2026-10-01", "end_date": "2026-10-01",
+            "reason": "Personal"}).get_json()["request"]
+        assert record["reviewed_by"] is None
+        assert record["reviewed_at"] is None
+
+    def test_single_day_request_is_allowed(self, client):
+        response = client.post(self.URL, headers=_employee(1), json={
+            "start_date": "2026-10-05", "end_date": "2026-10-05",
+            "reason": "Personal"})
+        assert response.status_code == 201
+
+    def test_notes_are_optional(self, client):
+        response = client.post(self.URL, headers=_employee(1), json={
+            "start_date": "2026-10-07", "end_date": "2026-10-08",
+            "reason": "Study leave"})
+        assert response.status_code == 201
+        assert response.get_json()["request"]["notes"] is None
+
+    def test_end_before_start_is_rejected(self, client):
+        response = client.post(self.URL, headers=_employee(1), json={
+            "start_date": "2026-10-09", "end_date": "2026-10-01",
+            "reason": "Personal"})
+        assert response.status_code == 400
+
+    def test_missing_reason_is_rejected(self, client):
+        response = client.post(self.URL, headers=_employee(1), json={
+            "start_date": "2026-10-01", "end_date": "2026-10-02"})
+        assert response.status_code == 400
+
+    def test_malformed_date_is_rejected(self, client):
+        response = client.post(self.URL, headers=_employee(1), json={
+            "start_date": "01/10/2026", "end_date": "2026-10-02",
+            "reason": "Personal"})
+        assert response.status_code == 400
+
+    def test_unknown_staff_is_404(self, client):
+        response = client.post("/api/staff/999/unavailability-requests",
+                               headers=_employee(999), json={
+                                   "start_date": "2026-10-01",
+                                   "end_date": "2026-10-02", "reason": "Personal"})
+        assert response.status_code == 404
+
+
+class TestRequestOverlap:
+    """Pending and Approved requests hold a period; Rejected and Cancelled
+    ones release it."""
+    URL = "/api/staff/1/unavailability-requests"
+
+    def _post(self, client, start, end):
+        return client.post(self.URL, headers=_employee(1), json={
+            "start_date": start, "end_date": end, "reason": "Personal"})
+
+    def test_overlapping_pending_is_rejected(self, client):
+        # Stub request 1 is Pending for staff 1 across 1–3 September.
+        assert self._post(client, "2026-09-02", "2026-09-04").status_code == 409
+
+    def test_exact_duplicate_is_rejected(self, client):
+        assert self._post(client, "2026-09-01", "2026-09-03").status_code == 409
+
+    def test_enclosing_period_is_rejected(self, client):
+        assert self._post(client, "2026-08-30", "2026-09-10").status_code == 409
+
+    def test_touching_boundary_is_an_overlap(self, client):
+        """Dates are inclusive, so sharing the boundary day is a real clash."""
+        assert self._post(client, "2026-09-03", "2026-09-05").status_code == 409
+
+    def test_adjacent_period_is_allowed(self, client):
+        assert self._post(client, "2026-09-04", "2026-09-06").status_code == 201
+
+    def test_cancelled_request_does_not_block(self, client):
+        # Stub request 4 is Cancelled for staff 1 across 20–21 September.
+        assert self._post(client, "2026-09-20", "2026-09-21").status_code == 201
+
+    def test_rejected_request_does_not_block(self, client):
+        # Stub request 3 is Rejected for staff 3 across 10–11 September.
+        response = client.post("/api/staff/3/unavailability-requests",
+                               headers=_employee(3), json={
+                                   "start_date": "2026-09-10",
+                                   "end_date": "2026-09-11", "reason": "Vacation"})
+        assert response.status_code == 201
+
+
+class TestRequestLifecycle:
+    def test_approve_records_decision(self, client):
+        response = client.put("/api/unavailability-requests/1/review",
+                              headers=MANAGER,
+                              json={"decision": "Approved",
+                                    "reviewed_by": "Nadia Whitfield"})
+        assert response.status_code == 200
+        record = response.get_json()["request"]
+        assert record["request_status"] == "Approved"
+        assert record["reviewed_by"] == "Nadia Whitfield"
+        assert record["reviewed_at"] is not None
+
+    def test_reject_records_decision(self, client):
+        record = client.put("/api/unavailability-requests/1/review",
+                            headers=MANAGER,
+                            json={"decision": "Rejected",
+                                  "reviewed_by": "Nadia Whitfield"}
+                            ).get_json()["request"]
+        assert record["request_status"] == "Rejected"
+        assert record["reviewed_by"] == "Nadia Whitfield"
+
+    def test_employee_cancels_own_pending_request(self, client):
+        response = client.put(
+            "/api/staff/1/unavailability-requests/1/cancel", headers=_employee(1))
+        assert response.status_code == 200
+        assert response.get_json()["request"]["request_status"] == "Cancelled"
+
+    def test_cancelling_leaves_no_reviewer(self, client):
+        """Withdrawing is the employee's own act, not a management decision,
+        so it must not populate the reviewer fields."""
+        record = client.put("/api/staff/1/unavailability-requests/1/cancel",
+                            headers=_employee(1)).get_json()["request"]
+        assert record["reviewed_by"] is None
+        assert record["reviewed_at"] is None
+
+    def test_invalid_decision_is_rejected(self, client):
+        response = client.put("/api/unavailability-requests/1/review",
+                              headers=MANAGER,
+                              json={"decision": "Maybe", "reviewed_by": "N"})
+        assert response.status_code == 400
+
+    def test_review_of_unknown_request_is_404(self, client):
+        response = client.put("/api/unavailability-requests/999/review",
+                              headers=MANAGER,
+                              json={"decision": "Approved", "reviewed_by": "N"})
+        assert response.status_code == 404
+
+    @pytest.mark.parametrize("request_id,decision", [
+        (2, "Rejected"),   # already Approved
+        (2, "Approved"),   # already Approved
+        (3, "Approved"),   # already Rejected
+        (4, "Approved"),   # already Cancelled
+    ])
+    def test_terminal_states_cannot_be_re_decided(self, client, request_id, decision):
+        response = client.put(f"/api/unavailability-requests/{request_id}/review",
+                              headers=MANAGER,
+                              json={"decision": decision, "reviewed_by": "N"})
+        assert response.status_code == 409
+
+    @pytest.mark.parametrize("request_id", [2, 3, 4])
+    def test_only_a_pending_request_can_be_withdrawn(self, client, request_id):
+        staff_id = {2: 2, 3: 3, 4: 1}[request_id]
+        response = client.put(
+            f"/api/staff/{staff_id}/unavailability-requests/{request_id}/cancel",
+            headers=_employee(staff_id))
+        assert response.status_code == 409
+
+
+class TestDecisionLeavesRosterAlone:
+    """The feature records intent. It never reschedules anyone."""
+
+    def test_approval_does_not_change_availability_status(self, client, stub_database):
+        before = stub_database.staff[1]["availability_status"]
+        client.put("/api/unavailability-requests/1/review", headers=MANAGER,
+                   json={"decision": "Approved", "reviewed_by": "N"})
+        assert stub_database.staff[1]["availability_status"] == before
+
+    def test_approval_does_not_unassign_anyone(self, client, stub_database):
+        before = {a["assignment_id"]: a["assignment_status"]
+                  for a in stub_database.assignments.values()}
+        client.put("/api/unavailability-requests/1/review", headers=MANAGER,
+                   json={"decision": "Approved", "reviewed_by": "N"})
+        after = {a["assignment_id"]: a["assignment_status"]
+                 for a in stub_database.assignments.values()}
+        assert after == before
+
+    def test_approval_does_not_change_shifts(self, client, stub_database):
+        before = dict(stub_database.shifts)
+        client.put("/api/unavailability-requests/1/review", headers=MANAGER,
+                   json={"decision": "Approved", "reviewed_by": "N"})
+        assert stub_database.shifts == before
+
+    def test_affected_shifts_are_derived_not_stored(self, client, stub_database):
+        """Request 2 covers 24 August; staff 2 is not on that shift, but
+        staff 1 is. The conflict list is computed from live assignments."""
+        detail = client.get("/api/unavailability-requests/1",
+                            headers=MANAGER).get_json()
+        assert "affected_assignments" in detail
+        # Stub request 1 covers 1–3 September; no assignment falls there.
+        assert detail["affected_assignments"] == []
+
+    def test_affected_shifts_reflect_current_assignments(self, client, stub_database):
+        """Move the shift into the requested period and the conflict appears,
+        without the request itself being touched."""
+        stub_database.shifts[1]["shift_date"] = "2026-09-02"
+        detail = client.get("/api/unavailability-requests/1",
+                            headers=MANAGER).get_json()
+        dates = [row["shift_date"] for row in detail["affected_assignments"]]
+        assert dates == ["2026-09-02"]
+
+
+class TestRequestAuthorization:
+    """The frontend hides controls; this is what actually enforces the rule."""
+
+    def test_employee_reads_own_requests(self, client):
+        assert client.get("/api/staff/1/unavailability-requests",
+                          headers=_employee(1)).status_code == 200
+
+    def test_employee_cannot_read_another_employees_requests(self, client):
+        assert client.get("/api/staff/2/unavailability-requests",
+                          headers=_employee(1)).status_code == 403
+
+    def test_employee_cannot_create_for_another_employee(self, client):
+        response = client.post("/api/staff/2/unavailability-requests",
+                               headers=_employee(1), json={
+                                   "start_date": "2026-10-01",
+                                   "end_date": "2026-10-02", "reason": "Personal"})
+        assert response.status_code == 403
+
+    def test_employee_cannot_cancel_another_employees_request(self, client):
+        assert client.put("/api/staff/2/unavailability-requests/2/cancel",
+                          headers=_employee(1)).status_code == 403
+
+    def test_employee_cannot_read_the_review_queue(self, client):
+        assert client.get("/api/unavailability-requests",
+                          headers=_employee(1)).status_code == 403
+
+    def test_employee_cannot_review_a_request(self, client):
+        response = client.put("/api/unavailability-requests/1/review",
+                              headers=_employee(1),
+                              json={"decision": "Approved", "reviewed_by": "me"})
+        assert response.status_code == 403
+
+    def test_employee_cannot_open_the_staff_directory(self, client):
+        assert client.get("/api/staff", headers=_employee(1)).status_code == 403
+
+    def test_manager_reads_the_review_queue(self, client):
+        assert client.get("/api/unavailability-requests",
+                          headers=MANAGER).status_code == 200
+
+    def test_manager_filters_the_queue_by_status(self, client):
+        rows = client.get("/api/unavailability-requests?request_status=Pending",
+                          headers=MANAGER).get_json()["requests"]
+        assert [row["request_status"] for row in rows] == ["Pending"]
+
+    def test_queue_carries_employee_context(self, client):
+        """A reviewer must be able to see whose request it is."""
+        row = client.get("/api/unavailability-requests",
+                         headers=MANAGER).get_json()["requests"][0]
+        assert row["staff_name"] and row["staff_role"] and row["staff_department"]
+
+    def test_single_request_carries_the_same_context_as_the_listing(self, client):
+        listed = client.get("/api/unavailability-requests",
+                            headers=MANAGER).get_json()["requests"][0]
+        single = client.get(f"/api/unavailability-requests/{listed['request_id']}",
+                            headers=MANAGER).get_json()["request"]
+        for field in ("staff_name", "staff_role", "staff_department"):
+            assert single[field] == listed[field]

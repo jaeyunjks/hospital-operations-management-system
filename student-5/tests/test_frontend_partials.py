@@ -40,12 +40,49 @@ def fe_api_client():
     return api_client
 
 
+def _enter_demo_as(test_client, role, staff_id=None, name=None):
+    """Establish the simulated R0 demo identity on a test client.
+
+    Written directly into the session rather than by posting the entry form,
+    so a test that is about the shift planner is not also a test of the demo
+    screen. Tests that care about the entry screen exercise it properly.
+    """
+    import demo_identity
+    with test_client.session_transaction() as session:
+        session[demo_identity.SESSION_KEY] = {
+            "role": role, "staff_id": staff_id, "name": name}
+
+
 @pytest.fixture
-def frontend_client(fe_api_client):
+def frontend_app():
+    """The frontend Flask app, with no demo identity established."""
     frontend_app_module = _load_frontend_app_module()
     app = frontend_app_module.create_app()
-    app.config.update(TESTING=True)
-    with app.test_client() as test_client:
+    app.config.update(TESTING=True, SECRET_KEY="test-key")
+    return app
+
+
+@pytest.fixture
+def anonymous_client(frontend_app):
+    """A client that has NOT chosen a demo role — sees the entry gate."""
+    with frontend_app.test_client() as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def frontend_client(fe_api_client, frontend_app):
+    """The default client: a Staff Manager, which is what every test written
+    before role separation existed implicitly assumed."""
+    with frontend_app.test_client() as test_client:
+        _enter_demo_as(test_client, "Staff Manager", name="Demo Staff Manager")
+        yield test_client
+
+
+@pytest.fixture
+def employee_client(fe_api_client, frontend_app):
+    """A client acting as employee 1."""
+    with frontend_app.test_client() as test_client:
+        _enter_demo_as(test_client, "Employee", staff_id=1, name="Amara Okafor")
         yield test_client
 
 
@@ -1875,3 +1912,603 @@ def test_backend_total_shortfall_is_per_shift(client):
     expected = sum(max(r["required_staff_count"] - r["assigned_staff_count"], 0)
                    for r in body["shifts"])
     assert body["summary"]["total_shortfall"] == expected
+
+
+# ==========================================================================
+# Scenario C — unavailability requests in the frontend
+# ==========================================================================
+
+def _req(request_id=1, staff_id=1, start="2026-08-31", end="2026-09-02",
+         status="Approved", reason="Vacation", notes=None, name="Amara Okafor"):
+    return {"request_id": request_id, "staff_id": staff_id,
+            "start_date": start, "end_date": end, "reason": reason,
+            "notes": notes, "request_status": status,
+            "reviewed_by": "Nadia Whitfield" if status in ("Approved", "Rejected") else None,
+            "reviewed_at": "2026-08-25 10:00" if status in ("Approved", "Rejected") else None,
+            "created_at": "2026-08-20 09:00", "updated_at": "2026-08-25 10:00",
+            "staff_name": name, "staff_role": "Registered Nurse",
+            "staff_department": "Emergency"}
+
+
+# ------------------------------------------------- eligibility blocking
+def test_approved_request_covering_the_shift_blocks_the_candidate():
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(), _planner_shift(date="2026-09-01"), set(), [], [],
+        [_req(start="2026-08-31", end="2026-09-02")])
+    assert result["eligible"] is False
+    assert result["blocked_reason"] == "Temporarily unavailable 31 Aug – 2 Sep"
+
+
+def test_blocking_is_inclusive_of_the_first_day():
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(), _planner_shift(date="2026-08-31"), set(), [], [],
+        [_req(start="2026-08-31", end="2026-09-02")])
+    assert result["eligible"] is False
+
+
+def test_blocking_is_inclusive_of_the_last_day():
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(), _planner_shift(date="2026-09-02"), set(), [], [],
+        [_req(start="2026-08-31", end="2026-09-02")])
+    assert result["eligible"] is False
+
+
+def test_shift_outside_the_approved_period_is_not_blocked():
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(), _planner_shift(date="2026-09-03"), set(), [], [],
+        [_req(start="2026-08-31", end="2026-09-02")])
+    assert result["eligible"] is True
+    assert result["approved_request"] is None
+
+
+@pytest.mark.parametrize("status", ["Pending", "Rejected", "Cancelled"])
+def test_only_an_approved_request_blocks_assignment(status):
+    """A request that has not been granted must never affect the roster."""
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(), _planner_shift(date="2026-09-01"), set(), [], [],
+        [_req(start="2026-08-31", end="2026-09-02", status=status)])
+    assert result["eligible"] is True
+
+
+def test_single_day_request_label_does_not_repeat_the_date():
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(), _planner_shift(date="2026-09-01"), set(), [], [],
+        [_req(start="2026-09-01", end="2026-09-01")])
+    assert result["blocked_reason"] == "Temporarily unavailable 1 Sep"
+
+
+def test_candidate_evaluation_without_requests_is_unchanged():
+    """The parameter is optional: existing callers keep working."""
+    fe = _fe()
+    result = fe._evaluate_candidate(_person(), _planner_shift(), set(), [], [])
+    assert result["eligible"] is True
+    assert result["approved_request"] is None
+
+
+def test_blocking_request_helper_ignores_other_peoples_requests():
+    """Grouping is by staff_id, so a request list is never applied to the
+    wrong person."""
+    fe = _fe()
+    grouped = fe._requests_by_staff([_req(staff_id=2)])
+    assert grouped.get(1) is None
+    assert len(grouped[2]) == 1
+
+
+# --------------------------------------------------- the R0 demo gate
+def test_application_is_unreachable_without_choosing_a_role(anonymous_client):
+    assert anonymous_client.get("/").status_code == 302
+    assert anonymous_client.get("/shifts").status_code == 302
+    assert anonymous_client.get("/me").status_code == 302
+
+
+def test_demo_entry_screen_is_reachable(anonymous_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **k: {"staff": [_person()], "count": 1})
+    response = anonymous_client.get("/demo")
+    assert response.status_code == 200
+
+
+def test_demo_entry_states_plainly_that_it_is_not_authentication(
+        anonymous_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **k: {"staff": [_person()], "count": 1})
+    body = anonymous_client.get("/demo").get_data(as_text=True)
+    assert "not a login" in body
+    assert "no authentication" in body
+
+
+def test_demo_entry_survives_the_backend_being_down(
+        anonymous_client, fe_api_client, monkeypatch):
+    """The entry screen must still offer the manager role when staff records
+    cannot be listed — otherwise a backend outage locks everyone out."""
+    monkeypatch.setattr(fe_api_client, "list_staff", _raise_unavailable)
+    response = anonymous_client.get("/demo")
+    assert response.status_code == 200
+    assert "Staff Manager" in response.get_data(as_text=True)
+
+
+def test_htmx_request_without_a_role_asks_the_browser_to_navigate(anonymous_client):
+    """A fragment cannot render a redirect, so the whole page must move."""
+    response = anonymous_client.get("/partials/kpis", headers={"HX-Request": "true"})
+    assert response.status_code == 204
+    assert response.headers["HX-Redirect"] == "/demo"
+
+
+def test_choosing_the_manager_role_enters_the_application(anonymous_client):
+    response = anonymous_client.post("/demo/enter", data={"role": "Staff Manager"})
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/")
+
+
+def test_employee_role_requires_a_staff_member(anonymous_client):
+    response = anonymous_client.post("/demo/enter", data={"role": "Employee"})
+    assert response.headers["Location"].endswith("role=Employee")
+
+
+def test_unknown_role_is_refused(anonymous_client):
+    response = anonymous_client.post("/demo/enter", data={"role": "Administrator"})
+    assert response.headers["Location"].endswith("/demo")
+
+
+def test_leaving_the_demo_clears_the_identity(frontend_client):
+    frontend_client.post("/demo/exit")
+    assert frontend_client.get("/").status_code == 302
+
+
+# ------------------------------------------------- role-aware chrome
+def test_manager_chrome_shows_the_requests_section(frontend_client, fe_api_client,
+                                                   monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_coverage", _raise_unavailable)
+    monkeypatch.setattr(fe_api_client, "list_staff", _raise_unavailable)
+    body = frontend_client.get("/").get_data(as_text=True)
+    assert 'href="/requests"' in body
+
+
+def test_employee_chrome_offers_only_their_own_view(employee_client, fe_api_client,
+                                                    monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_staff",
+                        lambda sid: {"staff": _person()})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    monkeypatch.setattr(fe_api_client, "get_weekly_availability",
+                        lambda sid: {"periods": []})
+    monkeypatch.setattr(fe_api_client, "list_staff_requests",
+                        lambda sid, **k: {"requests": []})
+    body = employee_client.get("/me").get_data(as_text=True)
+    assert 'href="/requests"' not in body
+    assert 'href="/staff"' not in body
+    assert 'href="/me"' in body
+
+
+def test_identity_is_read_only_context_not_a_role_switcher(
+        frontend_client, fe_api_client, monkeypatch):
+    """A dropdown in the chrome would read as a sign-in control. The role is
+    chosen once, on the separate demo screen, and shown here as text."""
+    monkeypatch.setattr(fe_api_client, "get_coverage", _raise_unavailable)
+    monkeypatch.setattr(fe_api_client, "list_staff", _raise_unavailable)
+    body = frontend_client.get("/").get_data(as_text=True)
+    assert "role-select" not in body
+    assert "demo only, not authentication" in body
+
+
+def test_employee_is_steered_away_from_manager_pages(employee_client):
+    for path in ("/", "/staff", "/shifts", "/requests"):
+        response = employee_client.get(path)
+        assert response.status_code == 302
+        assert response.headers["Location"].endswith("/me")
+
+
+# ------------------------------------------------------ employee view
+@pytest.fixture
+def employee_view(employee_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": _person()})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    monkeypatch.setattr(fe_api_client, "get_weekly_availability",
+                        lambda sid: {"periods": []})
+    return employee_client
+
+
+def test_my_workforce_lists_only_the_employees_own_requests(employee_view,
+                                                            fe_api_client, monkeypatch):
+    seen = {}
+
+    def fake_list(staff_id, request_status=None):
+        seen["staff_id"] = staff_id
+        return {"requests": [_req(status="Pending")]}
+
+    monkeypatch.setattr(fe_api_client, "list_staff_requests", fake_list)
+    body = employee_view.get("/me").get_data(as_text=True)
+    assert seen["staff_id"] == 1          # from the session, never the URL
+    assert "31 Aug – 2 Sep" in body
+
+
+def test_pending_request_offers_withdrawal(employee_view, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_staff_requests",
+                        lambda sid, **k: {"requests": [_req(status="Pending")]})
+    assert "Withdraw" in employee_view.get("/me").get_data(as_text=True)
+
+
+@pytest.mark.parametrize("status", ["Approved", "Rejected", "Cancelled"])
+def test_resolved_request_cannot_be_withdrawn(employee_view, fe_api_client,
+                                              monkeypatch, status):
+    monkeypatch.setattr(fe_api_client, "list_staff_requests",
+                        lambda sid, **k: {"requests": [_req(status=status)]})
+    body = employee_view.get("/me").get_data(as_text=True)
+    # Assert on the control, not the word: a cancelled request legitimately
+    # reads "Withdrawn by you." in its outcome line.
+    assert "/cancel" not in body
+
+
+def test_approved_request_tells_the_employee_the_roster_is_unchanged(
+        employee_view, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_staff_requests",
+                        lambda sid, **k: {"requests": [_req(status="Approved")]})
+    body = employee_view.get("/me").get_data(as_text=True)
+    assert "not cancelled automatically" in body
+
+
+def test_submitting_a_request_uses_the_session_staff_id(employee_view,
+                                                        fe_api_client, monkeypatch):
+    captured = {}
+
+    def fake_create(staff_id, payload):
+        captured["staff_id"], captured["payload"] = staff_id, payload
+        return {"request": _req(status="Pending")}
+
+    monkeypatch.setattr(fe_api_client, "create_staff_request", fake_create)
+    monkeypatch.setattr(fe_api_client, "list_staff_requests",
+                        lambda sid, **k: {"requests": []})
+    employee_view.post("/partials/me/requests", data={
+        "start_date": "2026-09-01", "end_date": "2026-09-02", "reason": "Vacation"})
+    assert captured["staff_id"] == 1
+    assert captured["payload"]["reason"] == "Vacation"
+
+
+def test_reversed_dates_are_refused_before_reaching_the_backend(
+        employee_view, fe_api_client, monkeypatch):
+    def fail(*a, **k):
+        raise AssertionError("the backend must not be called with invalid dates")
+
+    monkeypatch.setattr(fe_api_client, "create_staff_request", fail)
+    monkeypatch.setattr(fe_api_client, "list_staff_requests",
+                        lambda sid, **k: {"requests": []})
+    body = employee_view.post("/partials/me/requests", data={
+        "start_date": "2026-09-09", "end_date": "2026-09-01",
+        "reason": "Personal"}).get_data(as_text=True)
+    assert "end date cannot fall before the start date" in body
+
+
+def test_rejected_submission_keeps_what_was_typed(employee_view, fe_api_client,
+                                                  monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_staff_requests",
+                        lambda sid, **k: {"requests": []})
+    body = employee_view.post("/partials/me/requests", data={
+        "start_date": "2026-09-09", "end_date": "2026-09-01",
+        "reason": "Personal", "notes": "Wedding."}).get_data(as_text=True)
+    assert 'value="2026-09-09"' in body
+    assert "Wedding." in body
+
+
+def test_overlap_conflict_is_shown_without_http_plumbing(employee_view,
+                                                         fe_api_client, monkeypatch):
+    def conflict(staff_id, payload):
+        raise fe_api_client.ConflictError(
+            "This period overlaps an existing Pending request "
+            "(2026-09-01 to 2026-09-03).")
+
+    monkeypatch.setattr(fe_api_client, "create_staff_request", conflict)
+    monkeypatch.setattr(fe_api_client, "list_staff_requests",
+                        lambda sid, **k: {"requests": []})
+    body = employee_view.post("/partials/me/requests", data={
+        "start_date": "2026-09-02", "end_date": "2026-09-02",
+        "reason": "Personal"}).get_data(as_text=True)
+    assert "overlaps an existing Pending request" in body
+    assert "returned 409" not in body
+
+
+def test_employee_panels_declare_no_load_trigger(employee_view, fe_api_client,
+                                                 monkeypatch):
+    """The bug this guards against: a partial that re-arms `load` on itself
+    fires immediately on insertion and never stops."""
+    monkeypatch.setattr(fe_api_client, "list_staff_requests",
+                        lambda sid, **k: {"requests": [_req()]})
+    body = employee_view.get("/partials/me/requests").get_data(as_text=True)
+    assert "hx-trigger" not in body
+
+
+# ------------------------------------------------------- manager queue
+def test_queue_lists_requests_with_employee_context(frontend_client, fe_api_client,
+                                                    monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_unavailability_requests",
+                        lambda **k: {"requests": [_req(status="Pending")]})
+    body = frontend_client.get("/partials/requests").get_data(as_text=True)
+    assert "Amara Okafor" in body
+    assert "Registered Nurse" in body
+
+
+def test_queue_puts_pending_requests_first(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_unavailability_requests",
+                        lambda **k: {"requests": [
+                            _req(1, status="Approved", start="2026-08-01",
+                                 end="2026-08-02", name="Approved Person"),
+                            _req(2, status="Pending", start="2026-09-01",
+                                 end="2026-09-02", name="Pending Person")]})
+    body = frontend_client.get("/partials/requests?status=All").get_data(as_text=True)
+    assert body.index("Pending Person") < body.index("Approved Person")
+
+
+def test_queue_filters_by_status(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_unavailability_requests",
+                        lambda **k: {"requests": [
+                            _req(1, status="Pending", name="Pending Person"),
+                            _req(2, status="Approved", name="Approved Person")]})
+    body = frontend_client.get("/partials/requests?status=Pending").get_data(as_text=True)
+    assert "Pending Person" in body
+    assert "Approved Person" not in body
+
+
+def test_queue_declares_no_load_trigger(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_unavailability_requests",
+                        lambda **k: {"requests": [_req()]})
+    body = frontend_client.get("/partials/requests").get_data(as_text=True)
+    assert "load" not in [t.strip() for t in
+                          _hx_triggers(body)]
+
+
+def _hx_triggers(body):
+    import re
+    return [t for value in re.findall(r'hx-trigger="([^"]*)"', body)
+            for t in value.split(",")]
+
+
+def test_queue_page_owns_the_load_trigger(frontend_client):
+    """The wrapper triggers the load; the response it swaps in must not."""
+    body = frontend_client.get("/requests").get_data(as_text=True)
+    assert 'hx-trigger="load, requests-changed from:body"' in body
+    assert 'hx-target="this"' in body
+
+
+def test_queue_refusal_is_surfaced_not_swallowed(frontend_client, fe_api_client,
+                                                 monkeypatch):
+    def forbidden(**kwargs):
+        raise fe_api_client.ForbiddenError("This operation requires the Staff Manager role.")
+
+    monkeypatch.setattr(fe_api_client, "list_unavailability_requests", forbidden)
+    body = frontend_client.get("/partials/requests").get_data(as_text=True)
+    assert "requires the Staff Manager role" in body
+
+
+# ------------------------------------------------------ request detail
+def test_detail_shows_affected_shifts_as_derived(frontend_client, fe_api_client,
+                                                 monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_unavailability_request",
+                        lambda rid: {"request": _req(status="Pending"),
+                                      "affected_assignments": [
+                                          {"shift_id": 7, "shift_date": "2026-09-01",
+                                           "start_time": "07:00", "end_time": "15:00",
+                                           "department": "Emergency",
+                                           "assignment_status": "Assigned"}]})
+    body = frontend_client.get("/partials/requests/1").get_data(as_text=True)
+    assert "2026-09-01" in body
+    assert "Calculated now from the live roster" in body
+
+
+def test_detail_links_affected_shifts_into_the_existing_planner(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_unavailability_request",
+                        lambda rid: {"request": _req(status="Pending"),
+                                      "affected_assignments": [
+                                          {"shift_id": 7, "shift_date": "2026-09-01",
+                                           "start_time": "07:00", "end_time": "15:00",
+                                           "department": "Emergency",
+                                           "assignment_status": "Assigned"}]})
+    body = frontend_client.get("/partials/requests/1").get_data(as_text=True)
+    # The planner reads `selected_shift_id`, not `shift_id` — a link using the
+    # wrong name opens the right day with nothing selected.
+    assert "date=2026-09-01" in body
+    assert "selected_shift_id=7" in body
+    assert "view=week" in body
+
+
+def test_detail_excludes_cancelled_assignments_from_the_conflict_list(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_unavailability_request",
+                        lambda rid: {"request": _req(status="Pending"),
+                                      "affected_assignments": [
+                                          {"shift_id": 7, "shift_date": "2026-09-01",
+                                           "start_time": "07:00", "end_time": "15:00",
+                                           "department": "Emergency",
+                                           "assignment_status": "Cancelled"}]})
+    body = frontend_client.get("/partials/requests/1").get_data(as_text=True)
+    assert "No active assignments fall in this period" in body
+
+
+def test_pending_request_offers_a_decision(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_unavailability_request",
+                        lambda rid: {"request": _req(status="Pending"),
+                                      "affected_assignments": []})
+    body = frontend_client.get("/partials/requests/1").get_data(as_text=True)
+    assert 'name="decision" value="Approved"' in body
+    assert 'name="decision" value="Rejected"' in body
+
+
+@pytest.mark.parametrize("status", ["Approved", "Rejected", "Cancelled"])
+def test_resolved_request_offers_no_decision(frontend_client, fe_api_client,
+                                             monkeypatch, status):
+    monkeypatch.setattr(fe_api_client, "get_unavailability_request",
+                        lambda rid: {"request": _req(status=status),
+                                      "affected_assignments": []})
+    body = frontend_client.get("/partials/requests/1").get_data(as_text=True)
+    assert 'name="decision"' not in body
+    assert "can no longer be changed" in body
+
+
+def test_missing_request_renders_not_found(frontend_client, fe_api_client, monkeypatch):
+    def missing(rid):
+        raise fe_api_client.NotFoundError("Request 99 not found.")
+
+    monkeypatch.setattr(fe_api_client, "get_unavailability_request", missing)
+    response = frontend_client.get("/partials/requests/99")
+    assert response.status_code == 404
+    assert "Request not found" in response.get_data(as_text=True)
+
+
+# ------------------------------------------------------------- review
+def test_approving_sends_the_decision_and_the_reviewer(frontend_client, fe_api_client,
+                                                       monkeypatch):
+    captured = {}
+
+    def fake_review(request_id, decision, reviewed_by):
+        captured.update(request_id=request_id, decision=decision,
+                        reviewed_by=reviewed_by)
+        return {"request": _req(status="Approved")}
+
+    monkeypatch.setattr(fe_api_client, "review_unavailability_request", fake_review)
+    monkeypatch.setattr(fe_api_client, "get_unavailability_request",
+                        lambda rid: {"request": _req(status="Approved"),
+                                      "affected_assignments": []})
+    frontend_client.post("/partials/requests/3/review", data={"decision": "Approved"})
+    assert captured["request_id"] == 3
+    assert captured["decision"] == "Approved"
+    assert captured["reviewed_by"]
+
+
+def test_review_asks_the_queue_to_refresh(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "review_unavailability_request",
+                        lambda *a, **k: {"request": _req(status="Approved")})
+    monkeypatch.setattr(fe_api_client, "get_unavailability_request",
+                        lambda rid: {"request": _req(status="Approved"),
+                                      "affected_assignments": []})
+    response = frontend_client.post("/partials/requests/1/review",
+                                    data={"decision": "Approved"})
+    assert response.headers["HX-Trigger"] == "requests-changed"
+
+
+def test_review_result_says_the_roster_did_not_change(frontend_client, fe_api_client,
+                                                      monkeypatch):
+    monkeypatch.setattr(fe_api_client, "review_unavailability_request",
+                        lambda *a, **k: {"request": _req(status="Approved")})
+    monkeypatch.setattr(fe_api_client, "get_unavailability_request",
+                        lambda rid: {"request": _req(status="Approved"),
+                                      "affected_assignments": []})
+    body = frontend_client.post("/partials/requests/1/review",
+                                data={"decision": "Approved"}).get_data(as_text=True)
+    assert "The roster is unchanged" in body
+
+
+def test_review_never_calls_assignment_endpoints(frontend_client, fe_api_client,
+                                                 monkeypatch):
+    """Approval records a decision. If it ever starts moving people around,
+    this fails."""
+    def forbidden(*a, **k):
+        raise AssertionError("reviewing a request must not touch assignments")
+
+    monkeypatch.setattr(fe_api_client, "assign_staff", forbidden)
+    monkeypatch.setattr(fe_api_client, "unassign_staff", forbidden)
+    monkeypatch.setattr(fe_api_client, "update_availability", forbidden)
+    monkeypatch.setattr(fe_api_client, "review_unavailability_request",
+                        lambda *a, **k: {"request": _req(status="Approved")})
+    monkeypatch.setattr(fe_api_client, "get_unavailability_request",
+                        lambda rid: {"request": _req(status="Approved"),
+                                      "affected_assignments": []})
+    assert frontend_client.post("/partials/requests/1/review",
+                                data={"decision": "Approved"}).status_code == 200
+
+
+def test_missing_decision_is_refused(frontend_client, fe_api_client, monkeypatch):
+    def fail(*a, **k):
+        raise AssertionError("no decision was chosen")
+
+    monkeypatch.setattr(fe_api_client, "review_unavailability_request", fail)
+    monkeypatch.setattr(fe_api_client, "get_unavailability_request",
+                        lambda rid: {"request": _req(status="Pending"),
+                                      "affected_assignments": []})
+    body = frontend_client.post("/partials/requests/1/review", data={}).get_data(as_text=True)
+    assert "Choose whether to approve or reject" in body
+
+
+def test_terminal_state_refusal_is_shown_to_the_manager(frontend_client, fe_api_client,
+                                                        monkeypatch):
+    def conflict(*a, **k):
+        raise fe_api_client.ConflictError(
+            "This request is Approved and cannot become Rejected. "
+            "Decisions in Release 0 are final.")
+
+    monkeypatch.setattr(fe_api_client, "review_unavailability_request", conflict)
+    monkeypatch.setattr(fe_api_client, "get_unavailability_request",
+                        lambda rid: {"request": _req(status="Approved"),
+                                      "affected_assignments": []})
+    body = frontend_client.post("/partials/requests/1/review",
+                                data={"decision": "Rejected"}).get_data(as_text=True)
+    assert "cannot become Rejected" in body
+
+
+# ------------------------------------------------------- overview link
+def test_overview_surfaces_the_pending_request_count(frontend_client, fe_api_client,
+                                                     monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **k: {
+        "shifts": [], "summary": {"total_shortfall": 0, "total_shifts": 0}})
+    monkeypatch.setattr(fe_api_client, "list_staff", lambda **k: {"staff": [], "count": 0})
+    monkeypatch.setattr(fe_api_client, "list_unavailability_requests",
+                        lambda **k: {"requests": [_req(1), _req(2)]})
+    body = frontend_client.get("/partials/kpis").get_data(as_text=True)
+    assert "Requests to review" in body
+    assert 'href="/requests?status=Pending"' in body
+
+
+def test_overview_survives_the_request_queue_being_unavailable(frontend_client,
+                                                               fe_api_client, monkeypatch):
+    """A request-queue outage must not blank the coverage figures."""
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **k: {
+        "shifts": [], "summary": {"total_shortfall": 0, "total_shifts": 3}})
+    monkeypatch.setattr(fe_api_client, "list_staff", lambda **k: {"staff": [], "count": 7})
+    monkeypatch.setattr(fe_api_client, "list_unavailability_requests",
+                        _raise_unavailable)
+    body = frontend_client.get("/partials/kpis").get_data(as_text=True)
+    assert "Request queue unavailable" in body
+    assert "Shifts today" in body
+
+
+# ------------------------------------------------- identity propagation
+def test_identity_headers_travel_with_every_backend_call():
+    """The backend cannot enforce a role it is never told about."""
+    import demo_identity
+    from flask import Flask
+
+    app = Flask(__name__)
+    app.secret_key = "test-key"
+    with app.test_request_context():
+        from flask import session
+        session[demo_identity.SESSION_KEY] = {
+            "role": "Employee", "staff_id": 4, "name": "Liam"}
+        headers = demo_identity.identity_headers()
+    assert headers["X-HOMS-Role"] == "Employee"
+    assert headers["X-HOMS-Staff-Id"] == "4"
+
+
+def test_no_identity_sends_no_headers():
+    import demo_identity
+    from flask import Flask
+
+    app = Flask(__name__)
+    app.secret_key = "test-key"
+    with app.test_request_context():
+        assert demo_identity.identity_headers() == {}
+
+
+def test_an_employee_identity_without_a_staff_member_is_not_valid():
+    """Every employee route is scoped to a person; a roleless id is useless."""
+    import demo_identity
+    from flask import Flask
+
+    app = Flask(__name__)
+    app.secret_key = "test-key"
+    with app.test_request_context():
+        from flask import session
+        session[demo_identity.SESSION_KEY] = {"role": "Employee", "staff_id": None}
+        assert demo_identity.current_identity() is None

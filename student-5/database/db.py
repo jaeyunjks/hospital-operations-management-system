@@ -78,5 +78,6 @@ def drop_all(connection: sqlite3.Connection) -> None:
     Used by ``init_db.py --reset`` to rebuild a clean database.
     ``shift_assignment`` is dropped first because it holds the foreign keys.
     """
-    for table in ("staff_weekly_availability", "shift_assignment", "shift", "staff"):
+    for table in ("staff_unavailability_request", "staff_weekly_availability",
+                  "shift_assignment", "shift", "staff"):
         connection.execute(f"DROP TABLE IF EXISTS {table};")

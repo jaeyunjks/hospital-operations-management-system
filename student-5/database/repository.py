@@ -332,3 +332,117 @@ def replace_weekly_availability(connection: sqlite3.Connection, staff_id: int,
          for p in periods],
     )
     return len(periods)
+
+
+# ==========================================================================
+# STAFF_UNAVAILABILITY_REQUEST
+# --------------------------------------------------------------------------
+# Temporary, date-specific unavailability with its own review lifecycle.
+# Lifecycle and overlap rules live in the service layer; this module only
+# reads and writes rows.
+# ==========================================================================
+def create_unavailability_request(connection: sqlite3.Connection, staff_id: int,
+                                  start_date: str, end_date: str, reason: str,
+                                  notes: Optional[str] = None) -> int:
+    """Insert a new request. Always starts Pending with no reviewer."""
+    cursor = connection.execute(
+        """
+        INSERT INTO staff_unavailability_request (
+            staff_id, start_date, end_date, reason, notes, request_status
+        ) VALUES (?, ?, ?, ?, ?, 'Pending');
+        """,
+        (staff_id, start_date, end_date, reason, notes),
+    )
+    return int(cursor.lastrowid)
+
+
+def get_unavailability_request(connection: sqlite3.Connection,
+                               request_id: int) -> Optional[Dict[str, Any]]:
+    """Return one request with the employee's name, role and department.
+
+    Joined exactly as list_unavailability_requests does, so a single request
+    and the same request in a listing carry identical fields. Without the
+    join a reviewer would see a request with no indication of whose it is.
+    """
+    row = connection.execute(
+        """
+        SELECT r.*, s.name AS staff_name, s.role AS staff_role,
+               s.department AS staff_department
+        FROM staff_unavailability_request AS r
+        JOIN staff AS s ON s.staff_id = r.staff_id
+        WHERE r.request_id = ?;
+        """,
+        (request_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def list_unavailability_requests(connection: sqlite3.Connection,
+                                 staff_id: Optional[int] = None,
+                                 request_status: Optional[str] = None
+                                 ) -> List[Dict[str, Any]]:
+    """Return requests, optionally filtered by employee and/or status."""
+    clauses, parameters = [], []
+    if staff_id is not None:
+        clauses.append("r.staff_id = ?")
+        parameters.append(staff_id)
+    if request_status:
+        clauses.append("r.request_status = ?")
+        parameters.append(request_status)
+
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = connection.execute(
+        f"""
+        SELECT r.*, s.name AS staff_name, s.role AS staff_role,
+               s.department AS staff_department
+        FROM staff_unavailability_request AS r
+        JOIN staff AS s ON s.staff_id = r.staff_id{where}
+        ORDER BY r.start_date, r.request_id;
+        """,
+        parameters,
+    ).fetchall()
+    return _rows_to_dicts(rows)
+
+
+def set_unavailability_request_status(connection: sqlite3.Connection, request_id: int,
+                                      request_status: str,
+                                      reviewed_by: Optional[str] = None,
+                                      reviewed_at: Optional[str] = None) -> bool:
+    """Apply a status transition. The caller has already validated it."""
+    cursor = connection.execute(
+        """
+        UPDATE staff_unavailability_request
+        SET request_status = ?, reviewed_by = ?, reviewed_at = ?
+        WHERE request_id = ?;
+        """,
+        (request_status, reviewed_by, reviewed_at, request_id),
+    )
+    return cursor.rowcount > 0
+
+
+def list_active_requests_overlapping(connection: sqlite3.Connection, staff_id: int,
+                                     start_date: str, end_date: str,
+                                     exclude_request_id: Optional[int] = None
+                                     ) -> List[Dict[str, Any]]:
+    """Active (Pending/Approved) requests whose dates overlap the given range.
+
+    Inclusive-range overlap: two ranges clash unless one ends before the
+    other begins. Rejected and Cancelled requests never block.
+    """
+    parameters: List[Any] = [staff_id, end_date, start_date]
+    exclusion = ""
+    if exclude_request_id is not None:
+        exclusion = " AND request_id <> ?"
+        parameters.append(exclude_request_id)
+
+    rows = connection.execute(
+        f"""
+        SELECT * FROM staff_unavailability_request
+        WHERE staff_id = ?
+          AND request_status IN ('Pending', 'Approved')
+          AND start_date <= ? AND end_date >= ?{exclusion}
+        ORDER BY start_date;
+        """,
+        parameters,
+    ).fetchall()
+    return _rows_to_dicts(rows)

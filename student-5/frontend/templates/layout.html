@@ -34,7 +34,15 @@
       <nav class="topnav__links" aria-label="Staff and shift sections">
         {#- Implemented sections are real links; the rest stay plain text so
             they are neither focusable nor appear actionable. `active` is set
-            by each route. -#}
+            by each route.
+
+            The nav differs by role for clarity, NOT for security: an employee
+            who types a manager URL is refused by the backend, not by the
+            absence of a link. -#}
+        {% if is_employee %}
+        <a class="topnav__link" href="/me"
+           {% if active == 'me' %}aria-current="page"{% endif %}>My workforce</a>
+        {% else %}
         <a class="topnav__link" href="/"
            {% if active == 'workforce' %}aria-current="page"{% endif %}>Workforce overview</a>
 
@@ -43,6 +51,10 @@
 
         <a class="topnav__link" href="/shifts"
            {% if active == 'shifts' %}aria-current="page"{% endif %}>Shift planner</a>
+
+        <a class="topnav__link" href="/requests"
+           {% if active == 'requests' %}aria-current="page"{% endif %}>Requests</a>
+        {% endif %}
 
         {% for section in ["AI recommendations", "Reports"] %}
         <span class="topnav__link--pending" aria-disabled="true">
@@ -57,18 +69,33 @@
     </header>
 
     <!-- ================================================ role / status bar -->
+    {#- Identity is READ-ONLY here. It is chosen once on the separate demo
+        entry screen; there is deliberately no role switcher in the product
+        chrome, so nothing in the application resembles a sign-in control. -#}
     <div class="contextbar">
       <div class="contextbar__item">
         <span class="contextbar__label">Role</span>
-        <span class="contextbar__value">Staff Manager</span>
+        <span class="contextbar__value">{{ identity.role if identity else 'Not selected' }}</span>
       </div>
 
+      {% if is_employee %}
+      <div class="contextbar__item">
+        <span class="contextbar__label">Employee</span>
+        <span class="contextbar__value">{{ identity.name }}</span>
+      </div>
+      {% else %}
       <div class="contextbar__item">
         <span class="contextbar__label">Scope</span>
         {#- Honest: the service is queried with no department filter, so the
             scope genuinely is every department this service returns. -#}
         <span class="contextbar__value">All departments</span>
       </div>
+      {% endif %}
+
+      <form method="post" action="{{ url_for('demo_exit') }}" class="contextbar__demo">
+        <span class="contextbar__demo-tag">Simulated role — demo only, not authentication</span>
+        <button type="submit" class="btn-ghost btn-compact">Change role</button>
+      </form>
 
       <div class="contextbar__end">
         <span class="status {{ 'status--danger' if service_available is sameas false else 'status--success' }}">

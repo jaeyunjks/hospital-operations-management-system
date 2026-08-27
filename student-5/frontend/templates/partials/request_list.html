@@ -1,0 +1,83 @@
+{#- The review queue. Rendered into #requests-queue, which owns the load
+    trigger — this partial must never declare one of its own. -#}
+<section class="panel" aria-labelledby="queue-title">
+  <div class="panel__header">
+    <div>
+      <h2 class="panel__title" id="queue-title">Review queue</h2>
+      <p class="panel__meta">
+        {% if counts.Pending %}{{ counts.Pending }} awaiting a decision{% else %}Nothing awaiting a decision{% endif %}
+      </p>
+    </div>
+  </div>
+
+  {#- Filtering replaces only the queue region. The form is inside the swapped
+      content, so it re-renders with it; it carries no load trigger. -#}
+  <form class="toolbar toolbar--compact"
+        hx-get="/partials/requests"
+        hx-target="#requests-queue" hx-swap="innerHTML"
+        hx-trigger="change"
+        hx-indicator="#loading-indicator">
+    <div class="toolbar__group filter">
+      <label class="filter__label" for="status-filter">Status</label>
+      <select class="select" id="status-filter" name="status">
+        <option value="All" {% if selected_status == 'All' %}selected{% endif %}>
+          All ({{ counts.values() | sum }})
+        </option>
+        {% for status in statuses %}
+        <option value="{{ status }}" {% if selected_status == status %}selected{% endif %}>
+          {{ status }} ({{ counts.get(status, 0) }})
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+  </form>
+
+  <div class="panel__body panel__body--flush">
+    {% if error %}
+    <div class="alert alert--danger" role="alert">
+      <div>
+        <p class="alert__title">Queue unavailable</p>
+        <p class="alert__body">{{ error }}</p>
+      </div>
+    </div>
+
+    {% elif requests %}
+    <ul role="list" class="queue-list">
+      {% for row in requests %}
+      <li>
+        {#- The whole row is the control, so the request opens from anywhere
+            in the field rather than from a small button only. -#}
+        <button type="button"
+                class="queue-row {% if row.request_id == selected_id %}queue-row--active{% endif %}"
+                hx-get="/partials/requests/{{ row.request_id }}"
+                hx-target="#request-detail" hx-swap="innerHTML"
+                hx-indicator="#loading-indicator"
+                aria-label="Review {{ row.staff_name }}, {{ row.period_label }}">
+          <span class="queue-row__top">
+            <span class="queue-row__name">{{ row.staff_name }}</span>
+            <span class="{{ row.badge_class }}">{{ row.request_status }}</span>
+          </span>
+          <span class="queue-row__meta">
+            <span class="u-mono">{{ row.period_label }}</span>
+            <span class="queue-row__dot" aria-hidden="true">·</span>
+            <span>{{ row.reason }}</span>
+          </span>
+          <span class="queue-row__sub">
+            {{ row.staff_role }} · {{ row.staff_department }}
+            {%- if row.day_count %} · {{ row.day_count }} day{{ '' if row.day_count == 1 else 's' }}{% endif %}
+          </span>
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+
+    {% else %}
+    <div class="empty">
+      <p class="empty__title">Nothing to show</p>
+      <p class="empty__body">
+        No {{ selected_status | lower if selected_status != 'All' else '' }} requests.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+</section>

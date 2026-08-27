@@ -153,6 +153,33 @@ WEEKLY_AVAILABILITY_SEED: List[Tuple] = [
 ]
 
 
+# --------------------------------------------------------------------------
+# STAFF_UNAVAILABILITY_REQUEST — temporary date-specific unavailability
+# --------------------------------------------------------------------------
+# A small spread covering each lifecycle state so the manager queue, the
+# employee view and the eligibility rule all have real data to work with.
+# Dates sit in the week after the seeded roster so an approved request can
+# genuinely clash with real assignments.
+#
+# (staff_id, start_date, end_date, reason, notes, status, reviewed_by, reviewed_at)
+UNAVAILABILITY_REQUEST_SEED: List[Tuple] = [
+    # Pending — awaiting manager review, so no reviewer recorded.
+    (4, "2026-09-01", "2026-09-03", "Personal", None, "Pending", None, None),
+    (8, "2026-09-07", "2026-09-08", "Study leave", "Conference in Melbourne.",
+     "Pending", None, None),
+    # Approved — reviewer recorded. Overlaps no seeded assignment, so the
+    # default demo state starts without an unresolved roster clash.
+    (10, "2026-09-14", "2026-09-16", "Vacation", None,
+     "Approved", "Nadia Whitfield", "2026-08-25 09:20"),
+    # Rejected — reviewer recorded; must not block later requests or
+    # candidate eligibility.
+    (2, "2026-08-24", "2026-08-24", "Personal", "Declined: single doctor on shift.",
+     "Rejected", "Peter Lang", "2026-08-20 16:05"),
+    # Cancelled by the employee — no reviewer, because no manager acted on it.
+    (7, "2026-09-21", "2026-09-22", "Personal", None, "Cancelled", None, None),
+]
+
+
 def seed(connection: sqlite3.Connection) -> Dict[str, int]:
     """Insert all seed records and return the number of rows added per table.
 
@@ -197,11 +224,22 @@ def seed(connection: sqlite3.Connection) -> Dict[str, int]:
         WEEKLY_AVAILABILITY_SEED,
     )
 
+    connection.executemany(
+        """
+        INSERT INTO staff_unavailability_request (
+            staff_id, start_date, end_date, reason, notes,
+            request_status, reviewed_by, reviewed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+        """,
+        UNAVAILABILITY_REQUEST_SEED,
+    )
+
     return {
         "staff": len(STAFF_SEED),
         "shift": len(SHIFT_SEED),
         "shift_assignment": len(ASSIGNMENT_SEED),
         "staff_weekly_availability": len(WEEKLY_AVAILABILITY_SEED),
+        "staff_unavailability_request": len(UNAVAILABILITY_REQUEST_SEED),
     }
 
 

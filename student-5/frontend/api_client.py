@@ -43,6 +43,51 @@ class NotFoundError(BackendError):
     """
 
 
+class ValidationFailed(BackendError):
+    """The backend rejected the submitted values (HTTP 400).
+
+    Like ConflictError, the detail is already phrased for the person who
+    submitted the form, so it is surfaced as-is.
+    """
+
+
+class ConflictError(BackendError):
+    """The request clashes with existing state (HTTP 409).
+
+    Carries the backend's own explanation unchanged, because that message is
+    written for a person to read — "this period overlaps an existing Pending
+    request" — and wrapping it in status-code plumbing only obscures it.
+    """
+
+
+class ForbiddenError(BackendError):
+    """The simulated role is not permitted to perform this action (HTTP 403).
+
+    Raised when the backend's R0 authorization guard rejects the call. The
+    frontend never decides permission for itself — it asks, and renders
+    whatever the backend allows. Hiding a button is presentation; this is the
+    answer that actually counts.
+    """
+
+
+#: Callable returning the simulated identity headers for the current request,
+#: or None. Registered by the frontend app so every backend call carries the
+#: caller's simulated role. Kept as a hook rather than a Flask import so this
+#: module stays a plain HTTP client with no framework dependency.
+_identity_provider = None
+
+
+def set_identity_provider(provider) -> None:
+    """Register a zero-argument callable returning a header dict (or None).
+
+    DEVELOPMENT/DEMO ONLY. These headers carry an unverified, self-asserted
+    role for Release 0 demonstration. They are not credentials, they prove
+    nothing, and they are not authentication. See backend/authorization.py.
+    """
+    global _identity_provider
+    _identity_provider = provider
+
+
 def _request(method: str, path: str, params: Optional[Dict[str, Any]] = None,
              payload: Optional[Dict[str, Any]] = None) -> Any:
     url = f"{API_BASE_URL}{path}"
@@ -54,6 +99,12 @@ def _request(method: str, path: str, params: Optional[Dict[str, Any]] = None,
 
     body = None
     headers = {"Accept": "application/json"}
+
+    # Simulated identity travels with every call so the backend guard, not the
+    # template, decides what this role may see.
+    if _identity_provider is not None:
+        headers.update(_identity_provider() or {})
+
     if payload is not None:
         body = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -72,6 +123,13 @@ def _request(method: str, path: str, params: Optional[Dict[str, Any]] = None,
             detail = str(error.reason)
         if error.code == 404:
             raise NotFoundError(detail) from error
+        if error.code == 403:
+            raise ForbiddenError(detail) from error
+        if error.code == 409:
+            raise ConflictError(detail) from error
+        if error.code == 400:
+            # Validation messages are written for the user; pass them through.
+            raise ValidationFailed(detail) from error
         raise BackendError(f"Staff & Shift service returned {error.code}: {detail}") from error
 
     except urllib.error.URLError as error:
@@ -205,6 +263,70 @@ def search_staff(query: Optional[str] = None,
                              "role": role,
                              "availability_status": availability_status,
                              "employment_status": employment_status})
+
+
+# --------------------------------------------------------------------------
+# Temporary unavailability requests (Scenario C)
+# --------------------------------------------------------------------------
+# Employee self-service routes are nested under the staff member; the review
+# queue is a manager-only collection. That split is the backend's, mirrored
+# here so the URL itself says who the call is for.
+
+
+def list_staff_requests(staff_id: int,
+                        request_status: Optional[str] = None) -> Dict[str, Any]:
+    """GET /api/staff/<id>/unavailability-requests — an employee's own requests."""
+    return _request("GET", f"/api/staff/{staff_id}/unavailability-requests",
+                     params={"request_status": request_status})
+
+
+def create_staff_request(staff_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """POST /api/staff/<id>/unavailability-requests — submit a new request."""
+    return _request("POST", f"/api/staff/{staff_id}/unavailability-requests",
+                     payload=payload)
+
+
+def cancel_staff_request(staff_id: int, request_id: int) -> Dict[str, Any]:
+    """PUT /api/staff/<id>/unavailability-requests/<rid>/cancel — withdraw own Pending request."""
+    return _request(
+        "PUT", f"/api/staff/{staff_id}/unavailability-requests/{request_id}/cancel")
+
+
+def list_unavailability_requests(request_status: Optional[str] = None,
+                                 staff_id: Optional[int] = None) -> Dict[str, Any]:
+    """GET /api/unavailability-requests — manager review queue."""
+    return _request("GET", "/api/unavailability-requests",
+                     params={"request_status": request_status, "staff_id": staff_id})
+
+
+def get_unavailability_request(request_id: int) -> Dict[str, Any]:
+    """GET /api/unavailability-requests/<id> — request plus derived affected shifts.
+
+    `affected_assignments` is calculated from the request dates against live
+    assignments each time it is asked for. Nothing about the conflict is
+    stored, so it can never go stale against the roster.
+    """
+    return _request("GET", f"/api/unavailability-requests/{request_id}")
+
+
+def review_unavailability_request(request_id: int, decision: str,
+                                  reviewed_by: str) -> Dict[str, Any]:
+    """PUT /api/unavailability-requests/<id>/review — approve or reject.
+
+    Records the decision only. It does not unassign anybody, and it does not
+    touch staff.availability_status; acting on the roster stays a separate,
+    deliberate manager action.
+    """
+    return _request("PUT", f"/api/unavailability-requests/{request_id}/review",
+                     payload={"decision": decision, "reviewed_by": reviewed_by})
+
+
+#: Reasons offered in the submission form. Free text is still accepted by the
+#: backend; this list only shapes the UI.
+REQUEST_REASONS = ("Personal", "Vacation", "Study leave", "Medical", "Other")
+
+#: Lifecycle states of a temporary unavailability request.
+REQUEST_STATUSES = ("Pending", "Approved", "Rejected", "Cancelled")
 
 
 #: Values accepted by PUT /api/staff/<id>/availability, mirroring the

@@ -64,5 +64,22 @@
     <span class="kpi__sub">Scheduled for {{ today }}</span>
   </div>
 
+  {#- A plain link, not an HTMX swap: this KPI leads to another page rather
+      than refreshing a region here. -#}
+  <a class="kpi kpi--link" href="/requests?status=Pending">
+    <span class="kpi__label">Requests to review</span>
+    <span class="kpi__value{% if kpis.pending_requests %} kpi__value--warning{% endif %}"
+          data-numeric>{{ kpis.pending_requests if kpis.pending_requests is not none else '—' }}</span>
+    <span class="kpi__sub">
+      {%- if kpis.pending_requests is none -%}
+        Request queue unavailable
+      {%- elif kpis.pending_requests -%}
+        Unavailability requests awaiting a decision
+      {%- else -%}
+        Nothing awaiting a decision
+      {%- endif -%}
+    </span>
+  </a>
+
 </div>
 {% endif %}

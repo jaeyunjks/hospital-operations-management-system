@@ -1,0 +1,178 @@
+{#- One request, with everything the manager needs to decide.
+
+    Rendered into #request-detail. Actions inside target that same region and
+    swap this partial back; no load trigger is declared anywhere here. -#}
+{% if not_found %}
+<section class="panel">
+  <div class="panel__body">
+    <div class="empty">
+      <p class="empty__title">Request not found</p>
+      <p class="empty__body">It may have been removed since the queue was loaded.</p>
+    </div>
+  </div>
+</section>
+
+{% elif record is none %}
+<section class="panel">
+  <div class="panel__body">
+    <div class="alert alert--danger" role="alert">
+      <div>
+        <p class="alert__title">Request unavailable</p>
+        <p class="alert__body">{{ error }}</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+{% else %}
+<section class="panel" aria-labelledby="request-detail-title">
+
+  <div class="panel__header">
+    <div class="request-detail__identity">
+      <span class="avatar" aria-hidden="true">{{ initials }}</span>
+      <div>
+        <h2 class="panel__title" id="request-detail-title">{{ record.staff_name }}</h2>
+        <p class="panel__meta">{{ record.staff_role }} · {{ record.staff_department }}</p>
+      </div>
+    </div>
+    <span class="{{ record.badge_class }}">{{ record.request_status }}</span>
+  </div>
+
+  <div class="panel__body">
+
+    {% if notice %}
+    <div class="alert alert--success" role="status">
+      <div><p class="alert__body">{{ notice }}</p></div>
+    </div>
+    {% endif %}
+
+    {% if error %}
+    <div class="alert alert--danger" role="alert">
+      <div>
+        <p class="alert__title">Decision not recorded</p>
+        <p class="alert__body">{{ error }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    <dl class="request-facts">
+      <div class="request-facts__item">
+        <dt class="u-label">Period</dt>
+        <dd>
+          <span class="u-mono">{{ date_long(record.start_date) }}</span>
+          {% if record.start_date != record.end_date %}
+          <span class="u-muted">to</span>
+          <span class="u-mono">{{ date_long(record.end_date) }}</span>
+          {% endif %}
+          {% if record.day_count %}
+          <span class="u-muted">({{ record.day_count }} day{{ '' if record.day_count == 1 else 's' }}, inclusive)</span>
+          {% endif %}
+        </dd>
+      </div>
+
+      <div class="request-facts__item">
+        <dt class="u-label">Reason</dt>
+        <dd>{{ record.reason }}</dd>
+      </div>
+
+      {% if record.notes %}
+      <div class="request-facts__item">
+        <dt class="u-label">Notes from employee</dt>
+        <dd>{{ record.notes }}</dd>
+      </div>
+      {% endif %}
+
+      <div class="request-facts__item">
+        <dt class="u-label">Submitted</dt>
+        <dd>{{ record.submitted_display }}</dd>
+      </div>
+
+      {% if record.reviewed_by %}
+      <div class="request-facts__item">
+        <dt class="u-label">Decision</dt>
+        <dd>
+          {{ record.request_status }} by {{ record.reviewed_by }}
+          {%- if record.reviewed_display %} · {{ record.reviewed_display }}{% endif %}
+        </dd>
+      </div>
+      {% endif %}
+    </dl>
+
+    {# ------------------------------------------------- affected shifts #}
+    <div class="request-detail__section">
+      <h3 class="u-label">Shifts in this period</h3>
+      <p class="u-muted">
+        Calculated now from the live roster — not stored with the request, so
+        it cannot go stale.
+      </p>
+
+      {% if affected_active %}
+      <ul role="list" class="affected-list">
+        {% for shift in affected_active %}
+        <li class="affected-item">
+          <span class="affected-item__when u-mono">
+            {{ shift.shift_date }} {{ shift.start_time }}–{{ shift.end_time }}
+          </span>
+          <span class="affected-item__dept">{{ shift.department }}</span>
+          <span class="badge-neutral">{{ shift.assignment_status }}</span>
+          {#- Reuses the existing shift planner deep link rather than
+              duplicating assignment controls in this panel. -#}
+          <a class="btn-secondary btn-compact"
+             href="/shifts?date={{ shift.shift_date }}&amp;department={{ shift.department | urlencode }}&amp;selected_shift_id={{ shift.shift_id }}&amp;view=week">
+            Manage shift
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+
+      <p class="u-muted request-detail__caution">
+        {% if record.request_status == 'Approved' %}
+        These assignments still stand. Approval does not unassign anyone —
+        reassign each shift from the planner if cover is needed.
+        {% else %}
+        Approving will not unassign anyone. Reassign from the planner if cover
+        is needed.
+        {% endif %}
+      </p>
+
+      {% else %}
+      <p class="u-muted">
+        No active assignments fall in this period.
+      </p>
+      {% endif %}
+    </div>
+
+    {# ------------------------------------------------------- decision #}
+    {% if record.is_open %}
+    <form class="request-decision"
+          hx-post="/partials/requests/{{ record.request_id }}/review"
+          hx-target="#request-detail" hx-swap="innerHTML"
+          hx-indicator="#loading-indicator">
+      <h3 class="u-label">Decision</h3>
+      <p class="u-muted">
+        Recorded against your name. A decision is final — it cannot be
+        changed afterwards.
+      </p>
+      <div class="row request-decision__actions">
+        <button class="btn-primary btn-compact" type="submit"
+                name="decision" value="Approved"
+                hx-confirm="Approve this request? The decision is final and the roster will not change automatically.">
+          Approve
+        </button>
+        <button class="btn-secondary btn-compact" type="submit"
+                name="decision" value="Rejected"
+                hx-confirm="Reject this request? The decision is final.">
+          Reject
+        </button>
+      </div>
+    </form>
+
+    {% else %}
+    <p class="u-muted request-detail__closed">
+      This request is {{ record.request_status | lower }} and can no longer be changed.
+    </p>
+    {% endif %}
+
+  </div>
+</section>
+{% endif %}

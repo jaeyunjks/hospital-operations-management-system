@@ -123,6 +123,51 @@ CREATE TABLE IF NOT EXISTS staff_weekly_availability (
         UNIQUE (staff_id, day_of_week, start_time, end_time)
 );
 
+
+-- --------------------------------------------------------------------------
+-- STAFF_UNAVAILABILITY_REQUEST — temporary, date-specific unavailability
+-- --------------------------------------------------------------------------
+-- Distinct from the three availability concepts already modelled:
+--   staff.availability_status        current operational scheduling status
+--   staff_weekly_availability        recurring weekly pattern
+--   shift_assignment                 actual allocation to a real shift
+-- This table holds a request for a specific CALENDAR DATE RANGE, with its own
+-- review lifecycle. Approving one never mutates availability_status.
+--
+-- Lifecycle is one-way: Pending -> Approved | Rejected | Cancelled.
+-- Terminal states never transition again (enforced in the service layer).
+-- reviewed_by is TEXT, matching shift_assignment.approved_by: Release 0 has
+-- no user table. It stays NULL for Pending and for employee Cancellations,
+-- so a cancellation never implies a manager reviewed it.
+--
+-- Overlap between active (Pending/Approved) requests is rejected in the
+-- service layer, since SQLite CHECK cannot express a cross-row rule.
+CREATE TABLE IF NOT EXISTS staff_unavailability_request (
+    request_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    staff_id        INTEGER NOT NULL,
+    start_date      TEXT    NOT NULL,   -- 'YYYY-MM-DD'
+    end_date        TEXT    NOT NULL,   -- 'YYYY-MM-DD', inclusive
+    reason          TEXT    NOT NULL,
+    notes           TEXT,
+    request_status  TEXT    NOT NULL DEFAULT 'Pending',
+    reviewed_by     TEXT,
+    reviewed_at     TEXT,
+    created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+
+    CONSTRAINT chk_request_status
+        CHECK (request_status IN ('Pending', 'Approved', 'Rejected', 'Cancelled')),
+
+    CONSTRAINT chk_request_dates
+        CHECK (start_date <= end_date),
+
+    -- A request carries no audit value once the staff record is gone,
+    -- matching staff_weekly_availability rather than assignment history.
+    CONSTRAINT fk_request_staff
+        FOREIGN KEY (staff_id) REFERENCES staff (staff_id)
+        ON DELETE CASCADE
+);
+
 -- --------------------------------------------------------------------------
 -- Indexes — support the common lookups of the backend/API microservice
 -- --------------------------------------------------------------------------
@@ -140,6 +185,11 @@ CREATE INDEX IF NOT EXISTS idx_assignment_status    ON shift_assignment (assignm
 
 CREATE INDEX IF NOT EXISTS idx_weekly_availability_staff
     ON staff_weekly_availability (staff_id);
+
+CREATE INDEX IF NOT EXISTS idx_unavailability_staff
+    ON staff_unavailability_request (staff_id);
+CREATE INDEX IF NOT EXISTS idx_unavailability_status
+    ON staff_unavailability_request (request_status);
 
 -- --------------------------------------------------------------------------
 -- Triggers — keep updated_at accurate for UPDATE operations (CRUD support)
@@ -171,4 +221,12 @@ FOR EACH ROW
 BEGIN
     UPDATE staff_weekly_availability SET updated_at = datetime('now')
     WHERE availability_id = OLD.availability_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_unavailability_request_updated_at
+AFTER UPDATE ON staff_unavailability_request
+FOR EACH ROW
+BEGIN
+    UPDATE staff_unavailability_request SET updated_at = datetime('now')
+    WHERE request_id = OLD.request_id;
 END;
