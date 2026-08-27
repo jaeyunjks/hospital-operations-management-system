@@ -301,3 +301,89 @@ class TestStaffDetailAndEmploymentFilter:
     def test_search_combines_with_employment_filter(self, client):
         body = client.get("/api/staff/search?q=a&employment_status=Full-Time").get_json()
         assert all(s["employment_status"] == "Full-Time" for s in body["staff"])
+
+
+# ------------------------------------------------- weekly availability
+class TestWeeklyAvailability:
+    URL = "/api/staff/1/weekly-availability"
+
+    def _periods(self, *specs):
+        return {"periods": [{"day_of_week": d, "start_time": s, "end_time": e}
+                            for d, s, e in specs]}
+
+    def test_get_returns_seeded_pattern(self, client):
+        body = client.get(self.URL).get_json()
+        assert body["staff_id"] == 1
+        assert body["count"] >= 1
+        assert body["periods"][0]["start_time"] == "07:00"
+
+    def test_get_unknown_staff(self, client):
+        assert client.get("/api/staff/999/weekly-availability").status_code == 404
+
+    def test_replace_pattern(self, client):
+        response = client.put(self.URL, json=self._periods(
+            (0, "07:00", "15:00"), (2, "15:00", "23:00")))
+        assert response.status_code == 200
+        assert response.get_json()["count"] == 2
+
+    def test_replace_with_empty_list_clears_pattern(self, client):
+        assert client.put(self.URL, json={"periods": []}).get_json()["count"] == 0
+
+    def test_overnight_period_is_valid(self, client):
+        """end_time < start_time is an overnight period, not a malformed one."""
+        response = client.put(self.URL, json=self._periods((3, "23:00", "07:00")))
+        assert response.status_code == 200
+
+    def test_adjacent_periods_do_not_overlap(self, client):
+        response = client.put(self.URL, json=self._periods(
+            (0, "07:00", "15:00"), (0, "15:00", "23:00")))
+        assert response.status_code == 200
+
+    def test_rejects_overlapping_periods(self, client):
+        response = client.put(self.URL, json=self._periods(
+            (0, "07:00", "15:00"), (0, "14:00", "20:00")))
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "validation_error"
+
+    def test_rejects_exact_duplicate(self, client):
+        response = client.put(self.URL, json=self._periods(
+            (0, "07:00", "15:00"), (0, "07:00", "15:00")))
+        assert response.status_code == 400
+
+    def test_rejects_overnight_overlapping_next_day(self, client):
+        """Mon 23:00-07:00 spills into Tuesday and must clash with Tue 02:00."""
+        response = client.put(self.URL, json=self._periods(
+            (0, "23:00", "07:00"), (1, "02:00", "06:00")))
+        assert response.status_code == 400
+
+    def test_rejects_week_boundary_overlap(self, client):
+        """Sun 23:00-07:00 wraps into Monday and must clash with Mon 02:00."""
+        response = client.put(self.URL, json=self._periods(
+            (6, "23:00", "07:00"), (0, "02:00", "05:00")))
+        assert response.status_code == 400
+
+    def test_rejects_zero_length_period(self, client):
+        response = client.put(self.URL, json=self._periods((0, "07:00", "07:00")))
+        assert response.status_code == 400
+
+    def test_rejects_invalid_day(self, client):
+        response = client.put(self.URL, json=self._periods((9, "07:00", "15:00")))
+        assert response.status_code == 400
+
+    def test_rejects_invalid_time(self, client):
+        response = client.put(self.URL, json=self._periods((0, "7am", "15:00")))
+        assert response.status_code == 400
+
+    def test_rejects_non_list_payload(self, client):
+        assert client.put(self.URL, json={"periods": "monday"}).status_code == 400
+
+    def test_replace_unknown_staff(self, client):
+        response = client.put("/api/staff/999/weekly-availability",
+                              json={"periods": []})
+        assert response.status_code == 404
+
+    def test_no_availability_state_is_persisted(self, client):
+        """The model is sparse: rows are available periods, with no state field."""
+        client.put(self.URL, json=self._periods((0, "07:00", "15:00")))
+        period = client.get(self.URL).get_json()["periods"][0]
+        assert "availability_state" not in period

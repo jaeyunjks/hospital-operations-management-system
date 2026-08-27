@@ -123,3 +123,91 @@ def validate_shift_payload(payload: Dict[str, Any], partial: bool = False) -> Di
             raise ValidationError("'start_time' and 'end_time' must differ.")
 
     return cleaned
+
+
+# ==========================================================================
+# Weekly availability
+# ==========================================================================
+DAYS_OF_WEEK = ("Monday", "Tuesday", "Wednesday", "Thursday",
+                "Friday", "Saturday", "Sunday")
+
+MINUTES_PER_DAY = 24 * 60
+MINUTES_PER_WEEK = 7 * MINUTES_PER_DAY
+
+
+def _to_minutes(value: str) -> int:
+    hours, minutes = value.split(":")
+    return int(hours) * 60 + int(minutes)
+
+
+def weekly_period_segments(day_of_week: int, start_time: str, end_time: str):
+    """Map one weekly period onto absolute minute segments in a 7-day week.
+
+    An overnight period (``end_time <= start_time``) wraps into the following
+    day, and a Sunday-night period wraps around to Monday — so a period can
+    produce two segments. Returning segments lets overlap be tested with plain
+    linear comparisons instead of modular arithmetic at every call site.
+    """
+    start = day_of_week * MINUTES_PER_DAY + _to_minutes(start_time)
+    length = (_to_minutes(end_time) - _to_minutes(start_time)) % MINUTES_PER_DAY
+    if length == 0:                       # guarded earlier; belt and braces
+        length = MINUTES_PER_DAY
+    end = start + length
+
+    if end <= MINUTES_PER_WEEK:
+        return [(start, end)]
+    # Wraps past Sunday midnight back into Monday.
+    return [(start, MINUTES_PER_WEEK), (0, end - MINUTES_PER_WEEK)]
+
+
+def _segments_overlap(first, second) -> bool:
+    return any(a_start < b_end and b_start < a_end
+               for a_start, a_end in first
+               for b_start, b_end in second)
+
+
+def validate_weekly_availability(periods: Any) -> List[Dict[str, Any]]:
+    """Validate a complete weekly availability pattern.
+
+    The model is sparse: every submitted period IS an available period, so no
+    state field is accepted. Rejects malformed days/times, zero-length
+    periods, and any pair of OVERLAPPING intervals — not merely exact
+    duplicates — including overnight and week-boundary wraps.
+    """
+    if not isinstance(periods, list):
+        raise ValidationError("'periods' must be a list.")
+
+    cleaned: List[Dict[str, Any]] = []
+    segments: List[Any] = []
+
+    for index, period in enumerate(periods):
+        if not isinstance(period, dict):
+            raise ValidationError(f"Period {index} must be an object.")
+
+        day = period.get("day_of_week")
+        if isinstance(day, bool) or not isinstance(day, int) or not 0 <= day <= 6:
+            raise ValidationError(
+                "'day_of_week' must be an integer from 0 (Monday) to 6 (Sunday).",
+                {"index": index, "received": day})
+
+        start = validate_time(period.get("start_time"), "start_time")
+        end = validate_time(period.get("end_time"), "end_time")
+        if start == end:
+            raise ValidationError(
+                "'start_time' and 'end_time' must differ.", {"index": index})
+
+        current = weekly_period_segments(day, start, end)
+        for position, existing in enumerate(segments):
+            if _segments_overlap(current, existing):
+                raise ValidationError(
+                    "Availability periods must not overlap.",
+                    {"index": index, "overlaps_index": position})
+        segments.append(current)
+
+        entry = {"day_of_week": day, "start_time": start, "end_time": end}
+        notes = period.get("notes")
+        if notes:
+            entry["notes"] = validate_non_empty_string(notes, "notes")
+        cleaned.append(entry)
+
+    return cleaned

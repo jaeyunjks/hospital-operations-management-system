@@ -1,0 +1,79 @@
+{#- Weekly availability matrix editor. Swapped into #staff-drawer; carries no
+    hx-trigger of its own. Checkboxes are presentation — the server expands
+    them into real start/end times before persisting. -#}
+<div class="drawer__header">
+  <span class="u-label" id="drawer-heading">Edit weekly availability</span>
+  <button class="drawer__close" type="button" data-drawer-close
+          aria-label="Close staff detail">&times;</button>
+</div>
+
+{% if error %}
+<div class="drawer__body">
+  <div class="alert alert--danger" role="alert">
+    <div>
+      <p class="alert__title">Weekly availability unavailable</p>
+      <p class="alert__body">{{ error }}</p>
+    </div>
+  </div>
+</div>
+
+{% else %}
+<div class="drawer__body stack">
+  <p class="drawer__muted">
+    Tick the periods {{ person.name }} is normally available. Unticked periods
+    mean not available. This is a recurring pattern, not date-specific leave.
+  </p>
+
+  <form hx-post="/partials/staff/{{ person.staff_id }}/weekly-availability"
+        hx-target="#staff-drawer" hx-swap="innerHTML"
+        hx-indicator="#loading-indicator">
+    <div class="weekly-scroll">
+      <table class="weekly-grid">
+        <caption class="visually-hidden">
+          Weekly availability editor for {{ person.name }}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col"><span class="visually-hidden">Time band</span></th>
+            {% for label in ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"] %}
+            <th scope="col">{{ label }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {#- Capture the band index here: inside the inner cells loop,
+              `loop` refers to that loop, so loop.index0 would be the day. -#}
+          {% for row in grid %}
+          {% set band_index = loop.index0 %}
+          <tr>
+            <th scope="row" class="weekly-grid__band">
+              <span class="weekly-grid__band-name">{{ row.band }}</span>
+              <span class="weekly-grid__band-time u-mono">{{ row.start }}–{{ row.end }}</span>
+            </th>
+            {% for cell in row.cells %}
+            <td class="weekly-grid__cell">
+              <label class="weekly-check">
+                <input type="checkbox" name="slot" value="{{ cell.day }}-{{ band_index }}"
+                       {% if cell.available %}checked{% endif %}>
+                <span class="visually-hidden">
+                  {{ row.band }} on {{ cell.day_name }}, {{ row.start }} to {{ row.end }}
+                </span>
+              </label>
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="row" style="margin-top: var(--space-5);">
+      <button class="btn-primary btn-compact" type="submit">Save weekly availability</button>
+      <button class="btn-secondary btn-compact" type="button"
+              hx-get="/partials/staff/{{ person.staff_id }}"
+              hx-target="#staff-drawer" hx-swap="innerHTML"
+              hx-indicator="#loading-indicator">Cancel</button>
+    </div>
+  </form>
+</div>
+{% endif %}

@@ -442,8 +442,12 @@ def test_drawer_contains_no_fabricated_mockup_fields(frontend_client, fe_api_cli
     monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
     monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
     body = frontend_client.get("/partials/staff/1").data.decode().lower()
+    # "weekly availability" was forbidden while the schema could not support
+    # it; it is now a real persisted feature, so the guard targets the mockup
+    # concepts that remain unbacked by data.
     for forbidden in ("qualification", "bank contract", "band 5", "band 6",
-                      "weekly availability", "confidence", "suitability"):
+                      "confidence", "suitability",
+                      "shift short", "open gaps", "matches 3"):
         assert forbidden not in body, forbidden
 
 
@@ -1046,3 +1050,145 @@ def test_planner_returned_fragment_cannot_self_trigger():
     ).read_text()
     assert 'hx-trigger="load' not in template
     assert "fetch(" not in template
+
+
+# ------------------------------------------- weekly availability (UI)
+def _weekly(*specs):
+    return {"periods": [{"day_of_week": d, "start_time": s, "end_time": e}
+                        for d, s, e in specs]}
+
+
+def _drawer_stubs(monkeypatch, client_module, periods=None, shifts=None):
+    monkeypatch.setattr(client_module, "get_staff",
+                        lambda sid: {"staff": STAFF_FIXTURE[0]})
+    monkeypatch.setattr(client_module, "list_staff_shifts",
+                        lambda sid: {"shifts": shifts or []})
+    monkeypatch.setattr(client_module, "get_weekly_availability",
+                        lambda sid: periods if periods is not None else _weekly())
+
+
+def _grid_cells(body):
+    """Return only the grid's cell markup.
+
+    The legend also uses the weekly-cell--* classes, so assertions must look
+    at the table body rather than the whole drawer.
+    """
+    start = body.find("<tbody>", body.find("weekly-grid"))
+    return body[start:body.find("</tbody>", start)] if start != -1 else ""
+
+
+def test_weekly_grid_renders_three_bands(frontend_client, fe_api_client, monkeypatch):
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")))
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert "Weekly availability" in body
+    for band in ("Morning", "Afternoon", "Night"):
+        assert band in body
+
+
+def test_weekly_grid_marks_available_cell(frontend_client, fe_api_client, monkeypatch):
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")))
+    cells = _grid_cells(frontend_client.get("/partials/staff/1").data.decode())
+    assert "weekly-cell--available" in cells
+    # Sparse model: everything not stored renders as not available.
+    assert "weekly-cell--unavailable" in cells
+
+
+def test_weekly_grid_empty_pattern_is_all_unavailable(frontend_client, fe_api_client, monkeypatch):
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly())
+    cells = _grid_cells(frontend_client.get("/partials/staff/1").data.decode())
+    assert "weekly-cell--available" not in cells
+    assert "weekly-cell--rostered" not in cells
+
+
+def test_weekly_grid_overlays_real_assignment_as_rostered(frontend_client, fe_api_client, monkeypatch):
+    """A real assignment in the displayed week upgrades an available cell to
+    rostered, without changing the stored pattern."""
+    import datetime
+    monday = datetime.date.today() - datetime.timedelta(days=datetime.date.today().weekday())
+    shift = {"shift_id": 1, "department": "Emergency", "shift_date": monday.isoformat(),
+             "start_time": "07:00", "end_time": "15:00", "shift_status": "Planned",
+             "assignment_id": 1, "assignment_status": "Confirmed"}
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")), [shift])
+    cells = _grid_cells(frontend_client.get("/partials/staff/1").data.decode())
+    assert "weekly-cell--rostered" in cells
+
+
+def test_rostered_requires_stored_availability(frontend_client, fe_api_client, monkeypatch):
+    """An assignment on a day with no stored availability must not invent one."""
+    import datetime
+    monday = datetime.date.today() - datetime.timedelta(days=datetime.date.today().weekday())
+    shift = {"shift_id": 1, "department": "Emergency", "shift_date": monday.isoformat(),
+             "start_time": "07:00", "end_time": "15:00", "shift_status": "Planned",
+             "assignment_id": 1, "assignment_status": "Confirmed"}
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly(), [shift])
+    cells = _grid_cells(frontend_client.get("/partials/staff/1").data.decode())
+    assert "weekly-cell--rostered" not in cells
+
+
+def test_weekly_section_survives_backend_failure(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    monkeypatch.setattr(fe_api_client, "get_weekly_availability", _raise_unavailable)
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert "Amara Okafor" in body                      # drawer still renders
+    assert "Weekly availability is unavailable" in body
+
+
+def test_weekly_editor_loads_with_stored_slots_checked(frontend_client, fe_api_client, monkeypatch):
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")))
+    body = frontend_client.get(
+        "/partials/staff/1/weekly-availability/edit").data.decode()
+    assert 'value="0-0"' in body
+    # 21 slots: 7 days x 3 bands, each with a distinct day-band value.
+    import re
+    assert len(set(re.findall(r'value="([0-6]-[0-2])"', body))) == 21
+
+
+def test_weekly_editor_save_persists_structured_periods(frontend_client, fe_api_client, monkeypatch):
+    captured = {}
+
+    def fake_replace(staff_id, periods):
+        captured["periods"] = periods
+        return {"periods": periods}
+
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly())
+    monkeypatch.setattr(fe_api_client, "replace_weekly_availability", fake_replace)
+    response = frontend_client.post("/partials/staff/1/weekly-availability",
+                                    data={"slot": ["0-0", "3-2"]})
+    assert response.status_code == 200
+    # UI symbols are never persisted — slots expand to real times.
+    assert captured["periods"] == [
+        {"day_of_week": 0, "start_time": "07:00", "end_time": "15:00"},
+        {"day_of_week": 3, "start_time": "23:00", "end_time": "07:00"},
+    ]
+    assert "Weekly availability updated." in response.data.decode()
+
+
+def test_weekly_editor_save_ignores_malformed_slots(frontend_client, fe_api_client, monkeypatch):
+    captured = {}
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly())
+    monkeypatch.setattr(fe_api_client, "replace_weekly_availability",
+                        lambda sid, periods: captured.setdefault("p", periods) or {"periods": periods})
+    frontend_client.post("/partials/staff/1/weekly-availability",
+                         data={"slot": ["0-0", "9-9", "bad", "2-99"]})
+    assert captured["p"] == [{"day_of_week": 0, "start_time": "07:00", "end_time": "15:00"}]
+
+
+def test_weekly_editor_save_failure_reports_error(frontend_client, fe_api_client, monkeypatch):
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly())
+    monkeypatch.setattr(fe_api_client, "replace_weekly_availability", _raise_unavailable)
+    body = frontend_client.post("/partials/staff/1/weekly-availability",
+                                data={"slot": ["0-0"]}).data.decode()
+    assert "Weekly availability was not saved." in body
+
+
+def test_on_leave_retains_weekly_pattern(frontend_client, fe_api_client, monkeypatch):
+    """A global status change must not erase the recurring schedule."""
+    on_leave = {**STAFF_FIXTURE[0], "availability_status": "On Leave"}
+    monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": on_leave})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
+    monkeypatch.setattr(fe_api_client, "get_weekly_availability",
+                        lambda sid: _weekly((0, "07:00", "15:00")))
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert "weekly-cell--available" in body
+    assert "overrides scheduling eligibility" in body

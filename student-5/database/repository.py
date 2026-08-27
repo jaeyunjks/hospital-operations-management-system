@@ -285,3 +285,50 @@ def count_rows(connection: sqlite3.Connection, table: str) -> int:
     if table not in PRIMARY_KEYS:
         raise ValueError(f"Unknown table: {table}")
     return int(connection.execute(f"SELECT COUNT(*) FROM {table};").fetchone()[0])
+
+
+# ==========================================================================
+# STAFF_WEEKLY_AVAILABILITY
+# --------------------------------------------------------------------------
+# Sparse: each row is an available period. Absence of a row means the staff
+# member is not available then. Roster state is never stored here.
+# ==========================================================================
+def list_weekly_availability(connection: sqlite3.Connection,
+                             staff_id: int) -> List[Dict[str, Any]]:
+    """Return one staff member's recurring weekly availability periods."""
+    rows = connection.execute(
+        """
+        SELECT * FROM staff_weekly_availability
+        WHERE staff_id = ?
+        ORDER BY day_of_week, start_time;
+        """,
+        (staff_id,),
+    ).fetchall()
+    return _rows_to_dicts(rows)
+
+
+def replace_weekly_availability(connection: sqlite3.Connection, staff_id: int,
+                                periods: List[Dict[str, Any]]) -> int:
+    """Replace the whole weekly pattern for one staff member.
+
+    Full replacement matches how the matrix editor submits: the client sends
+    the complete intended week, so a partial-diff API would be harder to keep
+    consistent. Runs inside the caller's transaction, so a failure part-way
+    leaves the previous pattern intact.
+    """
+    connection.execute(
+        "DELETE FROM staff_weekly_availability WHERE staff_id = ?;", (staff_id,)
+    )
+    if not periods:
+        return 0
+
+    connection.executemany(
+        """
+        INSERT INTO staff_weekly_availability (
+            staff_id, day_of_week, start_time, end_time, notes
+        ) VALUES (?, ?, ?, ?, ?);
+        """,
+        [(staff_id, p["day_of_week"], p["start_time"], p["end_time"], p.get("notes"))
+         for p in periods],
+    )
+    return len(periods)

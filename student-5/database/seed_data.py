@@ -76,6 +76,63 @@ ASSIGNMENT_SEED: List[Tuple] = [
 ]
 
 
+# --------------------------------------------------------------------------
+# STAFF_WEEKLY_AVAILABILITY — recurring availability, owned by HOMS
+# --------------------------------------------------------------------------
+# Sparse: each row is an AVAILABLE period. No row for a day/band means the
+# staff member is not normally available then — no "Unavailable" rows exist.
+#
+# Patterns are deliberately consistent with ASSIGNMENT_SEED: wherever someone
+# is rostered above, the matching weekday band appears here, so the UI's
+# "Rostered" overlay always lands on a genuinely available period. Extra open
+# periods are included so gaps and variety are visible.
+#
+# Bands mirror the roster conventions already present in SHIFT_SEED:
+MORNING = ("07:00", "15:00")
+AFTERNOON = ("15:00", "23:00")
+NIGHT = ("23:00", "07:00")     # crosses midnight; valid, not a duplicate
+
+MON, TUE, WED, THU, FRI, SAT, SUN = range(7)
+
+#: staff_id -> [(day_of_week, band), ...]
+_WEEKLY_PATTERN = {
+    # Amara Okafor — ED RN. Rostered Mon 07-15, Fri 07-15, Thu night.
+    1:  [(MON, MORNING), (TUE, MORNING), (THU, NIGHT), (FRI, MORNING)],
+    # Daniel Reyes — ED doctor. Rostered Mon 15-23.
+    2:  [(MON, AFTERNOON), (WED, AFTERNOON), (FRI, AFTERNOON)],
+    # Priya Nandakumar — ICU RN, part-time. Rostered Mon night, Fri day.
+    3:  [(MON, NIGHT), (TUE, MORNING), (WED, MORNING), (FRI, MORNING)],
+    # Liam O'Sullivan — enrolled nurse, casual. Rostered Tue afternoon.
+    4:  [(TUE, AFTERNOON), (SAT, AFTERNOON)],
+    # Mei Lin Tan — on leave. The pattern is retained: a global status change
+    # must not erase the recurring schedule.
+    5:  [(WED, MORNING), (THU, MORNING)],
+    # Grace Mwangi — midwife. Rostered Tue 07-19 (spans two bands).
+    6:  [(TUE, MORNING), (TUE, AFTERNOON), (THU, MORNING)],
+    # Hassan Al-Rashid — surgery RN. Rostered Fri 07-15 and Sat 08-16.
+    7:  [(FRI, MORNING), (SAT, MORNING), (SUN, MORNING)],
+    # Sofia Petrova — physiotherapist, part-time. Rostered Wed 09-17.
+    8:  [(WED, MORNING), (WED, AFTERNOON)],
+    # Ethan Brooks — ward clerk, casual. Rostered Sat 06-14.
+    9:  [(SAT, MORNING), (SUN, MORNING)],
+    # Rina Kobayashi — pharmacist. Rostered Wed 08-16.
+    10: [(MON, MORNING), (WED, MORNING), (THU, MORNING)],
+    # Tomas Novak — currently Unavailable. The weekly pattern still exists,
+    # demonstrating that operational status and weekly availability are
+    # independent concepts.
+    11: [(THU, MORNING)],
+    # Chloe Bennett — ICU RN. Rostered Mon 07-15, Mon night, Fri 07-19.
+    12: [(MON, MORNING), (MON, NIGHT), (THU, NIGHT), (FRI, MORNING)],
+}
+
+#: (staff_id, day_of_week, start_time, end_time, notes)
+WEEKLY_AVAILABILITY_SEED: List[Tuple] = [
+    (staff_id, day, band[0], band[1], None)
+    for staff_id, periods in _WEEKLY_PATTERN.items()
+    for day, band in periods
+]
+
+
 def seed(connection: sqlite3.Connection) -> Dict[str, int]:
     """Insert all seed records and return the number of rows added per table.
 
@@ -111,10 +168,20 @@ def seed(connection: sqlite3.Connection) -> Dict[str, int]:
         ASSIGNMENT_SEED,
     )
 
+    connection.executemany(
+        """
+        INSERT INTO staff_weekly_availability (
+            staff_id, day_of_week, start_time, end_time, notes
+        ) VALUES (?, ?, ?, ?, ?);
+        """,
+        WEEKLY_AVAILABILITY_SEED,
+    )
+
     return {
         "staff": len(STAFF_SEED),
         "shift": len(SHIFT_SEED),
         "shift_assignment": len(ASSIGNMENT_SEED),
+        "staff_weekly_availability": len(WEEKLY_AVAILABILITY_SEED),
     }
 
 

@@ -169,6 +169,17 @@ def list_staff_shifts(staff_id: int) -> Dict[str, Any]:
     return _request("GET", f"/api/staff/{staff_id}/shifts")
 
 
+def get_weekly_availability(staff_id: int) -> Dict[str, Any]:
+    """GET /api/staff/<id>/weekly-availability — recurring weekly pattern."""
+    return _request("GET", f"/api/staff/{staff_id}/weekly-availability")
+
+
+def replace_weekly_availability(staff_id: int, periods) -> Dict[str, Any]:
+    """PUT /api/staff/<id>/weekly-availability — replace the whole pattern."""
+    return _request("PUT", f"/api/staff/{staff_id}/weekly-availability",
+                     payload={"periods": periods})
+
+
 def update_availability(staff_id: int, availability_status: str) -> Dict[str, Any]:
     """PUT /api/staff/<id>/availability — set operational availability.
 

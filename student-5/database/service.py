@@ -107,6 +107,22 @@ def create_app() -> Flask:
             return jsonify({"error": "not_found", "message": f"Staff {staff_id} not found."}), 404
         return "", 204
 
+    @app.get("/staff/<int:staff_id>/weekly-availability")
+    def weekly_availability(staff_id: int):
+        with db.get_connection() as connection:
+            return jsonify(repository.list_weekly_availability(connection, staff_id))
+
+    @app.put("/staff/<int:staff_id>/weekly-availability")
+    def replace_weekly_availability(staff_id: int):
+        payload = request.get_json(silent=True) or {}
+        with db.get_connection() as connection:
+            if repository.get_staff(connection, staff_id) is None:
+                return jsonify({"error": "not_found",
+                                "message": f"Staff {staff_id} not found."}), 404
+            repository.replace_weekly_availability(
+                connection, staff_id, payload.get("periods") or [])
+            return jsonify(repository.list_weekly_availability(connection, staff_id))
+
     @app.get("/staff/<int:staff_id>/shifts")
     def shifts_for_staff(staff_id: int):
         with db.get_connection() as connection:

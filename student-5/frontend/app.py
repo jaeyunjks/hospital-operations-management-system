@@ -385,6 +385,92 @@ def _split_shifts(shifts):
     return current, upcoming
 
 
+#: Display bands for the weekly grid. Presentation only — the database stores
+#: real start/end times, and seeded shifts use a wider set of windows than
+#: these three, so bands are matched by OVERLAP rather than equality.
+WEEKLY_BANDS = (
+    ("Morning", "07:00", "15:00"),
+    ("Afternoon", "15:00", "23:00"),
+    ("Night", "23:00", "07:00"),
+)
+
+DAY_LABELS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+DAY_NAMES = ("Monday", "Tuesday", "Wednesday", "Thursday",
+             "Friday", "Saturday", "Sunday")
+
+
+def _minutes(value):
+    hours, mins = value.split(":")
+    return int(hours) * 60 + int(mins)
+
+
+def _week_segments(day, start, end):
+    """Absolute minute segments for a weekly period (overnight/week wrap aware)."""
+    begin = day * 1440 + _minutes(start)
+    length = (_minutes(end) - _minutes(start)) % 1440 or 1440
+    finish = begin + length
+    if finish <= 10080:
+        return [(begin, finish)]
+    return [(begin, 10080), (0, finish - 10080)]
+
+
+def _overlaps(first, second):
+    return any(a0 < b1 and b0 < a1 for a0, a1 in first for b0, b1 in second)
+
+
+def _build_weekly_grid(periods, assignments, week_start):
+    """Build the 3-band x 7-day grid.
+
+    Each cell reports a state derived from two independent sources:
+      * "available" — a persisted weekly availability period overlaps the band
+      * "rostered"  — a real shift assignment ALSO overlaps it
+      * "unavailable" — no stored period overlaps (the sparse model's meaning)
+
+    "rostered" is never persisted: it is recomputed from shift data every
+    render, so creating or cancelling an assignment never mutates the
+    recurring pattern.
+    """
+    available = [_week_segments(p["day_of_week"], p["start_time"], p["end_time"])
+                 for p in periods]
+
+    # Map real assignments for the displayed week onto the same timeline.
+    rostered = []
+    for row in assignments:
+        if row.get("assignment_status") in _INACTIVE_ASSIGNMENT:
+            continue
+        try:
+            shift_date = datetime.datetime.strptime(row["shift_date"], "%Y-%m-%d").date()
+        except (ValueError, KeyError, TypeError):
+            continue
+        offset = (shift_date - week_start).days
+        if not 0 <= offset <= 6:
+            continue
+        rostered.append(_week_segments(offset, row["start_time"], row["end_time"]))
+
+    grid = []
+    for label, start, end in WEEKLY_BANDS:
+        cells = []
+        for day in range(7):
+            band = _week_segments(day, start, end)
+            is_available = any(_overlaps(band, seg) for seg in available)
+            is_rostered = is_available and any(_overlaps(band, seg) for seg in rostered)
+            cells.append({
+                "day": day,
+                "day_label": DAY_LABELS[day],
+                "day_name": DAY_NAMES[day],
+                "state": "rostered" if is_rostered
+                          else "available" if is_available else "unavailable",
+                "available": is_available,
+            })
+        grid.append({"band": label, "start": start, "end": end, "cells": cells})
+    return grid
+
+
+def _week_start(today=None):
+    today = today or datetime.date.today()
+    return today - datetime.timedelta(days=today.weekday())
+
+
 def create_app() -> Flask:
     # Absolute template/static paths: Flask's default resolution relies on
     # how the module was imported, which breaks when app.py is loaded via
@@ -830,11 +916,21 @@ def create_app() -> Flask:
                                     person=None, error=str(error), notice=None), status_code
 
         current, upcoming, shifts_error = None, [], None
+        assignments = []
         try:
-            current, upcoming = _split_shifts(
-                api_client.list_staff_shifts(staff_id)["shifts"])
+            assignments = api_client.list_staff_shifts(staff_id)["shifts"]
+            current, upcoming = _split_shifts(assignments)
         except (BackendUnavailableError, BackendError) as error:
             shifts_error = str(error)
+
+        # Weekly availability loads independently: a failure here marks only
+        # that section unavailable and leaves the rest of the drawer intact.
+        weekly_grid, weekly_error = None, None
+        try:
+            periods = api_client.get_weekly_availability(staff_id)["periods"]
+            weekly_grid = _build_weekly_grid(periods, assignments, _week_start())
+        except (BackendUnavailableError, BackendError) as error:
+            weekly_error = str(error)
 
         return render_template(
             "partials/staff_detail.html", person=record, error=None,
@@ -843,6 +939,8 @@ def create_app() -> Flask:
             last_updated=_format_timestamp(record.get("updated_at")),
             current_assignment=current, upcoming_shifts=upcoming,
             shifts_error=shifts_error,
+            weekly_grid=weekly_grid, weekly_error=weekly_error,
+            week_start=_week_start().isoformat(),
         ), status_code
 
     @app.get("/partials/staff/<int:staff_id>")
@@ -883,6 +981,58 @@ def create_app() -> Flask:
         response = make_response(body, code)
         response.headers["HX-Trigger"] = "staff-updated"
         return response
+
+    @app.get("/partials/staff/<int:staff_id>/weekly-availability/edit")
+    def weekly_availability_editor(staff_id: int):
+        """Matrix editor. Renders the stored pattern as toggleable band cells;
+        roster overlay is deliberately excluded here — you edit availability,
+        not assignments."""
+        try:
+            record = api_client.get_staff(staff_id)["staff"]
+            periods = api_client.get_weekly_availability(staff_id)["periods"]
+        except NotFoundError:
+            return render_template("partials/staff_detail.html",
+                                    person=None, error=None, notice=None,
+                                    not_found=True), 404
+        except (BackendUnavailableError, BackendError) as error:
+            return render_template("partials/weekly_availability_edit.html",
+                                    person=None, grid=None, error=str(error))
+
+        grid = _build_weekly_grid(periods, [], _week_start())
+        return render_template("partials/weekly_availability_edit.html",
+                                person=record, grid=grid, error=None)
+
+    @app.post("/partials/staff/<int:staff_id>/weekly-availability")
+    def weekly_availability_save(staff_id: int):
+        """Persist the submitted matrix as structured weekly periods.
+
+        Checkbox names carry "<day>-<band index>"; they are expanded back into
+        real start/end times here. UI symbols are never persisted.
+        """
+        periods = []
+        for key in request.form.getlist("slot"):
+            try:
+                day_raw, band_raw = key.split("-", 1)
+                day, band_index = int(day_raw), int(band_raw)
+                label, start, end = WEEKLY_BANDS[band_index]
+            except (ValueError, IndexError):
+                continue
+            if 0 <= day <= 6:
+                periods.append({"day_of_week": day, "start_time": start, "end_time": end})
+
+        try:
+            api_client.replace_weekly_availability(staff_id, periods)
+        except NotFoundError:
+            return _render_detail(staff_id)
+        except (BackendUnavailableError, BackendError) as error:
+            return _render_detail(
+                staff_id,
+                notice={"kind": "danger",
+                        "text": "Weekly availability was not saved. " + str(error)})
+
+        return _render_detail(
+            staff_id,
+            notice={"kind": "success", "text": "Weekly availability updated."})
 
     # ---------------------------------------------------------------- partials
     @app.get("/partials/kpis")

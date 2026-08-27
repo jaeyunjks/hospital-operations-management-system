@@ -82,6 +82,47 @@ CREATE TABLE IF NOT EXISTS shift_assignment (
         UNIQUE (shift_id, staff_id)
 );
 
+
+-- --------------------------------------------------------------------------
+-- STAFF_WEEKLY_AVAILABILITY — recurring weekly availability owned by HOMS
+-- --------------------------------------------------------------------------
+-- Sparse by design: a row IS an available period. The absence of a row means
+-- the staff member is not available then, so no "Unavailable" rows are stored.
+--
+-- Distinct from staff.availability_status (current operational scheduling
+-- status) and from shift_assignment (actual allocation to a real shift).
+-- Roster-derived states such as "Rostered" are never stored here.
+--
+-- end_time < start_time denotes an overnight period (e.g. 23:00-07:00) and is
+-- valid; only a zero-length period is rejected. Interval OVERLAP is enforced
+-- in the service layer, since SQLite CHECK cannot express a cross-row rule.
+CREATE TABLE IF NOT EXISTS staff_weekly_availability (
+    availability_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    staff_id        INTEGER NOT NULL,
+    day_of_week     INTEGER NOT NULL,   -- 0 = Monday ... 6 = Sunday
+    start_time      TEXT    NOT NULL,   -- 'HH:MM'
+    end_time        TEXT    NOT NULL,   -- 'HH:MM'; may be < start_time
+    notes           TEXT,
+    created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+
+    CONSTRAINT chk_weekly_availability_day
+        CHECK (day_of_week BETWEEN 0 AND 6),
+
+    -- A zero-length period is meaningless; an overnight wrap is not.
+    CONSTRAINT chk_weekly_availability_times
+        CHECK (start_time <> end_time),
+
+    -- A recurring pattern carries no audit value once the staff record is
+    -- gone, unlike assignment history which uses ON DELETE RESTRICT.
+    CONSTRAINT fk_weekly_availability_staff
+        FOREIGN KEY (staff_id) REFERENCES staff (staff_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT uq_weekly_availability
+        UNIQUE (staff_id, day_of_week, start_time, end_time)
+);
+
 -- --------------------------------------------------------------------------
 -- Indexes — support the common lookups of the backend/API microservice
 -- --------------------------------------------------------------------------
@@ -96,6 +137,9 @@ CREATE INDEX IF NOT EXISTS idx_shift_status         ON shift (shift_status);
 CREATE INDEX IF NOT EXISTS idx_assignment_shift     ON shift_assignment (shift_id);
 CREATE INDEX IF NOT EXISTS idx_assignment_staff     ON shift_assignment (staff_id);
 CREATE INDEX IF NOT EXISTS idx_assignment_status    ON shift_assignment (assignment_status);
+
+CREATE INDEX IF NOT EXISTS idx_weekly_availability_staff
+    ON staff_weekly_availability (staff_id);
 
 -- --------------------------------------------------------------------------
 -- Triggers — keep updated_at accurate for UPDATE operations (CRUD support)
@@ -119,4 +163,12 @@ AFTER UPDATE ON shift_assignment
 FOR EACH ROW
 BEGIN
     UPDATE shift_assignment SET updated_at = datetime('now') WHERE assignment_id = OLD.assignment_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_weekly_availability_updated_at
+AFTER UPDATE ON staff_weekly_availability
+FOR EACH ROW
+BEGIN
+    UPDATE staff_weekly_availability SET updated_at = datetime('now')
+    WHERE availability_id = OLD.availability_id;
 END;

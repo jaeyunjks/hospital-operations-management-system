@@ -56,6 +56,12 @@ class StubDatabaseClient:
         }
         self._next_shift_id = 3
         self._next_assignment_id = 2
+        # Sparse weekly availability: each row is an AVAILABLE period.
+        self.weekly = {
+            1: {"availability_id": 1, "staff_id": 1, "day_of_week": 0,
+                "start_time": "07:00", "end_time": "15:00", "notes": None},
+        }
+        self._next_weekly_id = 2
 
     # -- health ----------------------------------------------------------
     def health(self):
@@ -84,6 +90,23 @@ class StubDatabaseClient:
         record = self.get_staff(staff_id)
         record.update({k: v for k, v in fields.items() if v is not None})
         return record
+
+    # -- weekly availability ---------------------------------------------
+    def list_weekly_availability(self, staff_id):
+        return sorted(
+            [r for r in self.weekly.values() if r["staff_id"] == staff_id],
+            key=lambda r: (r["day_of_week"], r["start_time"]),
+        )
+
+    def replace_weekly_availability(self, staff_id, periods):
+        for key in [k for k, v in self.weekly.items() if v["staff_id"] == staff_id]:
+            del self.weekly[key]
+        for period in periods:
+            row_id = self._next_weekly_id
+            self._next_weekly_id += 1
+            self.weekly[row_id] = {"availability_id": row_id, "staff_id": staff_id,
+                                    "notes": None, **period}
+        return self.list_weekly_availability(staff_id)
 
     def list_shifts_for_staff(self, staff_id):
         """Mirrors the repository join: shift fields plus assignment state."""

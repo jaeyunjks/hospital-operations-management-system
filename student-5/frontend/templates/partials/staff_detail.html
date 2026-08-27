@@ -114,7 +114,7 @@
 
   {# --------------------------------------------- availability control #}
   <section class="drawer__section">
-    <h3 class="u-label">Availability · owned by HOMS</h3>
+    <h3 class="u-label">Current operational status · owned by HOMS</h3>
     <form class="availability-form"
           hx-post="/partials/staff/{{ person.staff_id }}/availability"
           hx-target="#staff-drawer" hx-swap="innerHTML"
@@ -136,6 +136,84 @@
         Availability is scheduling state. Employee reference data stays read-only.
       </p>
     </form>
+  </section>
+
+  {# ------------------------------------------------ weekly availability #}
+  <section class="drawer__section">
+    <div class="row row--between">
+      <h3 class="u-label">Weekly availability</h3>
+      <span class="u-label">Week of {{ week_start }}</span>
+    </div>
+
+    {% if weekly_error %}
+    <p class="drawer__muted">Weekly availability is unavailable. {{ weekly_error }}</p>
+
+    {% elif weekly_grid %}
+    <p class="drawer__muted">
+      Recurring pattern owned by HOMS. Rostered cells are derived from real
+      shift assignments and are not stored as availability.
+    </p>
+
+    <div class="weekly-scroll">
+      <table class="weekly-grid">
+        <caption class="visually-hidden">
+          Recurring weekly availability for {{ person.name }}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col"><span class="visually-hidden">Time band</span></th>
+            {% for label in ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"] %}
+            <th scope="col">{{ label }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in weekly_grid %}
+          <tr>
+            <th scope="row" class="weekly-grid__band">
+              <span class="weekly-grid__band-name">{{ row.band }}</span>
+              <span class="weekly-grid__band-time u-mono">{{ row.start }}–{{ row.end }}</span>
+            </th>
+            {% for cell in row.cells %}
+            {#- State is conveyed by glyph AND text, never colour alone. -#}
+            <td class="weekly-grid__cell weekly-cell--{{ cell.state }}">
+              <span aria-hidden="true">
+                {%- if cell.state == 'rostered' %}R{% elif cell.state == 'available' %}✓{% else %}—{% endif -%}
+              </span>
+              <span class="visually-hidden">
+                {{ row.band }} on {{ cell.day_name }}:
+                {%- if cell.state == 'rostered' %} rostered
+                {%- elif cell.state == 'available' %} available
+                {%- else %} not available{% endif %}
+              </span>
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <ul role="list" class="weekly-legend">
+      <li><span class="weekly-legend__key weekly-cell--available" aria-hidden="true">✓</span>Available</li>
+      <li><span class="weekly-legend__key weekly-cell--rostered" aria-hidden="true">R</span>Rostered</li>
+      <li><span class="weekly-legend__key weekly-cell--unavailable" aria-hidden="true">—</span>Not available</li>
+    </ul>
+
+    {% if person.availability_status != 'Available' %}
+    <p class="drawer__muted">
+      Current operational status is <strong>{{ person.availability_status }}</strong>,
+      which overrides scheduling eligibility. The recurring pattern below is retained.
+    </p>
+    {% endif %}
+
+    <button class="btn-secondary btn-compact" type="button"
+            hx-get="/partials/staff/{{ person.staff_id }}/weekly-availability/edit"
+            hx-target="#staff-drawer" hx-swap="innerHTML"
+            hx-indicator="#loading-indicator">
+      Edit weekly availability
+    </button>
+    {% endif %}
   </section>
 
   {# ------------------------------------------------ reference details #}

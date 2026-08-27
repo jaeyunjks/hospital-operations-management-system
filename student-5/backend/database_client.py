@@ -100,6 +100,14 @@ class DatabaseClient:
     def update_staff(self, staff_id: int, **fields: Any) -> Dict[str, Any]:
         return self._request("PATCH", f"/staff/{staff_id}", payload=fields)
 
+    def list_weekly_availability(self, staff_id: int) -> List[Dict[str, Any]]:
+        return self._request("GET", f"/staff/{staff_id}/weekly-availability")
+
+    def replace_weekly_availability(self, staff_id: int,
+                                    periods: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return self._request("PUT", f"/staff/{staff_id}/weekly-availability",
+                              payload={"periods": periods})
+
     def list_shifts_for_staff(self, staff_id: int) -> List[Dict[str, Any]]:
         return self._request("GET", f"/staff/{staff_id}/shifts")
 

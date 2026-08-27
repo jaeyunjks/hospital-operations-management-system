@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 from database_client import database_client
 from errors import ValidationError
 from validation import (AVAILABILITY_STATUSES, EMPLOYMENT_STATUSES,
-                        validate_choice)
+                        validate_choice, validate_weekly_availability)
 
 
 def list_staff(department: Optional[str] = None, role: Optional[str] = None,
@@ -71,3 +71,20 @@ def search_staff(query: Optional[str] = None, department: Optional[str] = None,
         record for record in records
         if any(term in str(record.get(field) or "").lower() for field in searchable)
     ]
+
+
+def get_weekly_availability(staff_id: int) -> List[Dict[str, Any]]:
+    """Return the recurring weekly availability owned by HOMS.
+
+    Separate from `availability_status` (current operational scheduling
+    status) and from shift assignments (actual allocation).
+    """
+    database_client.get_staff(staff_id)      # raises NotFoundError when absent
+    return database_client.list_weekly_availability(staff_id)
+
+
+def replace_weekly_availability(staff_id: int, periods: Any) -> List[Dict[str, Any]]:
+    """Validate and replace a staff member's whole weekly pattern."""
+    database_client.get_staff(staff_id)      # 404 before any validation work
+    cleaned = validate_weekly_availability(periods)
+    return database_client.replace_weekly_availability(staff_id, cleaned)
