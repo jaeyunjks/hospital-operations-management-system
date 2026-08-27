@@ -1918,3 +1918,42 @@
 }
 
 .roster-conflict button { align-self: flex-start; margin-top: var(--space-2); }
+
+/* ==========================================================================
+   8. Daily operational adjustment (Scenario B)
+   ========================================================================== */
+.daily-departments {
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: var(--border-hair);
+}
+
+.daily-department-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.daily-department {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-size: var(--size-ui-xs);
+}
+
+.daily-department__name {
+  min-width: 8.5em;
+  font-weight: var(--weight-medium);
+  color: var(--color-text-primary);
+}
+
+.daily-department__figures {
+  flex: 1;
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.daily-department__shifts { color: var(--color-text-label); }

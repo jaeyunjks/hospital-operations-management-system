@@ -742,6 +742,7 @@ def create_app() -> Flask:
             "workforce_overview.html", today=_today(), today_long=_today_long(),
             active="workforce",
             kpis=None, shifts=None, top_gap=None, summary=None, error=None,
+            departments=None,
         )
 
     # --------------------------------------------------------- staff directory
@@ -773,6 +774,17 @@ def create_app() -> Flask:
         if not _valid_iso_date(selected_date):
             selected_date = _today()
 
+        # Deep-link context from Workforce Overview's "Manage shift" action.
+        # These seed the initial #planner-state form so the planner opens on
+        # the right day/department with the affected shift already selected,
+        # instead of the manager having to find it again.
+        deep_department = request.args.get("department") or ""
+        # The planner's two views are "week" and "timeline" (the Day Timeline).
+        deep_view = request.args.get("view") if request.args.get("view") in ("week", "timeline") else "week"
+        deep_shift_id = request.args.get("selected_shift_id") or ""
+        if deep_shift_id and not deep_shift_id.isdigit():
+            deep_shift_id = ""
+
         service_available = True
         try:
             records = api_client.list_shifts()["shifts"]
@@ -789,6 +801,8 @@ def create_app() -> Flask:
             statuses=api_client.SHIFT_STATUSES,
             week_start=_week_start_for(selected_date).isoformat(),
             service_available=service_available,
+            deep_department=deep_department, deep_view=deep_view,
+            deep_shift_id=deep_shift_id,
         )
 
     @app.get("/partials/planner")
@@ -1381,8 +1395,27 @@ def create_app() -> Flask:
         shifts = coverage["shifts"]
         gaps = [row for row in shifts if row["shortfall"] > 0]
         top_gap = max(gaps, key=lambda row: row["shortfall"]) if gaps else None
+
+        # Per-department roll-up for today. "positions" counts required STAFF
+        # POSITIONS, which is not the same as the number of shifts — both are
+        # reported so neither can be mistaken for the other.
+        departments = {}
+        for row in shifts:
+            entry = departments.setdefault(row["department"], {
+                "department": row["department"], "shift_count": 0,
+                "required": 0, "assigned": 0, "gap": 0})
+            entry["shift_count"] += 1
+            entry["required"] += int(row["required_staff_count"])
+            entry["assigned"] += int(row["assigned_staff_count"])
+            entry["gap"] += int(row["shortfall"])
+
+        # Presentation ordering only: departments needing attention first.
+        department_rows = sorted(departments.values(),
+                                  key=lambda d: (d["gap"] == 0, d["department"]))
+
         return render_template("partials/demand.html", today=today,
-                                shifts=shifts, top_gap=top_gap, error=None)
+                                shifts=shifts, top_gap=top_gap, error=None,
+                                departments=department_rows)
 
     @app.get("/partials/summary")
     def summary_partial():

@@ -22,9 +22,9 @@
     <form id="planner-state" class="planner-state planner-state--initial" autocomplete="off">
       <input type="hidden" name="week_start" value="{{ week_start }}">
       <input type="hidden" name="selected_date" value="{{ selected_date }}">
-      <input type="hidden" name="department" value="">
-      <input type="hidden" name="view" value="week">
-      <input type="hidden" name="selected_shift_id" value="">
+      <input type="hidden" name="department" value="{{ deep_department }}">
+      <input type="hidden" name="view" value="{{ deep_view }}">
+      <input type="hidden" name="selected_shift_id" value="{{ deep_shift_id }}">
       <input type="hidden" name="required_role" value="">
       <input type="hidden" name="shift_status" value="">
     </form>

@@ -94,16 +94,31 @@ NIGHT = ("23:00", "07:00")     # crosses midnight; valid, not a duplicate
 
 MON, TUE, WED, THU, FRI, SAT, SUN = range(7)
 
-#: staff_id -> [(day_of_week, band), ...]
+#: Shift-shaped periods used where a staff member works a real rostered window
+#: that does not align to the three standard bands. Availability is stored as
+#: real start/end times, so these are as valid as the bands.
+LATE_TWELVE = ("19:00", "07:00")   # ICU night cover, Mon 19:00-07:00
+LONG_DAY = ("07:00", "19:00")      # ICU long day, Fri 07:00-19:00
+MID_EIGHT = ("14:00", "22:00")     # General Ward mid shift, Tue 14:00-22:00
+
+#: staff_id -> [(day_of_week, period), ...]
+#:
+#: Periods are chosen so a staff member's recurring availability genuinely
+#: covers the shifts they are seeded onto. Two deliberate mismatches are
+#: retained (staff 9 and 10, noted below) so conflict review has something
+#: real to detect in the default demo week.
 _WEEKLY_PATTERN = {
     # Amara Okafor — ED RN. Rostered Mon 07-15, Fri 07-15, Thu night.
     1:  [(MON, MORNING), (TUE, MORNING), (THU, NIGHT), (FRI, MORNING)],
     # Daniel Reyes — ED doctor. Rostered Mon 15-23.
     2:  [(MON, AFTERNOON), (WED, AFTERNOON), (FRI, AFTERNOON)],
-    # Priya Nandakumar — ICU RN, part-time. Rostered Mon night, Fri day.
-    3:  [(MON, NIGHT), (TUE, MORNING), (WED, MORNING), (FRI, MORNING)],
-    # Liam O'Sullivan — enrolled nurse, casual. Rostered Tue afternoon.
-    4:  [(TUE, AFTERNOON), (SAT, AFTERNOON)],
+    # Priya Nandakumar — ICU RN, part-time. Rostered the Mon 19:00-07:00 night
+    # cover and the Fri 07:00-19:00 long day, so her availability matches those
+    # real windows rather than the standard bands.
+    3:  [(MON, LATE_TWELVE), (TUE, MORNING), (WED, MORNING), (FRI, LONG_DAY)],
+    # Liam O'Sullivan — enrolled nurse, casual. Rostered the Tue 14:00-22:00
+    # mid shift, which starts an hour before the standard afternoon band.
+    4:  [(TUE, MID_EIGHT), (SAT, AFTERNOON)],
     # Mei Lin Tan — on leave. The pattern is retained: a global status change
     # must not erase the recurring schedule.
     5:  [(WED, MORNING), (THU, MORNING)],
@@ -113,16 +128,21 @@ _WEEKLY_PATTERN = {
     7:  [(FRI, MORNING), (SAT, MORNING), (SUN, MORNING)],
     # Sofia Petrova — physiotherapist, part-time. Rostered Wed 09-17.
     8:  [(WED, MORNING), (WED, AFTERNOON)],
-    # Ethan Brooks — ward clerk, casual. Rostered Sat 06-14.
+    # Ethan Brooks — ward clerk, casual. INTENTIONAL CONFLICT: rostered
+    # Sat 06:00-14:00 but only available from 07:00, so the first hour of the
+    # shift falls outside his recurring availability.
     9:  [(SAT, MORNING), (SUN, MORNING)],
-    # Rina Kobayashi — pharmacist. Rostered Wed 08-16.
+    # Rina Kobayashi — pharmacist. INTENTIONAL CONFLICT: rostered
+    # Wed 08:00-16:00 but available only until 15:00, so the final hour falls
+    # outside her recurring availability.
     10: [(MON, MORNING), (WED, MORNING), (THU, MORNING)],
     # Tomas Novak — currently Unavailable. The weekly pattern still exists,
     # demonstrating that operational status and weekly availability are
     # independent concepts.
     11: [(THU, MORNING)],
-    # Chloe Bennett — ICU RN. Rostered Mon 07-15, Mon night, Fri 07-19.
-    12: [(MON, MORNING), (MON, NIGHT), (THU, NIGHT), (FRI, MORNING)],
+    # Chloe Bennett — ICU RN. Rostered Mon 07-15, the Mon 19:00-07:00 night
+    # cover, and the Fri 07:00-19:00 long day.
+    12: [(MON, MORNING), (MON, LATE_TWELVE), (THU, NIGHT), (FRI, LONG_DAY)],
 }
 
 #: (staff_id, day_of_week, start_time, end_time, notes)

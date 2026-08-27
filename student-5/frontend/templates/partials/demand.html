@@ -38,6 +38,33 @@
   </div>
   {% endif %}
 
+  {#- Per-department roll-up for today. "positions" counts required STAFF
+      POSITIONS, which is not the same as the number of shifts, so both are
+      labelled. Departments with gaps sort first — a presentation choice,
+      not a severity score. -#}
+  {% if departments %}
+  <div class="daily-departments">
+    <h3 class="u-label">Today's staffing requirement by department</h3>
+    <ul role="list" class="daily-department-list">
+      {% for dept in departments %}
+      <li class="daily-department">
+        <span class="daily-department__name">{{ dept.department }}</span>
+        <span class="daily-department__figures">
+          <span class="u-mono">{{ dept.assigned }} / {{ dept.required }}</span> positions
+          <span class="daily-department__shifts">·
+            {{ dept.shift_count }} shift{{ '' if dept.shift_count == 1 else 's' }}</span>
+        </span>
+        {% if dept.gap %}
+        <span class="badge-warning">Gap {{ dept.gap }}</span>
+        {% else %}
+        <span class="badge-success">Fully staffed</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
   <div class="table-wrap">
     <table class="table table--zebra">
       <caption class="visually-hidden">
@@ -52,6 +79,7 @@
           <th scope="col">Shift</th>
           <th scope="col">Assigned</th>
           <th scope="col">Status</th>
+          <th scope="col">Action</th>
         </tr>
       </thead>
       <tbody>
@@ -77,6 +105,18 @@
             </div>
           </td>
           <td><span class="badge-{{ variant }}">{{ row.coverage_status }}</span></td>
+          <td class="table__actions">
+            {#- A plain link, not a clickable card: keyboard reachable, and it
+                carries day + department + shift so the planner opens on
+                exactly this shift instead of making the manager search for it
+                again. Full navigation is deliberate — coming back to the
+                dashboard re-fetches, so no stale figures can survive. -#}
+            <a class="btn-secondary btn-compact"
+               href="/shifts?date={{ row.shift_date }}&amp;department={{ row.department | urlencode }}&amp;selected_shift_id={{ row.shift_id }}&amp;view=timeline">
+              Manage<span class="visually-hidden">
+                {{ row.department }} shift {{ row.start_time }} to {{ row.end_time }}</span>
+            </a>
+          </td>
         </tr>
         {% endfor %}
       </tbody>

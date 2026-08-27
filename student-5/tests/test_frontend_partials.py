@@ -1550,3 +1550,125 @@ def test_roster_status_backend_unavailable(frontend_client, fe_api_client, monke
     monkeypatch.setattr(fe_api_client, "get_coverage", _raise_unavailable)
     body = frontend_client.get("/partials/roster-status").data.decode()
     assert "Roster status unavailable" in body
+
+
+# ==========================================================================
+# Scenario B — daily operational adjustment
+# ==========================================================================
+def _cov(shift_id=1, dept="Emergency", date="2026-08-27", start="07:00",
+         end="15:00", role="Registered Nurse", required=2, assigned=1):
+    return {"shift_id": shift_id, "department": dept, "shift_date": date,
+            "start_time": start, "end_time": end, "required_role": role,
+            "required_staff_count": required, "assigned_staff_count": assigned,
+            "shortfall": max(required - assigned, 0),
+            "coverage_status": ("Fully staffed" if assigned >= required
+                                 else "Unstaffed" if assigned == 0 else "Understaffed")}
+
+
+def _daily_stubs(monkeypatch, client_module, shifts):
+    monkeypatch.setattr(client_module, "get_coverage",
+                        lambda **kw: {"shifts": shifts,
+                                      "summary": {"total_shifts": len(shifts)}})
+
+
+# ------------------------------------------------- daily calculations
+def test_daily_demand_aggregates_by_department(frontend_client, fe_api_client, monkeypatch):
+    """Positions and shift counts are aggregated separately, not conflated."""
+    _daily_stubs(monkeypatch, fe_api_client, [
+        _cov(1, "Emergency", required=4, assigned=3),
+        _cov(2, "Emergency", start="15:00", end="23:00", required=3, assigned=3),
+        _cov(3, "Radiology", required=1, assigned=0),
+    ])
+    body = frontend_client.get("/partials/demand?date=2026-08-27").data.decode()
+    assert "Emergency" in body and "Radiology" in body
+    assert "6 / 7" in body            # 7 required positions across 2 shifts
+    assert "2 shifts" in body         # shift count reported separately
+    assert "Gap 1" in body
+
+
+def test_daily_demand_orders_departments_with_gaps_first(frontend_client, fe_api_client, monkeypatch):
+    _daily_stubs(monkeypatch, fe_api_client, [
+        _cov(1, "Anaesthetics", required=1, assigned=1),   # alphabetically first
+        _cov(2, "Radiology", required=1, assigned=0),      # but has the gap
+    ])
+    body = frontend_client.get("/partials/demand").data.decode()
+    assert body.index("Radiology") < body.index("Anaesthetics")
+
+
+def test_fully_staffed_day_still_lists_departments(frontend_client, fe_api_client, monkeypatch):
+    _daily_stubs(monkeypatch, fe_api_client, [_cov(1, required=2, assigned=2)])
+    body = frontend_client.get("/partials/demand").data.decode()
+    assert "No staffing gaps today" in body
+    assert "Fully staffed" in body
+    assert "Emergency" in body        # information is not hidden
+
+
+def test_no_shifts_today_is_reported_truthfully(frontend_client, fe_api_client, monkeypatch):
+    _daily_stubs(monkeypatch, fe_api_client, [])
+    body = frontend_client.get("/partials/demand?date=2030-01-01").data.decode()
+    assert "No shifts scheduled for 2030-01-01" in body
+
+
+def test_empty_day_coverage_is_dash_not_full(frontend_client, fe_api_client, monkeypatch):
+    """Zero required positions must not render as 100% coverage."""
+    monkeypatch.setattr(fe_api_client, "get_coverage",
+                        lambda **kw: {"shifts": [], "summary": {
+                            "total_shifts": 0, "fully_staffed": 0,
+                            "understaffed": 0, "unstaffed": 0, "total_shortfall": 0}})
+    monkeypatch.setattr(fe_api_client, "list_staff", lambda **kw: {"count": 0, "staff": []})
+    body = frontend_client.get("/partials/kpis?date=2030-01-01").data.decode()
+    assert "—" in body
+    assert "100%" not in body
+
+
+def test_daily_demand_backend_unavailable(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_coverage", _raise_unavailable)
+    body = frontend_client.get("/partials/demand").data.decode()
+    assert "Operational demand unavailable" in body
+
+
+# --------------------------------------------- dashboard -> planner link
+def test_manage_link_carries_full_planner_context(frontend_client, fe_api_client, monkeypatch):
+    """The manager must not have to find the same shift again."""
+    _daily_stubs(monkeypatch, fe_api_client, [_cov(11, "Emergency", required=2, assigned=1)])
+    body = frontend_client.get("/partials/demand?date=2026-08-27").data.decode()
+    assert "date=2026-08-27" in body
+    assert "department=Emergency" in body
+    assert "selected_shift_id=11" in body
+    assert "view=timeline" in body            # the planner's Day Timeline view
+
+
+def test_manage_link_is_a_real_anchor_not_a_clickable_card(frontend_client, fe_api_client, monkeypatch):
+    _daily_stubs(monkeypatch, fe_api_client, [_cov(11)])
+    body = frontend_client.get("/partials/demand").data.decode()
+    assert '<a class="btn-secondary btn-compact"' in body
+    assert "<tr onclick" not in body and "<td onclick" not in body
+
+
+def test_planner_seeds_state_from_deep_link(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_shifts",
+                        lambda **kw: {"shifts": [_cov(11)]})
+    body = frontend_client.get(
+        "/shifts?date=2026-08-27&department=Emergency"
+        "&selected_shift_id=11&view=timeline").data.decode()
+    assert 'name="department" value="Emergency"' in body
+    assert 'name="selected_shift_id" value="11"' in body
+    assert 'name="view" value="timeline"' in body
+    assert 'name="selected_date" value="2026-08-27"' in body
+
+
+def test_planner_rejects_invalid_deep_link_values(frontend_client, fe_api_client, monkeypatch):
+    """Bad query values fall back to safe defaults rather than propagating."""
+    monkeypatch.setattr(fe_api_client, "list_shifts", lambda **kw: {"shifts": []})
+    body = frontend_client.get(
+        "/shifts?department=Emergency&selected_shift_id=notanid&view=bogus").data.decode()
+    assert 'name="selected_shift_id" value=""' in body
+    assert 'name="view" value="week"' in body
+
+
+def test_planner_without_deep_link_uses_defaults(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_shifts", lambda **kw: {"shifts": []})
+    body = frontend_client.get("/shifts").data.decode()
+    assert 'name="department" value=""' in body
+    assert 'name="selected_shift_id" value=""' in body
+    assert 'name="view" value="week"' in body
