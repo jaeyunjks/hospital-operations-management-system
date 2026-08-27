@@ -46,8 +46,34 @@
       var root = document.getElementById('shift-drawer-root');
       var panel = root.querySelector('.drawer');
       var lastTrigger = null;
+      var rosterStateKey = 'homs.weeklyRosterStatus.collapsed';
+
+      function rosterIsCollapsed() {
+        try { return window.sessionStorage.getItem(rosterStateKey) === 'true'; }
+        catch (error) { return false; }
+      }
+
+      function setRosterCollapsed(status, collapsed) {
+        if (!status) { return; }
+        status.classList.toggle('is-collapsed', collapsed);
+        var toggle = status.querySelector('[data-roster-toggle]');
+        if (!toggle) { return; }
+        toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        toggle.querySelector('[data-roster-toggle-symbol]').textContent = collapsed ? '+' : '−';
+        toggle.querySelector('[data-roster-toggle-label]').textContent =
+          collapsed ? 'Expand weekly roster status' : 'Collapse weekly roster status';
+      }
 
       document.body.addEventListener('click', function (event) {
+        var rosterToggle = event.target.closest('[data-roster-toggle]');
+        if (rosterToggle) {
+          var status = rosterToggle.closest('.roster-status');
+          var collapsed = !status.classList.contains('is-collapsed');
+          setRosterCollapsed(status, collapsed);
+          try { window.sessionStorage.setItem(rosterStateKey, String(collapsed)); }
+          catch (error) { /* The control still works when storage is unavailable. */ }
+          return;
+        }
         var opener = event.target.closest('[data-shift-drawer-open], [hx-target="#shift-drawer"]');
         if (opener) { lastTrigger = opener; }
         if (event.target.closest('[data-drawer-close]')) { closeDrawer(); }
@@ -80,6 +106,10 @@
       });
 
       document.body.addEventListener('htmx:afterSwap', function (event) {
+        if (event.target.id === 'roster-status') {
+          setRosterCollapsed(event.target.querySelector('.roster-status'), rosterIsCollapsed());
+          return;
+        }
         if (event.target.id !== 'shift-drawer') { return; }
         root.hidden = false;
         panel.focus();

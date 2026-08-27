@@ -13,11 +13,25 @@
 {% else %}
 <div class="roster-status">
 
-  <div class="row row--between">
-    <h3 class="u-label">Weekly roster status</h3>
-    <span class="u-label">{{ week_label }}</span>
+  <div class="roster-status__header">
+    <div class="roster-status__heading">
+      <h3 class="u-label">Weekly roster status</h3>
+      <span class="u-label">{{ week_label }}</span>
+    </div>
+    <button class="roster-status__toggle" type="button" data-roster-toggle
+            aria-expanded="true" aria-controls="roster-status-details">
+      <span aria-hidden="true" data-roster-toggle-symbol>−</span>
+      <span class="visually-hidden" data-roster-toggle-label>Collapse weekly roster status</span>
+    </button>
   </div>
 
+  <p class="roster-status__compact" aria-live="polite">
+    <strong>{{ summary.assigned_positions }} / {{ summary.required_positions }}</strong> assigned
+    · {{ summary.unfilled_positions }} unfilled
+    · {{ summary.conflict_count }} conflict{{ '' if summary.conflict_count == 1 else 's' }}
+  </p>
+
+  <div class="roster-status__details" id="roster-status-details">
   {% if error %}
   <p class="drawer__muted">
     Some assignment data could not be loaded, so these figures may be incomplete. {{ error }}
@@ -116,6 +130,8 @@
       {% endfor %}
     </ul>
     {% endif %}
+  </div>
+
   </div>
 
 </div>

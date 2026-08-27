@@ -1730,6 +1730,23 @@ def test_roster_status_renders_real_totals(frontend_client, fe_api_client, monke
     assert "Weekly roster status" in body
     assert "31 Aug – 6 Sep 2026" in body       # real calculated dates
     assert "Roster incomplete" in body
+    assert 'data-roster-toggle' in body
+    assert 'aria-expanded="true"' in body
+    assert 'aria-controls="roster-status-details"' in body
+    assert "1 / 2</strong> assigned" in body
+    assert "· 1 unfilled" in body
+    assert "· 0 conflicts" in body
+
+
+def test_roster_collapse_state_is_restored_after_htmx_swaps():
+    from pathlib import Path
+    page = (Path(__file__).resolve().parents[1]
+            / "frontend/templates/shift_planner.html").read_text()
+
+    assert "homs.weeklyRosterStatus.collapsed" in page
+    assert "window.sessionStorage.setItem" in page
+    assert "event.target.id === 'roster-status'" in page
+    assert "setRosterCollapsed" in page
 
 
 def test_roster_status_backend_unavailable(frontend_client, fe_api_client, monkeypatch):

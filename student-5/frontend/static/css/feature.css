@@ -1890,6 +1890,72 @@
   padding: var(--space-5);
 }
 
+.roster-status__header,
+.roster-status__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.roster-status__heading {
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.roster-status__toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  font-family: var(--font-mono);
+  font-size: var(--size-ui-lg);
+  line-height: 1;
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border: var(--border-hair);
+  cursor: pointer;
+}
+
+.roster-status__toggle:hover {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.roster-status__toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.roster-status__compact {
+  display: none;
+  margin: 0;
+  font-size: var(--size-ui-xs);
+  line-height: var(--leading-ui);
+  color: var(--color-text-secondary);
+}
+
+.roster-status__compact strong {
+  font-family: var(--font-mono);
+  color: var(--color-text-primary);
+}
+
+.roster-status__details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.roster-status.is-collapsed {
+  gap: var(--space-3);
+  padding-block: var(--space-4);
+}
+
+.roster-status.is-collapsed .roster-status__compact { display: block; }
+.roster-status.is-collapsed .roster-status__details { display: none; }
+
 .roster-figures {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
