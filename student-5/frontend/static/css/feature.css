@@ -56,6 +56,14 @@
 
 .topnav__brand:hover { text-decoration: none; }
 
+.topnav__brand-logo {
+  display: block;
+  width: var(--space-9);
+  height: var(--space-9);
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
 .topnav__brand-sub {
   font-family: var(--font-mono);
   font-size: var(--size-label);

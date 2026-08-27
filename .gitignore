@@ -123,3 +123,8 @@ $RECYCLE.BIN/
 # The Python pattern `build/` above is unanchored and would otherwise ignore
 # the prescribed `scripts/build/` directory. Re-include it explicitly.
 !scripts/build/
+
+# --------------------- Codex / Playwright artefacts -----------------------
+/student-5/playwright-cli/
+/student-5/.playwright-cli/
+/student-5/output/playwright/

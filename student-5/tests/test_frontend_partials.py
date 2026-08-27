@@ -113,6 +113,9 @@ def test_index_renders_shell_without_calling_backend(frontend_client, fe_api_cli
 
     assert response.status_code == 200
     assert b"Workforce overview" in response.data
+    assert b'class="topnav__brand-logo"' in response.data
+    assert b'/static/images/hospital-operations-logo.png' in response.data
+    assert b'<span class="topnav__brand-sub">Hospital Operations</span>' in response.data
     assert b"kpi-row" in response.data
     assert b"demand-panel" in response.data
     assert b"summary-panel" in response.data
