@@ -2344,6 +2344,93 @@ def test_my_workforce_lists_only_the_employees_own_requests(employee_view,
     assert "31 Aug – 2 Sep" in body
 
 
+def _employee_weekly_stubs(monkeypatch, fe_api_client, periods=None, shifts=None):
+    monkeypatch.setattr(fe_api_client, "get_staff",
+                        lambda sid: {"staff": _person()})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts",
+                        lambda sid: {"shifts": shifts or []})
+    monkeypatch.setattr(fe_api_client, "get_weekly_availability",
+                        lambda sid: periods if periods is not None else _weekly())
+    monkeypatch.setattr(fe_api_client, "list_staff_requests",
+                        lambda sid, **kw: {"requests": []})
+
+
+def test_my_workforce_offers_own_weekly_availability_editor(
+        employee_client, fe_api_client, monkeypatch):
+    _employee_weekly_stubs(monkeypatch, fe_api_client,
+                           _weekly((0, "07:00", "15:00")))
+    body = employee_client.get("/me").get_data(as_text=True)
+    assert "Edit availability" in body
+    assert 'hx-get="/partials/me/weekly-availability/edit"' in body
+    assert "Update your recurring availability here" in body
+    assert "speak to your manager" not in body
+    assert 'name="availability_status"' not in body
+
+
+def test_employee_weekly_editor_reuses_three_by_seven_matrix_and_session_id(
+        employee_client, fe_api_client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(fe_api_client, "get_staff",
+                        lambda sid: seen.append(sid) or {"staff": _person()})
+    monkeypatch.setattr(fe_api_client, "list_staff_shifts",
+                        lambda sid: seen.append(sid) or {"shifts": []})
+    monkeypatch.setattr(fe_api_client, "get_weekly_availability",
+                        lambda sid: seen.append(sid) or _weekly((0, "07:00", "15:00")))
+    body = employee_client.get(
+        "/partials/me/weekly-availability/edit").get_data(as_text=True)
+    assert seen == [1, 1, 1]
+    assert body.count('type="checkbox" name="slot"') == 21
+    assert 'hx-post="/partials/me/weekly-availability"' in body
+    assert "Morning" in body and "Afternoon" in body and "Night" in body
+    assert 'name="availability_status"' not in body
+
+
+def test_employee_weekly_save_refreshes_grid_and_warns_without_unassigning(
+        employee_client, fe_api_client, monkeypatch):
+    captured = {}
+    shift = {
+        "shift_id": 51, "department": "Emergency", "shift_date": "2026-08-24",
+        "start_time": "07:00", "end_time": "15:00", "shift_status": "Planned",
+        "assignment_id": 71, "assignment_status": "Assigned",
+    }
+    new_periods = _weekly((1, "07:00", "15:00"))
+    _employee_weekly_stubs(monkeypatch, fe_api_client, new_periods, [shift])
+
+    def fake_replace(staff_id, periods):
+        captured.update(staff_id=staff_id, periods=periods)
+        return {"periods": periods}
+
+    monkeypatch.setattr(fe_api_client, "replace_weekly_availability", fake_replace)
+    monkeypatch.setattr(fe_api_client, "update_availability",
+                        lambda *a, **k: pytest.fail("operational status must not change"))
+    monkeypatch.setattr(fe_api_client, "unassign_staff",
+                        lambda *a, **k: pytest.fail("roster must not be changed"))
+
+    body = employee_client.post("/partials/me/weekly-availability",
+                                data={"slot": ["1-0"]}).get_data(as_text=True)
+    assert captured == {
+        "staff_id": 1,
+        "periods": [{"day_of_week": 1, "start_time": "07:00", "end_time": "15:00"}],
+    }
+    assert "Weekly availability updated." in body
+    assert "1 existing rostered shift" in body
+    assert "is now outside your weekly availability" in body
+    assert "Emergency" in body and "2026-08-24" in body and "07:00–15:00" in body
+    assert "Your roster has not been changed" in body
+    assert "weekly-cell--conflict" in body
+    assert "Edit availability" in body
+
+
+def test_employee_weekly_save_failure_preserves_submitted_grid(
+        employee_client, fe_api_client, monkeypatch):
+    _employee_weekly_stubs(monkeypatch, fe_api_client)
+    monkeypatch.setattr(fe_api_client, "replace_weekly_availability", _raise_unavailable)
+    body = employee_client.post("/partials/me/weekly-availability",
+                                data={"slot": ["3-2"]}).get_data(as_text=True)
+    assert "Weekly availability was not saved." in body
+    assert 'value="3-2"\n                     checked' in body
+
+
 def test_pending_request_offers_withdrawal(employee_view, fe_api_client, monkeypatch):
     monkeypatch.setattr(fe_api_client, "list_staff_requests",
                         lambda sid, **k: {"requests": [_req(status="Pending")]})

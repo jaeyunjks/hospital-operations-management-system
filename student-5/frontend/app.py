@@ -697,6 +697,25 @@ def _weekly_covers_shift(periods, shift):
     return True
 
 
+def _weekly_availability_conflicts(periods, assignments):
+    """Active rostered shifts not covered by the recurring pattern.
+
+    This is derived after every read/save. It never mutates an assignment and
+    deliberately ignores assignment and shift lifecycle states that no longer
+    represent an active roster commitment.
+    """
+    conflicts = [
+        row for row in (assignments or [])
+        if row.get("assignment_status") not in _INACTIVE_ASSIGNMENT
+        and row.get("shift_status") not in ("Cancelled", "Completed")
+        and not _weekly_covers_shift(periods, row)
+    ]
+    return sorted(conflicts,
+                  key=lambda row: (row.get("shift_date", ""),
+                                   row.get("start_time", ""),
+                                   row.get("shift_id", 0)))
+
+
 #: Only an APPROVED request blocks assignment. A Pending one is still a
 #: question, not an answer; Rejected and Cancelled ones were resolved without
 #: granting time off. This is the whole rule, in one place.
@@ -1752,13 +1771,8 @@ def create_app() -> Flask:
         return render_template("partials/weekly_availability_edit.html",
                                 person=record, grid=grid, error=None)
 
-    @app.post("/partials/staff/<int:staff_id>/weekly-availability")
-    def weekly_availability_save(staff_id: int):
-        """Persist the submitted matrix as structured weekly periods.
-
-        Checkbox names carry "<day>-<band index>"; they are expanded back into
-        real start/end times here. UI symbols are never persisted.
-        """
+    def _periods_from_weekly_slots():
+        """Expand the shared 3x7 editor values into the existing API shape."""
         periods = []
         for key in request.form.getlist("slot"):
             try:
@@ -1768,7 +1782,18 @@ def create_app() -> Flask:
             except (ValueError, IndexError):
                 continue
             if 0 <= day <= 6:
-                periods.append({"day_of_week": day, "start_time": start, "end_time": end})
+                periods.append({"day_of_week": day,
+                                "start_time": start, "end_time": end})
+        return periods
+
+    @app.post("/partials/staff/<int:staff_id>/weekly-availability")
+    def weekly_availability_save(staff_id: int):
+        """Persist the submitted matrix as structured weekly periods.
+
+        Checkbox names carry "<day>-<band index>"; they are expanded back into
+        real start/end times here. UI symbols are never persisted.
+        """
+        periods = _periods_from_weekly_slots()
 
         try:
             api_client.replace_weekly_availability(staff_id, periods)
@@ -1895,6 +1920,41 @@ def create_app() -> Flask:
             "has_pending": any(row["is_pending"] for row in requests),
         }
 
+    def _render_my_weekly_availability(staff_id, editing=False, notice=None,
+                                       save_error=None, periods_override=None):
+        """Render only the employee-owned weekly-availability panel.
+
+        The staff id is supplied by the session-scoped caller. The backend is
+        still authoritative and applies require_self_or_manager to every
+        staff and weekly-availability request.
+        """
+        person, assignments, periods = None, [], []
+        weekly_error = None
+        try:
+            person = api_client.get_staff(staff_id)["staff"]
+            assignments = api_client.list_staff_shifts(staff_id)["shifts"]
+            periods = (periods_override if periods_override is not None else
+                       api_client.get_weekly_availability(staff_id)["periods"])
+        except (NotFoundError, ForbiddenError,
+                BackendUnavailableError, BackendError) as exc:
+            weekly_error = str(exc)
+
+        grid = (_build_weekly_grid(periods, [] if editing else assignments,
+                                   _week_start())
+                if person is not None and weekly_error is None else None)
+        conflicts = (_weekly_availability_conflicts(periods, assignments)
+                     if not editing and weekly_error is None else [])
+        return render_template(
+            "partials/my_weekly_availability.html",
+            person=person, editing=editing, grid=grid,
+            weekly_grid=grid, weekly_error=weekly_error,
+            weekly_has_conflict=any(cell["state"] == "conflict"
+                                     for row in (grid or [])
+                                     for cell in row["cells"]),
+            weekly_conflicts=conflicts, week_start=_week_start().isoformat(),
+            notice=notice, save_error=save_error,
+        )
+
     @app.get("/me")
     def my_workforce():
         """The employee's own view: their shifts, availability, and requests."""
@@ -1918,10 +1978,10 @@ def create_app() -> Flask:
         except (BackendUnavailableError, BackendError) as exc:
             shifts_error = str(exc)
 
-        weekly_grid, weekly_error = None, None
+        weekly_grid, weekly_error, weekly_periods = None, None, []
         try:
-            periods = api_client.get_weekly_availability(staff_id)["periods"]
-            weekly_grid = _build_weekly_grid(periods, assignments, _week_start())
+            weekly_periods = api_client.get_weekly_availability(staff_id)["periods"]
+            weekly_grid = _build_weekly_grid(weekly_periods, assignments, _week_start())
         except (BackendUnavailableError, BackendError) as exc:
             weekly_error = str(exc)
 
@@ -1938,12 +1998,46 @@ def create_app() -> Flask:
             current_assignment=current, upcoming_shifts=upcoming,
             shifts_error=shifts_error, weekly_grid=weekly_grid,
             weekly_error=weekly_error,
+            weekly_conflicts=(_weekly_availability_conflicts(
+                weekly_periods, assignments) if weekly_error is None else []),
             weekly_has_conflict=any(cell["state"] == "conflict"
                                      for row in (weekly_grid or [])
                                      for cell in row["cells"]),
             week_start=_week_start().isoformat(),
         )
         return render_template("my_workforce.html", **model)
+
+    @app.get("/partials/me/weekly-availability")
+    def my_weekly_availability_partial():
+        staff_id = demo_identity.current_staff_id()
+        if staff_id is None:
+            return "", 403
+        return _render_my_weekly_availability(staff_id)
+
+    @app.get("/partials/me/weekly-availability/edit")
+    def my_weekly_availability_editor():
+        staff_id = demo_identity.current_staff_id()
+        if staff_id is None:
+            return "", 403
+        return _render_my_weekly_availability(staff_id, editing=True)
+
+    @app.post("/partials/me/weekly-availability")
+    def my_weekly_availability_save():
+        """Save the employee's own recurring pattern and re-render its grid."""
+        staff_id = demo_identity.current_staff_id()
+        if staff_id is None:
+            return "", 403
+        periods = _periods_from_weekly_slots()
+        try:
+            api_client.replace_weekly_availability(staff_id, periods)
+        except (NotFoundError, ForbiddenError,
+                BackendUnavailableError, BackendError) as exc:
+            return _render_my_weekly_availability(
+                staff_id, editing=True,
+                save_error="Weekly availability was not saved. " + str(exc),
+                periods_override=periods)
+        return _render_my_weekly_availability(
+            staff_id, notice="Weekly availability updated.")
 
     @app.get("/partials/me/requests")
     def my_requests_partial():

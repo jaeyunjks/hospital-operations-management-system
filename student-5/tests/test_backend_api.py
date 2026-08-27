@@ -454,6 +454,30 @@ def _employee(staff_id):
     return {"X-HOMS-Role": "Employee", "X-HOMS-Staff-Id": str(staff_id)}
 
 
+class TestWeeklyAvailabilityAuthorization:
+    def test_employee_reads_and_replaces_own_pattern(self, client):
+        url = "/api/staff/1/weekly-availability"
+        assert client.get(url, headers=_employee(1)).status_code == 200
+        response = client.put(url, headers=_employee(1), json={"periods": [
+            {"day_of_week": 2, "start_time": "15:00", "end_time": "23:00"}
+        ]})
+        assert response.status_code == 200
+        assert response.get_json()["periods"][0]["day_of_week"] == 2
+
+    def test_employee_cannot_read_or_replace_another_pattern(self, client):
+        url = "/api/staff/2/weekly-availability"
+        assert client.get(url, headers=_employee(1)).status_code == 403
+        assert client.put(url, headers=_employee(1),
+                          json={"periods": []}).status_code == 403
+
+    def test_weekly_update_does_not_change_operational_status(self, client,
+                                                               stub_database):
+        before = stub_database.staff[1]["availability_status"]
+        client.put("/api/staff/1/weekly-availability", headers=_employee(1),
+                   json={"periods": []})
+        assert stub_database.staff[1]["availability_status"] == before
+
+
 class TestRequestCreation:
     URL = "/api/staff/1/unavailability-requests"
 

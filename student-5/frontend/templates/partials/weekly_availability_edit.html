@@ -24,60 +24,10 @@
     mean not available. This is a recurring pattern, not date-specific leave.
   </p>
 
-  <form hx-post="/partials/staff/{{ person.staff_id }}/weekly-availability"
-        hx-target="#staff-drawer" hx-swap="innerHTML"
-        hx-indicator="#loading-indicator">
-    <div class="weekly-scroll">
-      <table class="weekly-grid">
-        <caption class="visually-hidden">
-          Weekly availability editor for {{ person.name }}
-        </caption>
-        <colgroup>
-          <col class="weekly-grid__labels">
-          {% for _ in range(7) %}<col>{% endfor %}
-        </colgroup>
-        <thead>
-          <tr>
-            <th scope="col"><span class="visually-hidden">Time band</span></th>
-            {% for label in ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"] %}
-            <th scope="col">{{ label }}</th>
-            {% endfor %}
-          </tr>
-        </thead>
-        <tbody>
-          {#- Capture the band index here: inside the inner cells loop,
-              `loop` refers to that loop, so loop.index0 would be the day. -#}
-          {% for row in grid %}
-          {% set band_index = loop.index0 %}
-          <tr>
-            <th scope="row" class="weekly-grid__band">
-              <span class="weekly-grid__band-name">{{ row.band }}</span>
-              <span class="weekly-grid__band-time u-mono">{{ row.start }}–{{ row.end }}</span>
-            </th>
-            {% for cell in row.cells %}
-            <td class="weekly-grid__cell">
-              <label class="weekly-check">
-                <input type="checkbox" name="slot" value="{{ cell.day }}-{{ band_index }}"
-                       {% if cell.available %}checked{% endif %}>
-                <span class="visually-hidden">
-                  {{ row.band }} on {{ cell.day_name }}, {{ row.start }} to {{ row.end }}
-                </span>
-              </label>
-            </td>
-            {% endfor %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    <div class="row" style="margin-top: var(--space-5);">
-      <button class="btn-primary btn-compact" type="submit">Save weekly availability</button>
-      <button class="btn-secondary btn-compact" type="button"
-              hx-get="/partials/staff/{{ person.staff_id }}"
-              hx-target="#staff-drawer" hx-swap="innerHTML"
-              hx-indicator="#loading-indicator">Cancel</button>
-    </div>
-  </form>
+  {% set weekly_form_action = "/partials/staff/" ~ person.staff_id ~ "/weekly-availability" %}
+  {% set weekly_form_target = "#staff-drawer" %}
+  {% set weekly_cancel_url = "/partials/staff/" ~ person.staff_id %}
+  {% set weekly_cancel_target = "#staff-drawer" %}
+  {% include "partials/_weekly_availability_form.html" %}
 </div>
 {% endif %}

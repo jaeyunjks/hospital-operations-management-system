@@ -1,0 +1,78 @@
+<section class="panel" aria-labelledby="my-availability-title">
+  <div class="panel__header">
+    <div>
+      <h2 class="panel__title" id="my-availability-title">My weekly availability</h2>
+      <p class="panel__meta">Week of {{ week_start }}</p>
+    </div>
+    {% if not editing and not weekly_error %}
+    <button class="btn-secondary btn-compact" type="button"
+            hx-get="/partials/me/weekly-availability/edit"
+            hx-target="#my-weekly-availability" hx-swap="innerHTML"
+            hx-indicator="#loading-indicator">Edit availability</button>
+    {% endif %}
+  </div>
+  <div class="panel__body">
+    {% if notice %}
+    <div class="alert alert--success me-availability__alert" role="status">
+      <div><p class="alert__title">{{ notice }}</p></div>
+    </div>
+    {% endif %}
+
+    {% if save_error %}
+    <div class="alert alert--danger me-availability__alert" role="alert">
+      <div><p class="alert__title">{{ save_error }}</p></div>
+    </div>
+    {% endif %}
+
+    {% if weekly_error %}
+    <p class="u-muted">Weekly availability is unavailable. {{ weekly_error }}</p>
+
+    {% elif editing %}
+    <p class="u-muted me-availability__intro">
+      Select the periods you are normally available. Unticked periods mean
+      not available. Use an unavailability request for a one-off period away.
+    </p>
+    {% set weekly_form_action = "/partials/me/weekly-availability" %}
+    {% set weekly_form_target = "#my-weekly-availability" %}
+    {% set weekly_cancel_url = "/partials/me/weekly-availability" %}
+    {% set weekly_cancel_target = "#my-weekly-availability" %}
+    {% include "partials/_weekly_availability_form.html" %}
+
+    {% elif weekly_grid %}
+    <p class="u-muted">
+      Your recurring pattern. Rostered cells are derived from real shift
+      assignments and are not stored as availability.
+    </p>
+
+    {% set grid_caption = "My recurring weekly availability" %}
+    {% include "partials/_weekly_grid.html" %}
+
+    {% if weekly_conflicts %}
+    <div class="alert alert--warning me-availability__warning" role="status">
+      <div>
+        <p class="alert__title">
+          {{ weekly_conflicts | length }} existing rostered shift{{ '' if weekly_conflicts | length == 1 else 's' }}
+          {{ 'is' if weekly_conflicts | length == 1 else 'are' }} now outside your weekly availability
+        </p>
+        <p class="alert__body">Your roster has not been changed. Review these shifts with your manager:</p>
+        <ul role="list" class="me-availability__conflicts">
+          {% for shift in weekly_conflicts %}
+          <li>
+            <strong>{{ shift.department }}</strong>
+            <span class="u-mono">{{ shift.shift_date }} · {{ shift.start_time }}–{{ shift.end_time }}</span>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+
+    <p class="u-muted me-availability__note">
+      Update your recurring availability here. For a one-off period away,
+      submit an unavailability request below.
+    </p>
+    {% else %}
+    <p class="u-muted">No recurring availability recorded.</p>
+    {% endif %}
+  </div>
+</section>

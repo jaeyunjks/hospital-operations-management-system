@@ -102,35 +102,12 @@
     </section>
 
     <!-- ============================================== my availability -->
-    <section class="panel" aria-labelledby="my-availability-title">
-      <div class="panel__header">
-        <div>
-          <h2 class="panel__title" id="my-availability-title">My weekly availability</h2>
-          <p class="panel__meta">Week of {{ week_start }}</p>
-        </div>
-      </div>
-      <div class="panel__body">
-        {% if weekly_error %}
-        <p class="u-muted">Weekly availability is unavailable. {{ weekly_error }}</p>
-
-        {% elif weekly_grid %}
-        <p class="u-muted">
-          Your recurring pattern. Rostered cells are derived from real shift
-          assignments and are not stored as availability.
-        </p>
-
-        {% set grid_caption = "My recurring weekly availability" %}
-        {% include "partials/_weekly_grid.html" %}
-
-        <p class="u-muted me-availability__note">
-          To change your recurring pattern, speak to your manager. For a
-          one-off period away, submit an unavailability request below.
-        </p>
-        {% else %}
-        <p class="u-muted">No recurring availability recorded.</p>
-        {% endif %}
-      </div>
-    </section>
+    <div id="my-weekly-availability">
+      {% set editing = false %}
+      {% set notice = none %}
+      {% set save_error = none %}
+      {% include "partials/my_weekly_availability.html" %}
+    </div>
 
     <!-- ================================================== my requests -->
     {#- The panel owns its own region. Every action inside it targets this

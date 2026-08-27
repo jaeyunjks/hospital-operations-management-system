@@ -2298,6 +2298,39 @@
 
 .me-availability__note { margin-top: var(--space-4); }
 
+.me-availability__intro { margin-bottom: var(--space-4); }
+
+.weekly-editor-actions {
+  margin-top: var(--space-5);
+  flex-wrap: wrap;
+}
+
+.me-availability__alert { margin-bottom: var(--space-4); }
+
+.me-availability__warning { margin-top: var(--space-4); }
+
+.me-availability__conflicts {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.me-availability__conflicts li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: var(--size-ui-xs);
+}
+
+@media (max-width: 620px) {
+  .me-availability__conflicts li {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+}
+
 /* --------------------------------------------------- 9.5 request lists */
 .request-list {
   display: grid;
