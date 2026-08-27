@@ -247,6 +247,22 @@
   </main>
 
   <aside class="planner-rail" aria-label="Workforce planning and shift detail">
+    {#- Weekly roster status. hx-target="this" is REQUIRED: the enclosing
+        .planner-layout sets hx-target="#planner-workspace", and hx-target is
+        inherited, so without this override the response would replace the
+        whole workspace instead of just this panel.
+
+        Only "load" is used. The workspace wrapper already re-fetches on
+        "shifts-updated", which re-renders this panel and re-fires its load —
+        so listening for that event here too would double-request. -#}
+    <section class="panel roster-status-panel" id="roster-status"
+             aria-label="Weekly roster status"
+             hx-get="/partials/roster-status?week_start={{ week_start }}"
+             hx-trigger="load" hx-target="this"
+             hx-swap="innerHTML" hx-indicator="#loading-indicator">
+      <p class="drawer__muted">Calculating weekly roster status…</p>
+    </section>
+
     <section class="panel assist-panel" aria-labelledby="assist-heading">
       <div class="assist-panel__heading"><span class="u-label">Assist</span><div><h2 id="assist-heading">Workforce planning</h2><p>Release 0 boundary</p></div></div>
       <div class="assist-panel__body"><span class="u-label">AI recommendations</span><p>AI-assisted workforce planning is not enabled in this Release 0 Shift Planner view.</p><span class="badge-neutral">Coming soon</span></div>

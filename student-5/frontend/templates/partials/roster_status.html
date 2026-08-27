@@ -1,0 +1,114 @@
+{#- Weekly roster summary + conflict review. Rendered by GET
+    /partials/roster-status and swapped into a persistent wrapper; carries no
+    hx-trigger of its own. Every figure is derived per request from real
+    shift/assignment/availability data — no roster state is persisted. -#}
+{% if summary is none %}
+<div class="alert alert--danger" role="alert">
+  <div>
+    <p class="alert__title">Roster status unavailable</p>
+    <p class="alert__body">{{ error }}</p>
+  </div>
+</div>
+
+{% else %}
+<div class="roster-status">
+
+  <div class="row row--between">
+    <h3 class="u-label">Weekly roster status</h3>
+    <span class="u-label">{{ week_label }}</span>
+  </div>
+
+  {% if error %}
+  <p class="drawer__muted">
+    Some assignment data could not be loaded, so these figures may be incomplete. {{ error }}
+  </p>
+  {% endif %}
+
+  <dl class="roster-figures">
+    <div class="roster-figure">
+      <dt class="roster-figure__label">Shifts</dt>
+      <dd class="roster-figure__value" data-numeric>{{ summary.shift_count }}</dd>
+    </div>
+    <div class="roster-figure">
+      <dt class="roster-figure__label">Required positions</dt>
+      <dd class="roster-figure__value" data-numeric>{{ summary.required_positions }}</dd>
+    </div>
+    <div class="roster-figure">
+      <dt class="roster-figure__label">Assigned</dt>
+      <dd class="roster-figure__value" data-numeric>{{ summary.assigned_positions }}</dd>
+    </div>
+    <div class="roster-figure">
+      <dt class="roster-figure__label">Unfilled</dt>
+      <dd class="roster-figure__value{% if summary.unfilled_positions %} roster-figure__value--gap{% endif %}"
+          data-numeric>{{ summary.unfilled_positions }}</dd>
+    </div>
+  </dl>
+
+  <p class="roster-state roster-state--{{ 'ready' if summary.ready else 'incomplete' }}">
+    <span aria-hidden="true">{{ '✓' if summary.ready else '!' }}</span>
+    {% if summary.empty %}
+      No shifts scheduled for this week yet — create the required shifts to begin planning
+    {% elif summary.ready %}
+      All scheduled positions filled — roster ready
+    {% else %}
+      {{ summary.label }}:
+      {%- if summary.unfilled_positions %} {{ summary.unfilled_positions }} unfilled position{{ '' if summary.unfilled_positions == 1 else 's' }}{% endif %}
+      {%- if summary.unfilled_positions and summary.conflict_count %} ·{% endif %}
+      {%- if summary.conflict_count %} {{ summary.conflict_count }} conflict{{ '' if summary.conflict_count == 1 else 's' }} to review{% endif %}
+    {% endif %}
+  </p>
+
+  {# ------------------------------------------------- remaining gaps #}
+  {% if departments %}
+  <div>
+    <h4 class="u-label">Remaining gaps by department</h4>
+    <ul role="list" class="roster-gaps">
+      {% for dept in departments %}
+      <li class="row row--between">
+        <span>{{ dept.department }}</span>
+        {% if dept.gap %}
+        <span class="badge-warning">Gap {{ dept.gap }}</span>
+        {% else %}
+        <span class="badge-success">Fully staffed</span>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {# ------------------------------------------------ conflict review #}
+  <div>
+    <h4 class="u-label">Conflict review</h4>
+    {% if not conflicts %}
+    <p class="drawer__muted">
+      <span aria-hidden="true">✓</span> No conflicts detected for this week.
+    </p>
+    {% else %}
+    <p class="drawer__muted">
+      {{ conflicts|length }} conflict{{ '' if conflicts|length == 1 else 's' }} require review.
+      Nothing is changed automatically — open the shift to keep or reassign.
+    </p>
+    <ul role="list" class="roster-conflicts">
+      {% for conflict in conflicts %}
+      <li class="roster-conflict">
+        <span class="roster-conflict__who">{{ conflict.staff_name }}</span>
+        <span class="roster-conflict__detail">{{ conflict.detail }}</span>
+        <span class="roster-conflict__when u-mono">
+          {{ conflict.department }} · {{ conflict.shift_date }}
+          {{ conflict.start_time }}–{{ conflict.end_time }}
+        </span>
+        <button class="btn-secondary btn-compact" type="button"
+                hx-get="/partials/shifts/{{ conflict.shift_id }}?panel=1"
+                hx-target="#planner-detail" hx-swap="innerHTML"
+                hx-indicator="#loading-indicator">
+          Review<span class="visually-hidden"> shift for {{ conflict.staff_name }}</span>
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+</div>
+{% endif %}

@@ -98,24 +98,45 @@
 
   <section class="drawer__section" aria-labelledby="candidate-heading">
     <div class="row row--between">
-      <h3 class="u-label" id="candidate-heading">Available staff</h3>
-      <span class="u-label">Required role match</span>
+      <h3 class="u-label" id="candidate-heading">Staff for this shift</h3>
+      <span class="u-label">{{ eligible_count }} eligible</span>
     </div>
     <p class="drawer__muted">
-      Candidates are filtered by the real required role and “Available” status. This is deterministic filtering, not an AI recommendation.
+      Staff holding the required role. Eligibility is calculated from real
+      availability and assignment data — deterministic rules, not an AI
+      recommendation. The manager makes the decision.
     </p>
+
     {% if candidate_error %}
     <p class="drawer__muted">Candidate staff are unavailable. {{ candidate_error }}</p>
+
     {% elif candidates %}
     <ul class="assignment-list" role="list">
       {% for person in candidates %}
-      <li class="assignment-person">
+      <li class="assignment-person{% if not person.eligible %} assignment-person--blocked{% endif %}">
         <span class="staff-avatar" aria-hidden="true">{{ initials(person.name) }}</span>
         <span class="assignment-person__main">
           <strong>{{ person.name }}</strong>
           <span>{{ person.role }} · {{ person.department }}</span>
           {% if person.specialisation %}<span>{{ person.specialisation }}</span>{% endif %}
+          <span class="candidate-flags">
+            <span class="badge-neutral">{{ person.employment_status }}</span>
+            {#- Weekly availability is ADVISORY: the backend permits assignment
+                outside it, so it is shown as a warning, never a block. -#}
+            {% for note in person.notes %}
+            <span class="candidate-note candidate-note--{{ 'ok' if note.ok else 'warn' }}">
+              <span aria-hidden="true">{{ '✓' if note.ok else '!' }}</span>{{ note.text }}
+            </span>
+            {% endfor %}
+            {% if person.blocked_reason %}
+            <span class="candidate-note candidate-note--blocked">
+              <span aria-hidden="true">✕</span>{{ person.blocked_reason }}
+            </span>
+            {% endif %}
+          </span>
         </span>
+
+        {% if person.eligible %}
         <form hx-post="/partials/shifts/{{ shift.shift_id }}/assign"
               hx-target="{{ detail_target }}" hx-swap="innerHTML"
               hx-indicator="#loading-indicator">
@@ -123,11 +144,17 @@
           {% if embedded %}<input type="hidden" name="panel" value="1">{% endif %}
           <button class="btn-primary btn-compact" type="submit">Assign</button>
         </form>
+        {% else %}
+        {#- Not a disabled button: an inert label states the reason instead of
+            offering an action that would be rejected. -#}
+        <span class="candidate-blocked-label">Not assignable</span>
+        {% endif %}
       </li>
       {% endfor %}
     </ul>
+
     {% else %}
-    <p class="drawer__muted">No unassigned staff match the required role and Available status.</p>
+    <p class="drawer__muted">No staff hold the required role for this shift.</p>
     {% endif %}
   </section>
 

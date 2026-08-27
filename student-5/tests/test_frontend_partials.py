@@ -785,7 +785,7 @@ def test_shift_detail_lists_active_assignments_and_candidates(
     assert "Amara Okafor" in body
     assert "Gap 1" in body
     assert "Chloe Bennett" in body
-    assert "deterministic filtering, not an AI recommendation" in body
+    assert "deterministic rules, not an AI" in body
 
 
 def test_shift_detail_not_found_state(frontend_client, fe_api_client, monkeypatch):
@@ -1045,11 +1045,33 @@ def test_planner_backend_and_database_failures_are_isolated(
 
 
 def test_planner_returned_fragment_cannot_self_trigger():
-    template = (
-        FRONTEND_DIR / "templates" / "partials" / "planner_workspace.html"
-    ).read_text()
-    assert 'hx-trigger="load' not in template
-    assert "fetch(" not in template
+    """The planner fragment must not be able to re-request itself.
+
+    A "load" trigger is permitted only on an element that also sets
+    hx-target="this", i.e. one that swaps its own contents. Such an element
+    cannot re-arm itself, because the partial it receives carries no
+    hx-trigger of its own (asserted separately below). Anything else with a
+    load trigger would fire again on every workspace swap and loop.
+    """
+    import re
+    from pathlib import Path
+    fragment = (Path(__file__).resolve().parents[1]
+                / "frontend/templates/partials/planner_workspace.html").read_text()
+
+    for match in re.finditer(r'<[^>]*hx-trigger="[^"]*\bload\b[^"]*"[^>]*>', fragment):
+        assert 'hx-target="this"' in match.group(0), (
+            "load trigger without hx-target=\"this\": " + match.group(0)[:120])
+
+
+def test_roster_status_response_carries_no_trigger():
+    """The roster-status partial must never re-arm the load that fetched it."""
+    from pathlib import Path
+    import re
+    partial = (Path(__file__).resolve().parents[1]
+               / "frontend/templates/partials/roster_status.html").read_text()
+    # Strip Jinja comments: only real markup matters here.
+    markup = re.sub(r"\{#.*?#\}", "", partial, flags=re.S)
+    assert "hx-trigger" not in markup
 
 
 # ------------------------------------------- weekly availability (UI)
@@ -1284,3 +1306,247 @@ def test_weekly_editor_still_has_21_slots_and_colgroup(frontend_client, fe_api_c
         "/partials/staff/1/weekly-availability/edit").data.decode()
     assert len(set(re.findall(r'value="([0-6]-[0-2])"', body))) == 21
     assert 'weekly-grid__labels' in body
+
+
+# ==========================================================================
+# Scenario A — weekly roster planning
+# ==========================================================================
+def _fe():
+    return _load_frontend_app_module()
+
+
+def _planner_shift(shift_id=1, date="2026-08-31", start="07:00", end="15:00",
+           dept="Emergency", role="Registered Nurse", required=2, assigned=0,
+           status="Assigned"):
+    return {"shift_id": shift_id, "department": dept, "shift_date": date,
+            "start_time": start, "end_time": end, "required_role": role,
+            "required_staff_count": required, "assigned_staff_count": assigned,
+            "shift_status": "Planned", "assignment_status": status}
+
+
+def _person(staff_id=1, name="Amara Okafor", role="Registered Nurse",
+            dept="Emergency", availability="Available", employment="Full-Time"):
+    return {"staff_id": staff_id, "name": name, "role": role, "department": dept,
+            "specialisation": None, "availability_status": availability,
+            "employment_status": employment}
+
+
+# ------------------------------------------------------------- overlap
+def test_shifts_overlap_detects_partial_overlap():
+    fe = _fe()
+    a = _planner_shift(1, start="07:00", end="15:00")
+    b = _planner_shift(2, start="14:00", end="22:00")
+    assert fe._shifts_overlap(a, b) is True
+
+
+def test_shifts_do_not_overlap_when_adjacent():
+    fe = _fe()
+    a = _planner_shift(1, start="07:00", end="15:00")
+    b = _planner_shift(2, start="15:00", end="23:00")
+    assert fe._shifts_overlap(a, b) is False
+
+
+def test_overnight_shift_overlaps_into_next_day():
+    """23:00-07:00 Monday runs into Tuesday and must clash with Tue 02:00."""
+    fe = _fe()
+    night = _planner_shift(1, date="2026-08-31", start="23:00", end="07:00")
+    early = _planner_shift(2, date="2026-09-01", start="02:00", end="06:00")
+    assert fe._shifts_overlap(night, early) is True
+
+
+def test_shifts_on_different_days_do_not_overlap():
+    fe = _fe()
+    a = _planner_shift(1, date="2026-08-31", start="07:00", end="15:00")
+    b = _planner_shift(2, date="2026-09-01", start="07:00", end="15:00")
+    assert fe._shifts_overlap(a, b) is False
+
+
+# ------------------------------------------- weekly availability cover
+def test_weekly_covers_shift_exact_match():
+    fe = _fe()
+    periods = [{"day_of_week": 0, "start_time": "07:00", "end_time": "15:00"}]
+    assert fe._weekly_covers_shift(periods, _planner_shift(date="2026-08-31")) is True
+
+
+def test_weekly_does_not_cover_partial_shift():
+    """Availability must cover the WHOLE shift window, not merely touch it."""
+    fe = _fe()
+    periods = [{"day_of_week": 0, "start_time": "07:00", "end_time": "14:00"}]
+    assert fe._weekly_covers_shift(periods, _planner_shift(date="2026-08-31")) is False
+
+
+def test_weekly_covers_overnight_shift():
+    fe = _fe()
+    periods = [{"day_of_week": 0, "start_time": "23:00", "end_time": "07:00"}]
+    night = _planner_shift(date="2026-08-31", start="23:00", end="07:00")
+    assert fe._weekly_covers_shift(periods, night) is True
+
+
+def test_empty_weekly_availability_covers_nothing():
+    fe = _fe()
+    assert fe._weekly_covers_shift([], _planner_shift()) is False
+
+
+# ----------------------------------------------------- eligibility
+def test_candidate_eligible_with_matching_availability():
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(), _planner_shift(), set(), [],
+        [{"day_of_week": 0, "start_time": "07:00", "end_time": "15:00"}])
+    assert result["eligible"] is True
+    assert result["weekly_ok"] is True
+
+
+def test_candidate_outside_weekly_availability_is_advisory_not_blocking():
+    """The backend permits this, so it must warn rather than block."""
+    fe = _fe()
+    result = fe._evaluate_candidate(_person(), _planner_shift(), set(), [], [])
+    assert result["eligible"] is True          # still assignable
+    assert result["weekly_ok"] is False
+    assert any("Outside weekly availability" in n["text"] for n in result["notes"])
+
+
+def test_candidate_on_leave_is_blocked():
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(availability="On Leave"), _planner_shift(), set(), [], [])
+    assert result["eligible"] is False
+    assert result["blocked_reason"] == "On Leave"
+
+
+def test_candidate_unavailable_is_blocked():
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(availability="Unavailable"), _planner_shift(), set(), [], [])
+    assert result["eligible"] is False
+    assert result["blocked_reason"] == "Unavailable"
+
+
+def test_candidate_role_mismatch_is_blocked():
+    fe = _fe()
+    result = fe._evaluate_candidate(
+        _person(role="Doctor"), _planner_shift(), set(), [], [])
+    assert result["eligible"] is False
+    assert result["blocked_reason"] == "Role mismatch"
+
+
+def test_candidate_already_assigned_to_this_shift_is_blocked():
+    fe = _fe()
+    result = fe._evaluate_candidate(_person(), _planner_shift(), {1}, [], [])
+    assert result["eligible"] is False
+    assert "Already assigned" in result["blocked_reason"]
+
+
+def test_candidate_with_overlapping_assignment_is_blocked():
+    fe = _fe()
+    target = _planner_shift(shift_id=5, start="07:00", end="15:00")
+    clash = _planner_shift(shift_id=9, start="08:00", end="16:00")
+    result = fe._evaluate_candidate(_person(), target, set(), [clash], [])
+    assert result["eligible"] is False
+    assert "Already rostered" in result["blocked_reason"]
+
+
+def test_cancelled_assignment_does_not_block_candidate():
+    fe = _fe()
+    target = _planner_shift(shift_id=5)
+    cancelled = _planner_shift(shift_id=9, start="08:00", end="16:00", status="Cancelled")
+    result = fe._evaluate_candidate(_person(), target, set(), [cancelled], [])
+    assert result["eligible"] is True
+
+
+# ------------------------------------------------- weekly summary
+def test_week_summary_counts_positions():
+    fe = _fe()
+    shifts = [_planner_shift(1, required=4, assigned=3), _planner_shift(2, required=2, assigned=2)]
+    summary = fe._week_roster_summary(shifts, [])
+    assert summary["shift_count"] == 2
+    assert summary["required_positions"] == 6
+    assert summary["assigned_positions"] == 5
+    assert summary["unfilled_positions"] == 1
+    assert summary["ready"] is False
+
+
+def test_week_summary_ready_when_filled_and_no_conflicts():
+    fe = _fe()
+    summary = fe._week_roster_summary([_planner_shift(1, required=2, assigned=2)], [])
+    assert summary["unfilled_positions"] == 0
+    assert summary["ready"] is True
+    assert summary["label"] == "Roster ready"
+
+
+def test_week_summary_not_ready_when_conflicts_exist():
+    fe = _fe()
+    summary = fe._week_roster_summary([_planner_shift(1, required=2, assigned=2)],
+                                       [{"kind": "overlap"}])
+    assert summary["ready"] is False
+
+
+def test_empty_week_is_not_reported_as_ready():
+    """No shifts planned is not a completed roster."""
+    fe = _fe()
+    summary = fe._week_roster_summary([], [])
+    assert summary["empty"] is True
+    assert summary["ready"] is False
+
+
+# ------------------------------------------------ conflict detection
+def _conflict_args(person, shift, weekly=None, other_shifts=None):
+    return ([shift],
+            {shift["shift_id"]: [{"staff_id": person["staff_id"],
+                                   "assignment_status": "Assigned"}]},
+            {person["staff_id"]: person},
+            {person["staff_id"]: weekly or []},
+            {person["staff_id"]: other_shifts or []})
+
+
+def test_no_conflicts_when_everything_matches():
+    fe = _fe()
+    shift = _planner_shift(shift_id=1, date="2026-08-31")
+    weekly = [{"day_of_week": 0, "start_time": "07:00", "end_time": "15:00"}]
+    assert fe._week_conflicts(*_conflict_args(_person(), shift, weekly)) == []
+
+
+def test_conflict_when_assigned_outside_weekly_availability():
+    fe = _fe()
+    conflicts = fe._week_conflicts(*_conflict_args(_person(), _planner_shift(shift_id=1)))
+    assert any(c["kind"] == "availability" for c in conflicts)
+
+
+def test_conflict_when_assigned_while_on_leave():
+    fe = _fe()
+    weekly = [{"day_of_week": 0, "start_time": "07:00", "end_time": "15:00"}]
+    conflicts = fe._week_conflicts(
+        *_conflict_args(_person(availability="On Leave"), _planner_shift(shift_id=1), weekly))
+    assert any(c["kind"] == "status" and "On Leave" in c["detail"] for c in conflicts)
+
+
+def test_conflict_when_assignments_overlap():
+    fe = _fe()
+    shift = _planner_shift(shift_id=1, start="07:00", end="15:00")
+    other = _planner_shift(shift_id=9, start="08:00", end="16:00")
+    weekly = [{"day_of_week": 0, "start_time": "00:00", "end_time": "23:59"}]
+    conflicts = fe._week_conflicts(
+        *_conflict_args(_person(), shift, weekly, [other]))
+    assert any(c["kind"] == "overlap" for c in conflicts)
+
+
+# --------------------------------------------------- roster status route
+def test_roster_status_renders_real_totals(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_coverage",
+                        lambda **kw: {"shifts": [_planner_shift(1, date="2026-08-31",
+                                                         required=2, assigned=1)]})
+    monkeypatch.setattr(fe_api_client, "list_staff",
+                        lambda **kw: {"staff": [_person()]})
+    monkeypatch.setattr(fe_api_client, "list_shift_assignments",
+                        lambda sid: {"assignments": []})
+    body = frontend_client.get(
+        "/partials/roster-status?week_start=2026-08-31").data.decode()
+    assert "Weekly roster status" in body
+    assert "31 Aug – 6 Sep 2026" in body       # real calculated dates
+    assert "Roster incomplete" in body
+
+
+def test_roster_status_backend_unavailable(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_coverage", _raise_unavailable)
+    body = frontend_client.get("/partials/roster-status").data.decode()
+    assert "Roster status unavailable" in body

@@ -480,6 +480,206 @@ def _week_start(today=None):
     return today - datetime.timedelta(days=today.weekday())
 
 
+#: Employment groupings used only to order candidates in the list. This is a
+#: presentation aid, not a policy rule — the manager still decides.
+_EMPLOYMENT_PRIORITY = {"Full-Time": 0, "Part-Time": 0, "Casual": 1, "Contract": 1}
+
+
+def _shift_minutes_on(shift):
+    """Absolute (start, end) minutes for a shift, from its own date.
+
+    An overnight shift (end <= start) runs into the following day, so its end
+    is pushed a day forward rather than being treated as invalid.
+    """
+    try:
+        day = datetime.datetime.strptime(shift["shift_date"], "%Y-%m-%d").date()
+    except (KeyError, TypeError, ValueError):
+        return None
+    base = day.toordinal() * 1440
+    start = base + _time_minutes(shift["start_time"])
+    end = base + _time_minutes(shift["end_time"])
+    if end <= start:
+        end += 1440
+    return (start, end)
+
+
+def _shifts_overlap(first, second):
+    a, b = _shift_minutes_on(first), _shift_minutes_on(second)
+    if not a or not b:
+        return False
+    return a[0] < b[1] and b[0] < a[1]
+
+
+def _weekly_covers_shift(periods, shift):
+    """True when a recurring weekly period covers the shift's whole window.
+
+    Compared on the seven-day timeline used by the weekly grid, so overnight
+    periods and the Sunday-to-Monday wrap behave consistently.
+    """
+    span = _shift_minutes_on(shift)
+    if not span or not periods:
+        return False
+    try:
+        day = datetime.datetime.strptime(shift["shift_date"], "%Y-%m-%d").date()
+    except (KeyError, TypeError, ValueError):
+        return False
+
+    length = span[1] - span[0]
+    start_in_week = day.weekday() * 1440 + _time_minutes(shift["start_time"])
+    shift_segments = []
+    end_in_week = start_in_week + length
+    if end_in_week <= 10080:
+        shift_segments.append((start_in_week, end_in_week))
+    else:
+        shift_segments.append((start_in_week, 10080))
+        shift_segments.append((0, end_in_week - 10080))
+
+    available = []
+    for period in periods:
+        available.extend(_week_segments(period["day_of_week"],
+                                         period["start_time"], period["end_time"]))
+
+    # Every minute of the shift must fall inside some available period.
+    for seg_start, seg_end in shift_segments:
+        cursor = seg_start
+        progressed = True
+        while cursor < seg_end and progressed:
+            progressed = False
+            for a_start, a_end in available:
+                if a_start <= cursor < a_end:
+                    cursor = min(a_end, seg_end)
+                    progressed = True
+                    break
+        if cursor < seg_end:
+            return False
+    return True
+
+
+def _evaluate_candidate(person, shift, assigned_ids, their_shifts, weekly_periods):
+    """Deterministic eligibility for manual assignment. No scoring, no AI.
+
+    Returns the blocking reason (if any) plus advisory notes. Blocking states
+    are those the backend itself would reject or that are plainly wrong;
+    weekly-availability mismatch is ADVISORY — the backend permits it, so the
+    manager may still assign with the mismatch shown.
+    """
+    notes, blocked = [], None
+
+    if person["staff_id"] in assigned_ids:
+        blocked = "Already assigned to this shift"
+    elif person.get("availability_status") == "On Leave":
+        blocked = "On Leave"
+    elif person.get("availability_status") == "Unavailable":
+        blocked = "Unavailable"
+    elif person.get("role") != shift.get("required_role"):
+        blocked = "Role mismatch"
+    else:
+        clash = next((row for row in their_shifts
+                      if row.get("shift_id") != shift.get("shift_id")
+                      and row.get("assignment_status") not in _INACTIVE_ASSIGNMENT
+                      and _shifts_overlap(row, shift)), None)
+        if clash:
+            blocked = ("Already rostered " + clash.get("shift_date", "") + " "
+                       + clash.get("start_time", "") + "-" + clash.get("end_time", ""))
+
+    covered = _weekly_covers_shift(weekly_periods, shift)
+    notes.append({"ok": covered,
+                  "text": "Weekly availability matches" if covered
+                          else "Outside weekly availability"})
+
+    return {
+        "staff_id": person["staff_id"],
+        "name": person.get("name"),
+        "role": person.get("role"),
+        "specialisation": person.get("specialisation"),
+        "department": person.get("department"),
+        "employment_status": person.get("employment_status"),
+        "availability_status": person.get("availability_status"),
+        "eligible": blocked is None,
+        "blocked_reason": blocked,
+        "weekly_ok": covered,
+        "notes": notes,
+    }
+
+
+def _week_label(start, end):
+    """e.g. "31 Aug – 6 Sep 2026" from real calculated dates."""
+    left = start.strftime("%-d %b") if start.year == end.year else start.strftime("%-d %b %Y")
+    return f"{left} – {end.strftime('%-d %b %Y')}"
+
+
+def _week_roster_summary(week_shifts, conflicts):
+    """Derive the weekly planning summary. Nothing here is persisted.
+
+    "Roster ready" is a calculated statement about the current data, not a
+    stored publication state.
+    """
+    required = sum(int(row.get("required_staff_count", 0)) for row in week_shifts)
+    assigned = sum(int(row.get("assigned_staff_count", 0)) for row in week_shifts)
+    unfilled = sum(max(int(row.get("required_staff_count", 0))
+                        - int(row.get("assigned_staff_count", 0)), 0)
+                    for row in week_shifts)
+    # An empty week is not a completed roster — nothing has been planned yet.
+    empty = len(week_shifts) == 0
+    ready = (not empty) and unfilled == 0 and not conflicts
+    return {
+        "shift_count": len(week_shifts),
+        "required_positions": required,
+        "assigned_positions": assigned,
+        "unfilled_positions": unfilled,
+        "conflict_count": len(conflicts),
+        "empty": empty,
+        "ready": ready,
+        "label": "Roster ready" if ready else "Roster incomplete",
+    }
+
+
+def _week_conflicts(week_shifts, assignments_by_shift, staff_by_id,
+                    weekly_by_staff, shifts_by_staff):
+    """Deterministic conflicts across the selected week.
+
+    Detects: overlapping assignments, assignment outside recurring weekly
+    availability, and staff who are operationally Unavailable or On Leave.
+    Nothing is auto-corrected — each is surfaced for the manager to decide.
+    """
+    conflicts = []
+    for shift in week_shifts:
+        for row in assignments_by_shift.get(shift["shift_id"], []):
+            staff_id = row.get("staff_id")
+            person = staff_by_id.get(staff_id)
+            if not person:
+                continue
+            base = {"shift_id": shift["shift_id"], "staff_id": staff_id,
+                    "staff_name": person.get("name"),
+                    "department": shift.get("department"),
+                    "shift_date": shift.get("shift_date"),
+                    "start_time": shift.get("start_time"),
+                    "end_time": shift.get("end_time")}
+
+            status = person.get("availability_status")
+            if status in ("Unavailable", "On Leave"):
+                conflicts.append({**base, "kind": "status",
+                                   "detail": f"Assigned while {status}"})
+
+            if not _weekly_covers_shift(weekly_by_staff.get(staff_id, []), shift):
+                conflicts.append({**base, "kind": "availability",
+                                   "detail": "Assigned outside weekly availability"})
+
+            for other in shifts_by_staff.get(staff_id, []):
+                if other.get("shift_id") == shift["shift_id"]:
+                    continue
+                if other.get("assignment_status") in _INACTIVE_ASSIGNMENT:
+                    continue
+                if _shifts_overlap(other, shift) and other.get("shift_id", 0) > shift["shift_id"]:
+                    conflicts.append({
+                        **base, "kind": "overlap",
+                        "detail": ("Overlaps " + str(other.get("department", "")) + " "
+                                    + str(other.get("shift_date", "")) + " "
+                                    + str(other.get("start_time", "")) + "-"
+                                    + str(other.get("end_time", "")))})
+    return conflicts
+
+
 def create_app() -> Flask:
     # Absolute template/static paths: Flask's default resolution relies on
     # how the module was imported, which breaks when app.py is loaded via
@@ -701,13 +901,37 @@ def create_app() -> Flask:
                 "Candidate assignment is unavailable until current assignments can be loaded.")
         else:
             try:
+                # Fetch by required role only. Operational status and conflicts
+                # are ANNOTATED rather than filtered out, so the manager can
+                # see why someone is unavailable instead of them silently
+                # vanishing from the list.
                 candidate_records = api_client.list_staff(
-                    role=shift["required_role"], availability_status="Available")["staff"]
+                    role=shift["required_role"])["staff"]
                 active_ids = {row["staff_id"] for row in assignments}
-                candidates = [row for row in candidate_records
-                              if row["staff_id"] not in active_ids]
-                candidates.sort(key=lambda row: (
-                    row.get("department") != shift["department"], row.get("name", "")))
+
+                evaluated = []
+                for person in candidate_records:
+                    staff_id = person["staff_id"]
+                    try:
+                        their_shifts = api_client.list_staff_shifts(staff_id)["shifts"]
+                    except (BackendUnavailableError, BackendError):
+                        their_shifts = []
+                    try:
+                        periods = api_client.get_weekly_availability(staff_id)["periods"]
+                    except (BackendUnavailableError, BackendError):
+                        periods = []
+                    evaluated.append(_evaluate_candidate(
+                        person, shift, active_ids, their_shifts, periods))
+
+                # Eligible first, then weekly-availability match, then the
+                # employment ordering aid, then name. Ordering only.
+                evaluated.sort(key=lambda row: (
+                    not row["eligible"],
+                    not row["weekly_ok"],
+                    _EMPLOYMENT_PRIORITY.get(row.get("employment_status"), 2),
+                    row.get("department") != shift["department"],
+                    row.get("name") or ""))
+                candidates = evaluated
             except (BackendUnavailableError, BackendError) as error:
                 candidate_error = str(error)
 
@@ -720,6 +944,7 @@ def create_app() -> Flask:
             assignment_error=assignment_error, candidates=candidates,
             candidate_error=candidate_error, coverage=coverage,
             assigned_count=assigned_count, embedded=embedded,
+            eligible_count=sum(1 for row in candidates if row.get("eligible")),
         )
 
     @app.get("/partials/shifts/<int:shift_id>")
@@ -752,6 +977,78 @@ def create_app() -> Flask:
         return render_template(
             "partials/shift_form.html", values=values, mode=mode,
             shift_id=shift_id, statuses=api_client.SHIFT_STATUSES, error=error)
+
+    @app.get("/partials/roster-status")
+    def roster_status_partial():
+        """Weekly roster summary and deterministic conflict review.
+
+        Everything here is derived from existing shift/assignment/availability
+        data on each request — no roster state is persisted.
+        """
+        week_start = request.args.get("week_start") or _week_start().isoformat()
+        try:
+            start = datetime.datetime.strptime(week_start, "%Y-%m-%d").date()
+        except (TypeError, ValueError):
+            start = _week_start()
+        end = start + datetime.timedelta(days=6)
+
+        try:
+            coverage_rows = api_client.get_coverage()["shifts"]
+            staff_rows = api_client.list_staff()["staff"]
+        except (BackendUnavailableError, BackendError) as error:
+            return render_template("partials/roster_status.html",
+                                    summary=None, conflicts=None, error=str(error),
+                                    week_start=start.isoformat(),
+                                    week_end=end.isoformat())
+
+        week_shifts = [row for row in coverage_rows
+                       if start.isoformat() <= row.get("shift_date", "") <= end.isoformat()]
+
+        staff_by_id = {row["staff_id"]: row for row in staff_rows}
+        assignments_by_shift, weekly_by_staff, shifts_by_staff = {}, {}, {}
+        partial_error = None
+
+        for shift in week_shifts:
+            try:
+                assignments_by_shift[shift["shift_id"]] = [
+                    row for row in api_client.list_shift_assignments(
+                        shift["shift_id"])["assignments"]
+                    if row.get("assignment_status") not in _INACTIVE_ASSIGNMENT]
+            except (BackendUnavailableError, BackendError) as error:
+                assignments_by_shift[shift["shift_id"]] = []
+                partial_error = str(error)
+
+        involved = {row.get("staff_id")
+                    for rows in assignments_by_shift.values() for row in rows}
+        for staff_id in involved:
+            try:
+                weekly_by_staff[staff_id] = api_client.get_weekly_availability(
+                    staff_id)["periods"]
+            except (BackendUnavailableError, BackendError):
+                weekly_by_staff[staff_id] = []
+            try:
+                shifts_by_staff[staff_id] = api_client.list_staff_shifts(
+                    staff_id)["shifts"]
+            except (BackendUnavailableError, BackendError):
+                shifts_by_staff[staff_id] = []
+
+        conflicts = _week_conflicts(week_shifts, assignments_by_shift,
+                                     staff_by_id, weekly_by_staff, shifts_by_staff)
+        summary = _week_roster_summary(week_shifts, conflicts)
+
+        # Department roll-up for the "remaining gaps" view.
+        departments = {}
+        for row in week_shifts:
+            entry = departments.setdefault(row["department"],
+                                            {"department": row["department"], "gap": 0})
+            entry["gap"] += max(int(row.get("required_staff_count", 0))
+                                 - int(row.get("assigned_staff_count", 0)), 0)
+
+        return render_template(
+            "partials/roster_status.html", summary=summary, conflicts=conflicts,
+            departments=sorted(departments.values(), key=lambda d: d["department"]),
+            error=partial_error, week_start=start.isoformat(),
+            week_end=end.isoformat(), week_label=_week_label(start, end))
 
     @app.get("/partials/shifts/new")
     def new_shift_partial():

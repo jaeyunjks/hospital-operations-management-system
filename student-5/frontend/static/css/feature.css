@@ -1796,3 +1796,125 @@
 }
 
 .weekly-check input { margin: 0; cursor: pointer; }
+
+/* ==========================================================================
+   7. Weekly roster planning (Scenario A)
+   ========================================================================== */
+
+/* -------------------------------------------- candidate eligibility -- */
+.assignment-person--blocked { opacity: 0.72; }
+
+.candidate-flags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* Each state pairs a glyph with its text, so meaning never rests on colour. */
+.candidate-note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--size-label);
+  line-height: 1.4;
+}
+
+.candidate-note--ok { color: var(--color-success); }
+.candidate-note--warn { color: var(--color-warning); }
+.candidate-note--blocked { color: var(--color-danger); }
+
+/* Inert label rather than a disabled button: the action does not exist for
+   this candidate, so nothing button-shaped is offered. */
+.candidate-blocked-label {
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-label);
+  white-space: nowrap;
+}
+
+/* ------------------------------------------------- roster status ----- */
+.roster-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5);
+}
+
+.roster-figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin: 0;
+}
+
+.roster-figure__label {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+.roster-figure__value {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--size-data-lg);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-primary);
+}
+
+.roster-figure__value--gap { color: var(--color-danger); }
+
+.roster-state {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--size-ui-xs);
+  line-height: var(--leading-ui-tight);
+  border: var(--border-hair);
+}
+
+.roster-state--ready {
+  background: var(--color-success-soft);
+  color: var(--color-success);
+}
+
+.roster-state--incomplete {
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+}
+
+.roster-gaps,
+.roster-conflicts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  font-size: var(--size-ui-xs);
+}
+
+.roster-conflict {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: var(--border-hair);
+  border-left: 3px solid var(--color-warning-mark);
+}
+
+.roster-conflict__who {
+  font-weight: var(--weight-medium);
+  color: var(--color-text-primary);
+}
+
+.roster-conflict__detail { color: var(--color-text-secondary); }
+
+.roster-conflict__when {
+  font-size: var(--size-data-sm);
+  color: var(--color-text-label);
+}
+
+.roster-conflict button { align-self: flex-start; margin-top: var(--space-2); }
