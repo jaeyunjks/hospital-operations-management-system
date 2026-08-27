@@ -2491,3 +2491,61 @@
 @media (max-width: 820px) {
   .conflict-item { align-items: flex-start; }
 }
+
+/* ==========================================================================
+   11. All-departments weekly overview (Shift Planner)
+   --------------------------------------------------------------------------
+   A dense summary table, not a second dashboard: the planner already has its
+   own visual language, and this view exists to be scanned for gaps.
+   ========================================================================== */
+
+.department-summary {
+  /* Department name takes the slack; the numeric columns stay narrow and
+     aligned so a column of gaps reads as a column. */
+  width: 100%;
+}
+
+.department-summary th[scope="col"].table__num,
+.department-summary td.table__num {
+  width: 1%;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The number a manager opens this view to find. */
+.department-summary__gap {
+  font-weight: var(--weight-semibold);
+  color: var(--color-danger);
+}
+
+.department-summary td.table__actions { width: 1%; white-space: nowrap; }
+
+@media (max-width: 1080px) {
+  /* Surplus and Assigned are derivable from the rest; drop them before the
+     table starts scrolling, keeping Gap and Coverage visible. */
+  .department-summary th:nth-child(4),
+  .department-summary td:nth-child(4),
+  .department-summary th:nth-child(7),
+  .department-summary td:nth-child(7) { display: none; }
+}
+
+@media (max-width: 820px) {
+  .department-summary th:nth-child(5),
+  .department-summary td:nth-child(5) { display: none; }
+}
+
+/* Below this width the remaining columns no longer fit, and .table-wrap
+   would take an inner horizontal scrollbar. That scrollbar costs the PAGE
+   13px of horizontal scroll (measured), and it pushes Gap, Status and the
+   drill-down button off screen — the three things this view exists to show.
+   Dropping Shifts and Required keeps the table inside its container, so the
+   page stays put and what matters stays visible. */
+@media (max-width: 720px) {
+  .department-summary th:nth-child(2),
+  .department-summary td:nth-child(2),
+  .department-summary th:nth-child(3),
+  .department-summary td:nth-child(3) { display: none; }
+  /* Overrides the shared .table min-width, which would otherwise keep
+     demanding 640px and re-create the inner scrollbar. */
+  .department-summary { min-width: 0; }
+}

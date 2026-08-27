@@ -2845,3 +2845,402 @@ def test_employee_availability_change_is_refused_by_the_backend(employee_client,
                                     data={"availability_status": "Unavailable"})
     assert "HX-Trigger" not in response.headers
     assert "requires the Staff Manager role" in response.get_data(as_text=True)
+
+
+# ==========================================================================
+# Shift Planner — All departments weekly overview
+# ==========================================================================
+
+def _week_shift(shift_id, dept, date="2026-08-25", required=2, assigned=2,
+                start="07:00", end="15:00", role="Registered Nurse",
+                status="Planned"):
+    return {"shift_id": shift_id, "department": dept, "shift_date": date,
+            "start_time": start, "end_time": end, "required_role": role,
+            "required_staff_count": required, "shift_status": status}
+
+
+def _coverage_row(shift_id, required=2, assigned=2):
+    return {"shift_id": shift_id, "required_staff_count": required,
+            "assigned_staff_count": assigned}
+
+
+def _planner_model(shifts, coverage, department=None, week="2026-08-24",
+                   date="2026-08-25", **kwargs):
+    fe = _fe()
+    return fe._build_planner_model(shifts, coverage, week, date,
+                                   selected_department=department, **kwargs)
+
+
+def _by_department(model):
+    return {row["department"]: row for row in model["department_summary"]}
+
+
+# -------------------------------------------------------- aggregation
+def test_department_summary_reports_each_department_separately():
+    model = _planner_model(
+        [_week_shift(1, "Emergency", required=2),
+         _week_shift(2, "Radiology", required=1)],
+        [_coverage_row(1, 2, 1), _coverage_row(2, 1, 0)],
+        department="All")
+    rows = _by_department(model)
+    assert rows["Emergency"]["gap"] == 1
+    assert rows["Radiology"]["gap"] == 1
+
+
+def test_fully_staffed_department():
+    model = _planner_model([_week_shift(1, "Pharmacy", required=1)],
+                           [_coverage_row(1, 1, 1)], department="All")
+    row = _by_department(model)["Pharmacy"]
+    assert (row["gap"], row["surplus"], row["coverage_pct"]) == (0, 0, 100)
+    assert row["status"]["label"] == "Fully staffed"
+
+
+def test_understaffed_department_reports_the_shortfall():
+    model = _planner_model([_week_shift(1, "Radiology", required=3)],
+                           [_coverage_row(1, 3, 1)], department="All")
+    row = _by_department(model)["Radiology"]
+    assert row["gap"] == 2
+    assert row["status"]["label"] == "Gap 2"
+
+
+def test_overstaffed_department_reports_surplus_not_a_gap():
+    model = _planner_model([_week_shift(1, "Emergency", required=2)],
+                           [_coverage_row(1, 2, 3)], department="All")
+    row = _by_department(model)["Emergency"]
+    assert (row["gap"], row["surplus"]) == (0, 1)
+    assert row["status"]["label"] == "Overstaffed by 1"
+
+
+def test_department_with_no_shifts_this_week_says_so():
+    """A quiet department must not silently disappear from the overview."""
+    model = _planner_model(
+        [_week_shift(1, "Emergency"), _week_shift(2, "Surgery", date="2026-09-14")],
+        [_coverage_row(1), _coverage_row(2)], department="All")
+    row = _by_department(model)["Surgery"]
+    assert row["shift_count"] == 0
+    assert row["coverage_pct"] is None
+    assert row["status"]["label"] == "No shifts"
+
+
+def test_coverage_never_exceeds_one_hundred_percent():
+    model = _planner_model([_week_shift(1, "Emergency", required=2)],
+                           [_coverage_row(1, 2, 5)], department="All")
+    assert _by_department(model)["Emergency"]["coverage_pct"] == 100
+
+
+def test_filled_counts_positions_not_bodies():
+    model = _planner_model([_week_shift(1, "Emergency", required=2)],
+                           [_coverage_row(1, 2, 5)], department="All")
+    row = _by_department(model)["Emergency"]
+    assert row["assigned"] == 5
+    assert row["filled"] == 2
+
+
+# ------------------------------------------------------- surplus safety
+def test_surplus_in_one_department_never_cancels_a_gap_in_another():
+    """The exact netting bug this aggregation exists to prevent."""
+    model = _planner_model(
+        [_week_shift(1, "Emergency", required=2),
+         _week_shift(2, "Radiology", required=2)],
+        [_coverage_row(1, 2, 3), _coverage_row(2, 2, 1)],
+        department="All")
+    rows = _by_department(model)
+    assert rows["Emergency"]["surplus"] == 1
+    assert rows["Emergency"]["gap"] == 0
+    assert rows["Radiology"]["gap"] == 1
+    assert sum(r["gap"] for r in model["department_summary"]) == 1
+
+
+def test_surplus_within_one_department_never_cancels_its_own_gap():
+    """Same rule between two shifts of a single department."""
+    model = _planner_model(
+        [_week_shift(1, "Emergency", required=2),
+         _week_shift(2, "Emergency", required=2, start="15:00", end="23:00")],
+        [_coverage_row(1, 2, 3), _coverage_row(2, 2, 1)],
+        department="All")
+    row = _by_department(model)["Emergency"]
+    assert (row["gap"], row["surplus"]) == (1, 1)
+
+
+def test_summary_totals_reconcile_with_the_whole_week():
+    fe = _fe()
+    shifts = [_week_shift(1, "Emergency", required=3),
+              _week_shift(2, "Radiology", required=1),
+              _week_shift(3, "Surgery", required=2, date="2026-08-27")]
+    coverage = [_coverage_row(1, 3, 2), _coverage_row(2, 1, 0), _coverage_row(3, 2, 2)]
+    model = _planner_model(shifts, coverage, department="All")
+    summary = model["department_summary"]
+    assert sum(r["shift_count"] for r in summary) == model["week_summary"]["shift_count"]
+    assert sum(r["required"] for r in summary) == model["week_summary"]["required"]
+    assert sum(r["assigned"] for r in summary) == model["week_summary"]["assigned"]
+    assert sum(r["gap"] for r in summary) == model["week_summary"]["gap"]
+
+
+def test_departments_with_gaps_are_listed_first():
+    model = _planner_model(
+        [_week_shift(1, "Alpha", required=1), _week_shift(2, "Zulu", required=3)],
+        [_coverage_row(1, 1, 1), _coverage_row(2, 3, 1)], department="All")
+    assert model["department_summary"][0]["department"] == "Zulu"
+
+
+# ------------------------------------------------------------- selection
+def test_all_departments_is_an_explicit_selection():
+    model = _planner_model([_week_shift(1, "Emergency")], [_coverage_row(1)],
+                           department="All")
+    assert model["showing_all_departments"] is True
+    assert model["selected_department"] == "All"
+
+
+def test_a_named_department_is_not_treated_as_all():
+    model = _planner_model([_week_shift(1, "Emergency")], [_coverage_row(1)],
+                           department="Emergency")
+    assert model["showing_all_departments"] is False
+
+
+def test_blank_department_still_falls_back_to_a_real_one():
+    """Blank keeps its existing deep-link meaning and must not become 'All'."""
+    model = _planner_model([_week_shift(1, "Emergency")], [_coverage_row(1)],
+                           department="")
+    assert model["showing_all_departments"] is False
+    assert model["selected_department"] == "Emergency"
+
+
+def test_unknown_department_falls_back_rather_than_showing_all():
+    model = _planner_model([_week_shift(1, "Emergency")], [_coverage_row(1)],
+                           department="Cardiology")
+    assert model["showing_all_departments"] is False
+    assert model["selected_department"] == "Emergency"
+
+
+@pytest.mark.parametrize("week,date", [
+    ("2026-08-17", "2026-08-17"),
+    ("2026-08-24", "2026-08-25"),
+    ("2026-08-31", "2026-08-31"),
+])
+def test_all_selection_survives_week_navigation(week, date):
+    model = _planner_model([_week_shift(1, "Emergency")], [_coverage_row(1)],
+                           department="All", week=week, date=date)
+    assert model["showing_all_departments"] is True
+
+
+def test_department_selection_survives_week_navigation():
+    """Navigating weeks must not silently reset to another department."""
+    model = _planner_model(
+        [_week_shift(1, "Emergency"), _week_shift(2, "Surgery")],
+        [_coverage_row(1), _coverage_row(2)],
+        department="Surgery", week="2026-08-31", date="2026-08-31")
+    assert model["selected_department"] == "Surgery"
+
+
+# --------------------------------------------------- scope of the panels
+def test_all_departments_week_summary_covers_every_department():
+    model = _planner_model(
+        [_week_shift(1, "Emergency", required=2),
+         _week_shift(2, "Surgery", required=2)],
+        [_coverage_row(1, 2, 2), _coverage_row(2, 2, 2)], department="All")
+    assert model["week_summary"]["shift_count"] == 2
+    assert model["week_summary"]["required"] == 4
+
+
+def test_single_department_week_summary_stays_scoped_to_it():
+    model = _planner_model(
+        [_week_shift(1, "Emergency", required=2),
+         _week_shift(2, "Surgery", required=2)],
+        [_coverage_row(1, 2, 2), _coverage_row(2, 2, 2)], department="Emergency")
+    assert model["week_summary"]["shift_count"] == 1
+
+
+def test_all_departments_daily_panel_covers_every_department():
+    """Showing one department's numbers under an 'All' label would be a lie."""
+    model = _planner_model(
+        [_week_shift(1, "Emergency", date="2026-08-25"),
+         _week_shift(2, "Surgery", date="2026-08-25")],
+        [_coverage_row(1), _coverage_row(2)], department="All", date="2026-08-25")
+    assert {row["department"] for row in model["daily_rows"]} == {"Emergency", "Surgery"}
+
+
+# ---------------------------------------------------------------- filters
+def test_summary_respects_the_role_filter():
+    model = _planner_model(
+        [_week_shift(1, "Emergency", role="Registered Nurse"),
+         _week_shift(2, "Surgery", role="Doctor")],
+        [_coverage_row(1), _coverage_row(2)],
+        department="All", required_role="Doctor")
+    rows = _by_department(model)
+    assert "Surgery" in rows
+    assert "Emergency" not in rows
+
+
+def test_summary_respects_the_status_filter():
+    model = _planner_model(
+        [_week_shift(1, "Emergency", status="Planned"),
+         _week_shift(2, "Surgery", status="Cancelled")],
+        [_coverage_row(1), _coverage_row(2)],
+        department="All", shift_status="Cancelled")
+    assert set(_by_department(model)) == {"Surgery"}
+
+
+# ------------------------------------------------------------ empty week
+def test_empty_week_reports_no_shifts_rather_than_full_coverage():
+    model = _planner_model([_week_shift(1, "Emergency", date="2026-09-14")],
+                           [_coverage_row(1)], department="All")
+    assert model["week_summary"]["shift_count"] == 0
+    assert model["week_summary"]["coverage_pct"] is None
+
+
+# ------------------------------------------------------------- rendering
+@pytest.fixture
+def planner(frontend_client, fe_api_client, monkeypatch):
+    state = {"shifts": [_week_shift(1, "Emergency", required=2),
+                        _week_shift(2, "Radiology", required=1)],
+             "coverage": [_coverage_row(1, 2, 1), _coverage_row(2, 1, 0)]}
+    monkeypatch.setattr(fe_api_client, "list_shifts",
+                        lambda **k: {"shifts": state["shifts"]})
+    monkeypatch.setattr(fe_api_client, "get_coverage",
+                        lambda **k: {"shifts": state["coverage"],
+                                     "summary": {"total_shortfall": 2,
+                                                 "total_shifts": len(state["shifts"])}})
+    return frontend_client, state
+
+
+def _planner_url(department="All", week="2026-08-24", date="2026-08-25", view="week"):
+    return (f"/partials/planner?week_start={week}&selected_date={date}"
+            f"&department={department}&view={view}")
+
+
+def test_all_departments_renders_a_summary_table(planner):
+    client, _ = planner
+    body = client.get(_planner_url()).get_data(as_text=True)
+    assert "department-summary" in body
+    assert "Emergency" in body and "Radiology" in body
+
+
+def test_summary_table_uses_semantic_headers(planner):
+    client, _ = planner
+    body = client.get(_planner_url()).get_data(as_text=True)
+    assert '<th scope="col">Department</th>' in body
+    assert 'scope="row"' in body
+
+
+def test_status_is_conveyed_in_words(planner):
+    client, _ = planner
+    body = client.get(_planner_url()).get_data(as_text=True)
+    assert "Gap 1" in body
+
+
+def test_all_departments_does_not_render_the_single_department_grid(planner):
+    """The design rule: an overview, not one enormous multi-department grid."""
+    client, _ = planner
+    body = client.get(_planner_url()).get_data(as_text=True)
+    assert 'id="week-grid-heading"' not in body
+
+
+def test_selecting_a_department_restores_the_detailed_grid(planner):
+    client, _ = planner
+    body = client.get(_planner_url(department="Emergency")).get_data(as_text=True)
+    assert 'id="week-grid-heading"' in body
+    assert "department-summary" not in body
+
+
+def test_every_department_row_offers_a_drill_down(planner):
+    client, _ = planner
+    body = client.get(_planner_url()).get_data(as_text=True)
+    assert body.count("View department") >= 2
+
+
+def test_drill_down_keeps_the_week_and_sets_the_department(planner):
+    client, _ = planner
+    body = client.get(_planner_url()).get_data(as_text=True)
+    assert '"department": "Emergency"' in body or '{"department":"Emergency"' in body
+    assert 'name="week_start" value="2026-08-24"' in body
+
+
+def test_all_departments_tab_is_offered_and_marked_active(planner):
+    client, _ = planner
+    body = client.get(_planner_url()).get_data(as_text=True)
+    assert "All departments" in body
+    assert 'class="department-tab is-active"' in body
+
+
+def test_empty_week_renders_a_truthful_state(planner):
+    client, _ = planner
+    body = client.get(_planner_url(week="2026-09-21", date="2026-09-21")).get_data(as_text=True)
+    assert "No shifts scheduled for this week." in body
+    assert "100%" not in body
+
+
+def test_conflict_review_stays_available_under_all_departments(planner):
+    """Conflicts are cross-department; not selecting one must not hide them."""
+    client, _ = planner
+    body = client.get(_planner_url()).get_data(as_text=True)
+    assert 'id="roster-status"' in body
+
+
+def test_create_shift_remains_available_under_all_departments(planner):
+    client, _ = planner
+    body = client.get(_planner_url()).get_data(as_text=True)
+    assert "/partials/shifts/new" in body
+
+
+def test_all_departments_view_is_loop_safe(planner):
+    """Same invariant the planner has been held to since Scenario A: a "load"
+    trigger is permitted only on an element that swaps its OWN contents
+    (hx-target="this"). Anything else re-fires on every workspace swap and
+    loops. The All-departments view must not introduce an exception."""
+    import re
+    client, _ = planner
+    body = client.get(_planner_url()).get_data(as_text=True)
+    for match in re.finditer(r'<[^>]*hx-trigger="[^"]*\bload\b[^"]*"[^>]*>', body):
+        assert 'hx-target="this"' in match.group(0), (
+            'load trigger without hx-target="this": ' + match.group(0)[:120])
+
+
+def test_summary_rows_do_not_carry_assignment_controls(planner):
+    """The overview orients; rostering happens in the department grid."""
+    client, _ = planner
+    body = client.get(_planner_url()).get_data(as_text=True)
+    table = body[body.index("department-summary"):body.index("</table>")]
+    assert "/assign" not in table
+    assert "/unassign" not in table
+
+
+def test_gap_rail_is_hidden_when_the_summary_already_shows_it(frontend_client,
+                                                              fe_api_client, monkeypatch):
+    """Two copies of the same department gap list on one screen is noise."""
+    monkeypatch.setattr(fe_api_client, "get_coverage",
+                        lambda **k: {"shifts": [_coverage_row(1, 2, 1)]})
+    monkeypatch.setattr(fe_api_client, "list_staff", lambda **k: {"staff": []})
+    monkeypatch.setattr(fe_api_client, "list_shift_assignments",
+                        lambda sid: {"assignments": []})
+    body = frontend_client.get(
+        "/partials/roster-status?week_start=2026-08-24&department=All"
+    ).get_data(as_text=True)
+    assert "Remaining gaps by department" not in body
+
+
+def test_gap_rail_remains_for_a_single_department(frontend_client, fe_api_client,
+                                                  monkeypatch):
+    """With one department selected the rail is the only cross-department view."""
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **k: {"shifts": [
+        {"shift_id": 1, "department": "Emergency", "shift_date": "2026-08-25",
+         "required_staff_count": 2, "assigned_staff_count": 1}]})
+    monkeypatch.setattr(fe_api_client, "list_staff", lambda **k: {"staff": []})
+    monkeypatch.setattr(fe_api_client, "list_shift_assignments",
+                        lambda sid: {"assignments": []})
+    body = frontend_client.get(
+        "/partials/roster-status?week_start=2026-08-24&department=Emergency"
+    ).get_data(as_text=True)
+    assert "Remaining gaps by department" in body
+
+
+def test_conflict_review_is_never_hidden_by_the_department_selection(frontend_client,
+                                                                     fe_api_client,
+                                                                     monkeypatch):
+    """Conflicts are cross-department and must survive either selection."""
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **k: {"shifts": []})
+    monkeypatch.setattr(fe_api_client, "list_staff", lambda **k: {"staff": []})
+    for department in ("All", "Emergency"):
+        body = frontend_client.get(
+            f"/partials/roster-status?week_start=2026-08-24&department={department}"
+        ).get_data(as_text=True)
+        assert "Conflict review" in body

@@ -65,7 +65,9 @@
   </p>
 
   {# ------------------------------------------------- remaining gaps #}
-  {% if departments %}
+  {#- Hidden while the All-departments summary is showing: it lists the same
+      departments and gaps, with more detail, a few centimetres away. -#}
+  {% if departments and show_department_gaps %}
   <div>
     <h4 class="u-label">Remaining gaps by department</h4>
     <ul role="list" class="roster-gaps">

@@ -71,6 +71,16 @@
     </div>
     {% if departments %}
     <div class="department-tabs" role="list" aria-label="Departments">
+      {#- Orientation first: the whole hospital, then one department. Same
+          request and same target as the other tabs, so it carries no new
+          HTMX behaviour of its own. -#}
+      <button class="department-tab{{ ' is-active' if showing_all_departments else '' }}"
+              type="button" role="listitem"
+              aria-pressed="{{ 'true' if showing_all_departments else 'false' }}"
+              hx-get="/partials/planner" hx-include="#planner-state"
+              hx-vals='{"department":{{ all_departments_value|tojson }},"selected_shift_id":""}'>
+        All departments
+      </button>
       {% for item in departments %}
       <button class="department-tab{{ ' is-active' if item.name == selected_department else '' }}"
               type="button" role="listitem"
@@ -113,7 +123,7 @@
       <div class="demand-panel__heading">
         <div>
           <span class="u-label">Daily workforce demand</span>
-          <h2 id="daily-demand-heading">{{ selected_department or 'No department selected' }}</h2>
+          <h2 id="daily-demand-heading">{{ 'All departments' if showing_all_departments else (selected_department or 'No department selected') }}</h2>
           <p>{{ selected_date.strftime('%A %-d %B %Y') }}</p>
         </div>
         <span class="coverage-status coverage-status--{{ daily.state.tone }}">{{ daily.state.label }}</span>
@@ -145,11 +155,99 @@
         {% endfor %}
       </div>
       {% else %}
-      <div class="empty demand-empty"><p class="empty__title">No shifts scheduled for this department and date.</p><p class="empty__body">Choose another department/date or create a shift.</p></div>
+      <div class="empty demand-empty"><p class="empty__title">No shifts scheduled for {{ 'any department' if showing_all_departments else 'this department' }} on this date.</p><p class="empty__body">Choose another {{ 'date' if showing_all_departments else 'department/date' }} or create a shift.</p></div>
       {% endif %}
     </section>
 
-    {% if view == 'week' %}
+    {#- ============================================ all-departments overview -#}
+    {#- Deliberately NOT one giant grid of every department: this is a dense
+        summary for orientation, and managing a roster still happens in the
+        single-department grid one click away. -#}
+    {% if showing_all_departments and view == 'week' %}
+    <section class="panel planning-board" aria-labelledby="all-departments-heading">
+      <div class="planning-board__header">
+        <div>
+          <h2 id="all-departments-heading">All departments — week of
+            {{ week_start.strftime('%-d %b') }}–{{ week_end.strftime('%-d %b') }}</h2>
+          <p>
+            Whole-week staffing per department.
+            {%- if required_role or shift_status %}
+            Reflects the current filters.
+            {%- endif %}
+            Open a department to manage its shifts.
+          </p>
+        </div>
+      </div>
+
+      {% set week_total = department_summary | sum(attribute='shift_count') %}
+      {% if week_total %}
+      <div class="table-wrap">
+        <table class="table table--zebra department-summary">
+          <caption class="visually-hidden">
+            Staffing by department for the week of
+            {{ week_start.strftime('%-d %B') }}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Department</th>
+              <th scope="col" class="table__num">Shifts</th>
+              <th scope="col" class="table__num">Required</th>
+              <th scope="col" class="table__num">Assigned</th>
+              <th scope="col" class="table__num">Filled</th>
+              <th scope="col" class="table__num">Gap</th>
+              <th scope="col" class="table__num">Surplus</th>
+              <th scope="col" class="table__num">Coverage</th>
+              <th scope="col">Status</th>
+              <th scope="col"><span class="visually-hidden">Open department</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in department_summary %}
+            <tr>
+              <th scope="row" class="table__name">{{ row.department }}</th>
+              <td class="table__num">{{ row.shift_count }}</td>
+              <td class="table__num">{{ row.required }}</td>
+              <td class="table__num">{{ row.assigned }}</td>
+              <td class="table__num">{{ row.filled }}</td>
+              <td class="table__num{{ ' department-summary__gap' if row.gap else '' }}">{{ row.gap }}</td>
+              <td class="table__num">{{ row.surplus }}</td>
+              <td class="table__num">
+                {{ (row.coverage_pct ~ '%') if row.coverage_pct is not none else '—' }}
+              </td>
+              <td>
+                {#- Status is carried by the word, never by colour alone. -#}
+                <span class="status status--{{ row.status.tone }}">
+                  <span class="status__dot"></span>{{ row.status.label }}
+                </span>
+              </td>
+              <td class="table__actions">
+                {% if row.shift_count %}
+                <button class="btn-secondary btn-compact" type="button"
+                        hx-get="/partials/planner" hx-include="#planner-state"
+                        hx-vals='{"department":{{ row.department|tojson }},"selected_shift_id":""}'>
+                  View department<span class="visually-hidden"> {{ row.department }}</span>
+                </button>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      {% else %}
+      {#- Truthful empty week: no coverage figure is claimed at all. -#}
+      <div class="empty">
+        <p class="empty__title">No shifts scheduled for this week.</p>
+        <p class="empty__body">
+          Nothing is rostered between {{ week_start.strftime('%-d %B') }} and
+          {{ week_end.strftime('%-d %B %Y') }}. Create a shift to begin planning.
+        </p>
+      </div>
+      {% endif %}
+    </section>
+
+    {% elif view == 'week' %}
     <section class="panel planning-board" aria-labelledby="week-grid-heading">
       <div class="planning-board__header">
         <div><h2 id="week-grid-heading">{{ selected_department or 'Department' }} — week grid</h2><p>Required vs assigned per real shift time. Select a shift to manage its roster.</p></div>
@@ -275,7 +373,7 @@
     </section>
 
     <section class="panel week-summary" aria-labelledby="week-summary-heading">
-      <h2 class="u-label" id="week-summary-heading">Week summary · {{ selected_department or 'No department' }}</h2>
+      <h2 class="u-label" id="week-summary-heading">Week summary · {{ 'All departments' if showing_all_departments else (selected_department or 'No department') }}</h2>
       <dl><div><dt>Shifts</dt><dd>{{ week_summary.shift_count }}</dd></div><div><dt>Positions</dt><dd>{{ week_summary.required }}</dd></div><div><dt>Filled</dt><dd>{{ week_summary.filled }}</dd></div>{% if week_summary.surplus %}<div><dt>Surplus</dt><dd>{{ week_summary.surplus }}</dd></div>{% endif %}<div><dt>Coverage</dt><dd>{{ week_summary.coverage_pct ~ '%' if week_summary.coverage_pct is not none else '—' }}</dd></div></dl>
     </section>
   </aside>

@@ -183,6 +183,53 @@ def _aggregate_shifts(rows):
     }
 
 
+#: Explicit planner selection meaning "every department". A sentinel rather
+#: than blank: blank already means "no department was specified, pick a
+#: sensible default" for deep links, and one value cannot carry both meanings
+#: without the planner guessing which was intended.
+ALL_DEPARTMENTS = "All"
+
+
+def _department_week_summary(records, departments, week_start, week_end):
+    """Per-department staffing for one week.
+
+    Each department is aggregated through _aggregate_shifts, so gap, surplus
+    and filled are summed PER SHIFT exactly as everywhere else — a department
+    with one overstaffed shift and one short shift reports both, never a
+    netted zero.
+
+    Departments with no shifts this week are included with zero counts, so a
+    department does not silently vanish from the overview in a quiet week.
+    """
+    start_iso, end_iso = week_start.isoformat(), week_end.isoformat()
+    summary = []
+    for department in departments:
+        rows = [row for row in records
+                if row.get("department") == department
+                and start_iso <= row.get("shift_date", "") <= end_iso]
+        summary.append({
+            "department": department,
+            "shifts": rows,
+            **_aggregate_shifts(rows),
+        })
+
+    # Departments needing attention first, then alphabetically: the reason to
+    # open this view is to find the gaps.
+    summary.sort(key=lambda row: (row["gap"] == 0, -row["gap"], row["department"]))
+    return summary
+
+
+def _department_status(entry):
+    """Plain-language status for one department's week. Never persisted."""
+    if not entry["shift_count"]:
+        return {"label": "No shifts", "tone": "neutral"}
+    if entry["gap"]:
+        return {"label": f"Gap {entry['gap']}", "tone": "danger"}
+    if entry["surplus"]:
+        return {"label": f"Overstaffed by {entry['surplus']}", "tone": "warning"}
+    return {"label": "Fully staffed", "tone": "success"}
+
+
 def _build_planner_model(shifts, coverage_rows, week_start_value, selected_date_value,
                          selected_department=None, required_role=None,
                          shift_status=None, view="week", now=None):
@@ -223,7 +270,11 @@ def _build_planner_model(shifts, coverage_rows, week_start_value, selected_date_
     selected_iso = selected_date.isoformat()
     date_departments = sorted({row["department"] for row in records
                                if row.get("shift_date") == selected_iso})
-    if selected_department not in departments:
+    # "All" is a real selection and must survive; anything else unrecognised
+    # (a deep link with no department, a department whose shifts were all
+    # filtered out) still falls back to a sensible default.
+    showing_all = selected_department == ALL_DEPARTMENTS
+    if not showing_all and selected_department not in departments:
         selected_department = (date_departments or departments or [""])[0]
 
     department_tabs = []
@@ -236,8 +287,11 @@ def _build_planner_model(shifts, coverage_rows, week_start_value, selected_date_
             "gap": _aggregate_shifts(department_rows)["gap"],
         })
 
+    # Under "All" these panels describe every department, not a department
+    # chosen on the user's behalf — showing one department's numbers while
+    # the selector says "All" would simply be untrue.
     daily_rows = [row for row in records
-                  if row.get("department") == selected_department
+                  if (showing_all or row.get("department") == selected_department)
                   and row.get("shift_date") == selected_iso]
     daily = _aggregate_shifts(daily_rows)
 
@@ -256,7 +310,7 @@ def _build_planner_model(shifts, coverage_rows, week_start_value, selected_date_
         })
 
     week_rows = [row for row in records
-                 if row.get("department") == selected_department
+                 if (showing_all or row.get("department") == selected_department)
                  and week_start.isoformat() <= row.get("shift_date", "") <= week_end.isoformat()]
     grid_keys = sorted({(row.get("start_time", ""), row.get("end_time", ""))
                         for row in week_rows}, key=lambda value: _time_minutes(value[0]))
@@ -314,6 +368,11 @@ def _build_planner_model(shifts, coverage_rows, week_start_value, selected_date_
             **_aggregate_shifts(department_segments),
         })
 
+    department_summary = _department_week_summary(
+        records, departments, week_start, week_end)
+    for entry in department_summary:
+        entry["status"] = _department_status(entry)
+
     week_summary = _aggregate_shifts(week_rows)
     all_today = [row for row in records if row.get("shift_date") == selected_iso]
     unfilled = _aggregate_shifts(all_today)["gap"]
@@ -333,6 +392,9 @@ def _build_planner_model(shifts, coverage_rows, week_start_value, selected_date_
         "week_dates": week_dates,
         "selected_date": selected_date,
         "selected_department": selected_department,
+        "showing_all_departments": showing_all,
+        "all_departments_value": ALL_DEPARTMENTS,
+        "department_summary": department_summary,
         "departments": department_tabs,
         "daily": daily,
         "daily_rows": daily_rows,
@@ -1370,9 +1432,18 @@ def create_app() -> Flask:
             entry["gap"] += max(int(row.get("required_staff_count", 0))
                                  - int(row.get("assigned_staff_count", 0)), 0)
 
+        # The planner state rides along in the query string. When the
+        # All-departments summary is on screen it already shows every
+        # department's gap in more detail, so the rail's shorter copy of the
+        # same list is suppressed rather than shown twice. With a single
+        # department selected the rail is the only cross-department status
+        # visible, so it stays.
+        showing_all = request.args.get("department") == ALL_DEPARTMENTS
+
         return render_template(
             "partials/roster_status.html", summary=summary, conflicts=conflicts,
             departments=sorted(departments.values(), key=lambda d: d["department"]),
+            show_department_gaps=not showing_all,
             error=partial_error, week_start=start.isoformat(),
             week_end=end.isoformat(), week_label=_week_label(start, end))
 
