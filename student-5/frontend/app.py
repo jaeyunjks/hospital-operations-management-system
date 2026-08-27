@@ -143,15 +143,40 @@ def _week_start_for(value: str) -> datetime.date:
 
 
 def _aggregate_shifts(rows):
+    """Aggregate staffing across shifts.
+
+    Gap and surplus are computed PER SHIFT and only then summed. Aggregating
+    the totals first and subtracting would let extra staff on one shift cancel
+    a shortage on another — e.g. A(req 2, asg 3) + B(req 2, asg 1) would report
+    no gap at all, hiding a real shortage.
+
+    Coverage counts FILLED positions, min(assigned, required), so an
+    overstaffed shift cannot push the figure past 100%.
+    """
     required = sum(int(row.get("required_staff_count", 0)) for row in rows)
     assigned = sum(int(row.get("assigned_staff_count", 0)) for row in rows)
+    filled = sum(min(int(row.get("assigned_staff_count", 0)),
+                     int(row.get("required_staff_count", 0))) for row in rows)
+    gap = sum(max(int(row.get("required_staff_count", 0))
+                   - int(row.get("assigned_staff_count", 0)), 0) for row in rows)
+    surplus = sum(max(int(row.get("assigned_staff_count", 0))
+                       - int(row.get("required_staff_count", 0)), 0) for row in rows)
+
+    # Derive the status label from the true per-shift gap. When a gap exists,
+    # feed the equivalent assigned count so the label reflects the real
+    # shortage rather than the netted total.
+    state = (_planning_coverage(required - gap, required) if gap
+             else _planning_coverage(assigned, required))
+
     return {
         "shift_count": len(rows),
         "required": required,
         "assigned": assigned,
-        "gap": max(required - assigned, 0),
-        "coverage_pct": round(assigned / required * 100) if required else None,
-        "state": _planning_coverage(assigned, required),
+        "filled": filled,
+        "gap": gap,
+        "surplus": surplus,
+        "coverage_pct": round(filled / required * 100) if required else None,
+        "state": state,
     }
 
 

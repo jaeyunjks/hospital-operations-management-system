@@ -121,8 +121,8 @@
       <dl class="demand-metrics">
         <div><dt>Required today</dt><dd>{{ daily.required }}</dd><small>staff, all listed shifts</small></div>
         <div><dt>Assigned</dt><dd>{{ daily.assigned }}</dd><small>active assignments</small></div>
-        <div><dt>Coverage</dt><dd>{{ daily.coverage_pct ~ '%' if daily.coverage_pct is not none else '—' }}</dd><small>assigned ÷ required</small></div>
-        <div><dt>Staffing gap</dt><dd>{{ daily.gap }}</dd><small>unfilled positions</small></div>
+        <div><dt>Coverage</dt><dd>{{ daily.coverage_pct ~ '%' if daily.coverage_pct is not none else '—' }}</dd><small>filled ÷ required</small></div>
+        <div><dt>Staffing gap</dt><dd>{{ daily.gap }}</dd><small>unfilled positions</small></div>{% if daily.surplus %}<div><dt>Surplus</dt><dd>{{ daily.surplus }}</dd><small>positions over requirement</small></div>{% endif %}
       </dl>
 
       <div class="distribution-heading">
@@ -276,7 +276,7 @@
 
     <section class="panel week-summary" aria-labelledby="week-summary-heading">
       <h2 class="u-label" id="week-summary-heading">Week summary · {{ selected_department or 'No department' }}</h2>
-      <dl><div><dt>Shifts</dt><dd>{{ week_summary.shift_count }}</dd></div><div><dt>Positions</dt><dd>{{ week_summary.required }}</dd></div><div><dt>Filled</dt><dd>{{ week_summary.assigned }}</dd></div><div><dt>Coverage</dt><dd>{{ week_summary.coverage_pct ~ '%' if week_summary.coverage_pct is not none else '—' }}</dd></div></dl>
+      <dl><div><dt>Shifts</dt><dd>{{ week_summary.shift_count }}</dd></div><div><dt>Positions</dt><dd>{{ week_summary.required }}</dd></div><div><dt>Filled</dt><dd>{{ week_summary.filled }}</dd></div>{% if week_summary.surplus %}<div><dt>Surplus</dt><dd>{{ week_summary.surplus }}</dd></div>{% endif %}<div><dt>Coverage</dt><dd>{{ week_summary.coverage_pct ~ '%' if week_summary.coverage_pct is not none else '—' }}</dd></div></dl>
     </section>
   </aside>
 </div>

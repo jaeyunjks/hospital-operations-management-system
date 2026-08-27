@@ -1809,3 +1809,69 @@ def test_requirement_change_does_not_touch_assignments(frontend_client, fe_api_c
         "required_role": "Registered Nurse", "required_staff_count": "3",
         "shift_status": "Filled"})
     assert calls and calls[0][1]["required_staff_count"] == 3
+
+
+# ==========================================================================
+# Coverage correctness — surplus must never inflate coverage or mask a gap
+# ==========================================================================
+def _agg(*pairs):
+    """pairs of (required, assigned)."""
+    fe = _fe()
+    return fe._aggregate_shifts([
+        {"required_staff_count": r, "assigned_staff_count": a} for r, a in pairs])
+
+
+def test_case_a_normal_shortage():
+    a = _agg((4, 3))
+    assert (a["filled"], a["gap"], a["surplus"], a["coverage_pct"]) == (3, 1, 0, 75)
+
+
+def test_case_b_exact_coverage():
+    a = _agg((4, 4))
+    assert (a["filled"], a["gap"], a["surplus"], a["coverage_pct"]) == (4, 0, 0, 100)
+
+
+def test_case_c_overstaffed_is_capped_at_100():
+    a = _agg((2, 3))
+    assert (a["filled"], a["gap"], a["surplus"]) == (2, 0, 1)
+    assert a["coverage_pct"] == 100
+    assert a["coverage_pct"] <= 100
+
+
+def test_case_d_surplus_cannot_cancel_another_shifts_gap():
+    """The critical case: A(req 2, asg 3) + B(req 2, asg 1)."""
+    a = _agg((2, 3), (2, 1))
+    assert a["required"] == 4
+    assert a["filled"] == 3
+    assert a["gap"] == 1          # NOT 0
+    assert a["surplus"] == 1
+    assert a["coverage_pct"] == 75    # NOT 100
+
+
+def test_case_e_no_demand_is_dash_not_full():
+    a = _agg()
+    assert a["coverage_pct"] is None
+    assert a["state"]["label"] == "No demand"
+
+
+def test_aggregate_coverage_never_exceeds_100_across_many_shapes():
+    for pairs in [((1, 9),), ((2, 3), (2, 3)), ((1, 5), (4, 0)), ((3, 4), (1, 1))]:
+        a = _agg(*pairs)
+        assert a["coverage_pct"] is None or a["coverage_pct"] <= 100, pairs
+
+
+def test_aggregate_status_label_reflects_true_gap_not_netted_total():
+    """Netting would label A+B "Covered"; the real state is a shortage."""
+    assert _agg((2, 3), (2, 1))["state"]["label"] == "Short 1"
+
+
+def test_aggregate_reports_over_when_only_surplus_exists():
+    assert _agg((2, 3))["state"]["label"] == "Over 1"
+
+
+def test_backend_total_shortfall_is_per_shift(client):
+    """The backend must also floor shortfall per shift before summing."""
+    body = client.get("/api/shifts/coverage").get_json()
+    expected = sum(max(r["required_staff_count"] - r["assigned_staff_count"], 0)
+                   for r in body["shifts"])
+    assert body["summary"]["total_shortfall"] == expected
