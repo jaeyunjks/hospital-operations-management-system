@@ -25,6 +25,13 @@ API_BASE_URL = os.environ.get("STAFF_SHIFT_API_URL", "http://127.0.0.1:5500")
 #: Seconds to wait before giving up on the backend.
 API_TIMEOUT = float(os.environ.get("STAFF_SHIFT_API_TIMEOUT", "5"))
 
+#: The narrated coverage summary may legitimately wait for the backend's
+#: bounded Ollama attempt before falling back to deterministic figures. Keep
+#: this frontend allowance longer than that backend window so a safe fallback
+#: response is not turned into an uncaught browser-facing timeout.
+SUMMARY_API_TIMEOUT = float(os.environ.get(
+    "STAFF_SHIFT_SUMMARY_API_TIMEOUT", str(max(API_TIMEOUT, 10.0))))
+
 
 class BackendUnavailableError(Exception):
     """The backend/API microservice could not be reached at all."""
@@ -89,7 +96,8 @@ def set_identity_provider(provider) -> None:
 
 
 def _request(method: str, path: str, params: Optional[Dict[str, Any]] = None,
-             payload: Optional[Dict[str, Any]] = None) -> Any:
+             payload: Optional[Dict[str, Any]] = None,
+             timeout: Optional[float] = None) -> Any:
     url = f"{API_BASE_URL}{path}"
 
     if params:
@@ -112,7 +120,8 @@ def _request(method: str, path: str, params: Optional[Dict[str, Any]] = None,
     request = urllib.request.Request(url, data=body, headers=headers, method=method)
 
     try:
-        with urllib.request.urlopen(request, timeout=API_TIMEOUT) as response:
+        with urllib.request.urlopen(
+                request, timeout=API_TIMEOUT if timeout is None else timeout) as response:
             raw = response.read().decode("utf-8")
             return json.loads(raw) if raw else None
 
@@ -133,6 +142,15 @@ def _request(method: str, path: str, params: Optional[Dict[str, Any]] = None,
         raise BackendError(f"Staff & Shift service returned {error.code}: {detail}") from error
 
     except urllib.error.URLError as error:
+        raise BackendUnavailableError(
+            "Workforce data is temporarily unavailable. "
+            "Check that the Staff & Shift service is running."
+        ) from error
+
+    except TimeoutError as error:
+        # ``urlopen`` may surface a socket read timeout directly rather than
+        # wrapping it in URLError. It is still an unavailable upstream, never
+        # an internal server error that should escape into an HTMX response.
         raise BackendUnavailableError(
             "Workforce data is temporarily unavailable. "
             "Check that the Staff & Shift service is running."
@@ -383,4 +401,5 @@ def get_coverage_summary(shift_date: Optional[str] = None,
         payload["shift_date"] = shift_date
     if department:
         payload["department"] = department
-    return _request("POST", "/api/shifts/coverage-summary", payload=payload)
+    return _request("POST", "/api/shifts/coverage-summary", payload=payload,
+                    timeout=SUMMARY_API_TIMEOUT)

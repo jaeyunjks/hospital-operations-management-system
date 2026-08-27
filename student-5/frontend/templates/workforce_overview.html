@@ -11,9 +11,19 @@
       </p>
     </div>
     <div class="page-header__actions">
-      <button class="btn-secondary" type="button"
+      {#- Icon-only, so the label lives in aria-label and title rather than on
+          screen. The SVG is aria-hidden: it is decoration, and a screen reader
+          announcing "refresh icon, Refresh workforce data" would say it twice. -#}
+      <button class="btn-secondary btn-icon" type="button"
+              aria-label="Refresh workforce data"
+              title="Refresh workforce data"
               hx-on:click="htmx.trigger(document.body, 'refresh-workforce')">
-        Refresh
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+             focusable="false">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
+          <path d="M21 3v6h-6"></path>
+        </svg>
       </button>
     </div>
   </div>
@@ -44,7 +54,7 @@
     </div>
   </section>
 
-  <!-- ==================================================== three panels -->
+  <!-- ======================================= demand and operational summary -->
   <div class="panel-row">
 
     <section class="panel" aria-labelledby="demand-title">
@@ -66,40 +76,41 @@
       </div>
     </section>
 
-    <section class="panel" aria-labelledby="forecast-title">
-      <div class="panel__header">
-        <div>
-          <span class="ai-label"><span class="ai-label__dot"></span>Assist</span>
-          <h2 class="panel__title" id="forecast-title">Workforce forecast</h2>
+    <div class="overview-secondary-stack">
+      <section class="panel" aria-labelledby="summary-title">
+        <div class="panel__header">
+          <div>
+            <h2 class="panel__title" id="summary-title">Operational summary</h2>
+            <p class="panel__meta">Derived from the coverage service</p>
+          </div>
         </div>
-      </div>
-      <div class="panel__body">
-        <div class="forecast-pending">
-          <p class="forecast-pending__body">
-            AI-assisted workforce forecasting will become available when the
-            AI Recommendations workflow is implemented. No forecast is
-            generated on this screen.
-          </p>
+        <div class="panel__body">
+          <div id="summary-panel" hx-get="/partials/summary"
+               hx-trigger="load, refresh-workforce from:body"
+               hx-swap="innerHTML" hx-indicator="#loading-indicator">
+            <p class="u-muted">Loading operational summary…</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- A deliberately compact placeholder: forecasting is not part of this
+           Release 0 workflow and should not compete with real operational data. -->
+      <section class="panel forecast-strip" aria-labelledby="forecast-title">
+        <div class="forecast-strip__content">
+          <div class="forecast-strip__intro">
+            <span class="ai-label"><span class="ai-label__dot"></span>Assist</span>
+            <div>
+              <h2 class="panel__title" id="forecast-title">Workforce forecast</h2>
+              <p class="forecast-pending__body">
+                AI-assisted workforce forecasting is not implemented in this
+                release. No forecast is generated on this screen.
+              </p>
+            </div>
+          </div>
           <span class="badge-pending">Coming soon</span>
         </div>
-      </div>
-    </section>
-
-    <section class="panel" aria-labelledby="summary-title">
-      <div class="panel__header">
-        <div>
-          <h2 class="panel__title" id="summary-title">Operational summary</h2>
-          <p class="panel__meta">Derived from the coverage service</p>
-        </div>
-      </div>
-      <div class="panel__body">
-        <div id="summary-panel" hx-get="/partials/summary"
-             hx-trigger="load, refresh-workforce from:body"
-             hx-swap="innerHTML" hx-indicator="#loading-indicator">
-          <p class="u-muted">Loading operational summary…</p>
-        </div>
-      </div>
-    </section>
+      </section>
+    </div>
 
   </div>
 

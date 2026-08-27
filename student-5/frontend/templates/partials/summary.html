@@ -43,7 +43,7 @@
 {% set attempted = summary.generation and summary.generation.fallback_reason != 'not_requested' %}
 {#- The action is offered in every state; only its wording changes, so it says
     what pressing it would actually do from where the reader is standing. -#}
-{% set action_label = 'Regenerate AI summary' if is_ai
+{% set action_label = 'Refresh AI summary' if is_ai
                       else 'Try AI summary again' if attempted
                       else 'Generate AI summary' %}
 <div class="stack stack--sm">

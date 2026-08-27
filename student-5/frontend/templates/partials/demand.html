@@ -19,8 +19,8 @@
 {% else %}
 
   {% if top_gap %}
-  <div class="alert alert--{{ 'danger' if top_gap.coverage_status == 'Unstaffed' else 'warning' }}"
-       role="alert" style="margin-bottom: var(--space-5);">
+  <div class="alert alert--{{ 'danger' if top_gap.coverage_status == 'Unstaffed' else 'warning' }} demand-callout"
+       role="alert">
     <div>
       <p class="alert__title">{{ top_gap.department }} needs attention</p>
       <p class="alert__body">
@@ -30,7 +30,7 @@
     </div>
   </div>
   {% else %}
-  <div class="alert alert--success" role="status" style="margin-bottom: var(--space-5);">
+  <div class="alert alert--success demand-callout" role="status">
     <div>
       <p class="alert__title">No staffing gaps today</p>
       <p class="alert__body">All scheduled shifts meet their required headcount.</p>

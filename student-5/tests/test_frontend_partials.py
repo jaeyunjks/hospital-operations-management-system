@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import datetime
 import importlib.util
+import json
+import re
 import sys
 from pathlib import Path
 
@@ -1499,52 +1501,27 @@ def test_weekly_section_survives_backend_failure(frontend_client, fe_api_client,
     assert "Weekly availability is unavailable" in body
 
 
-def test_weekly_editor_loads_with_stored_slots_checked(frontend_client, fe_api_client, monkeypatch):
-    _drawer_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")))
-    body = frontend_client.get(
-        "/partials/staff/1/weekly-availability/edit").data.decode()
+def test_weekly_editor_loads_with_stored_slots_checked(
+        employee_client, fe_api_client, monkeypatch):
+    """The editor lives on the employee's own page — they own the pattern."""
+    _employee_weekly_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")))
+    body = employee_client.get(
+        "/partials/me/weekly-availability/edit").get_data(as_text=True)
     assert 'value="0-0"' in body
     # 21 slots: 7 days x 3 bands, each with a distinct day-band value.
     import re
     assert len(set(re.findall(r'value="([0-6]-[0-2])"', body))) == 21
 
 
-def test_weekly_editor_save_persists_structured_periods(frontend_client, fe_api_client, monkeypatch):
+def test_weekly_editor_save_ignores_malformed_slots(
+        employee_client, fe_api_client, monkeypatch):
     captured = {}
-
-    def fake_replace(staff_id, periods):
-        captured["periods"] = periods
-        return {"periods": periods}
-
-    _drawer_stubs(monkeypatch, fe_api_client, _weekly())
-    monkeypatch.setattr(fe_api_client, "replace_weekly_availability", fake_replace)
-    response = frontend_client.post("/partials/staff/1/weekly-availability",
-                                    data={"slot": ["0-0", "3-2"]})
-    assert response.status_code == 200
-    # UI symbols are never persisted — slots expand to real times.
-    assert captured["periods"] == [
-        {"day_of_week": 0, "start_time": "07:00", "end_time": "15:00"},
-        {"day_of_week": 3, "start_time": "23:00", "end_time": "07:00"},
-    ]
-    assert "Weekly availability updated." in response.data.decode()
-
-
-def test_weekly_editor_save_ignores_malformed_slots(frontend_client, fe_api_client, monkeypatch):
-    captured = {}
-    _drawer_stubs(monkeypatch, fe_api_client, _weekly())
+    _employee_weekly_stubs(monkeypatch, fe_api_client, _weekly())
     monkeypatch.setattr(fe_api_client, "replace_weekly_availability",
                         lambda sid, periods: captured.setdefault("p", periods) or {"periods": periods})
-    frontend_client.post("/partials/staff/1/weekly-availability",
+    employee_client.post("/partials/me/weekly-availability",
                          data={"slot": ["0-0", "9-9", "bad", "2-99"]})
     assert captured["p"] == [{"day_of_week": 0, "start_time": "07:00", "end_time": "15:00"}]
-
-
-def test_weekly_editor_save_failure_reports_error(frontend_client, fe_api_client, monkeypatch):
-    _drawer_stubs(monkeypatch, fe_api_client, _weekly())
-    monkeypatch.setattr(fe_api_client, "replace_weekly_availability", _raise_unavailable)
-    body = frontend_client.post("/partials/staff/1/weekly-availability",
-                                data={"slot": ["0-0"]}).data.decode()
-    assert "Weekly availability was not saved." in body
 
 
 def test_on_leave_retains_weekly_pattern(frontend_client, fe_api_client, monkeypatch):
@@ -1642,11 +1619,12 @@ def test_view_button_still_present(frontend_client, fe_api_client, monkeypatch):
     assert "View" in body and "table__actions" in body
 
 
-def test_weekly_editor_still_has_21_slots_and_colgroup(frontend_client, fe_api_client, monkeypatch):
+def test_weekly_editor_still_has_21_slots_and_colgroup(
+        employee_client, fe_api_client, monkeypatch):
     import re
-    _drawer_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")))
-    body = frontend_client.get(
-        "/partials/staff/1/weekly-availability/edit").data.decode()
+    _employee_weekly_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")))
+    body = employee_client.get(
+        "/partials/me/weekly-availability/edit").get_data(as_text=True)
     assert len(set(re.findall(r'value="([0-6]-[0-2])"', body))) == 21
     assert 'weekly-grid__labels' in body
 
@@ -3959,6 +3937,48 @@ def test_the_ai_route_is_the_only_one_that_requests_narration(
                       "narrate": True}]
 
 
+def test_summary_api_client_waits_for_backend_ai_fallback(
+        fe_api_client, monkeypatch):
+    """The frontend allowance must outlast the backend's bounded model wait."""
+    captured = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return b'{}'
+
+    def fake_urlopen(request, timeout):
+        captured["timeout"] = timeout
+        captured["payload"] = json.loads(request.data.decode("utf-8"))
+        return Response()
+
+    monkeypatch.setattr(fe_api_client, "_identity_provider", lambda: {})
+    monkeypatch.setattr(fe_api_client.urllib.request, "urlopen", fake_urlopen)
+
+    fe_api_client.get_coverage_summary(
+        shift_date="2026-08-24", narrate=True)
+
+    assert captured["payload"]["narrate"] is True
+    assert captured["timeout"] == fe_api_client.SUMMARY_API_TIMEOUT
+    assert fe_api_client.SUMMARY_API_TIMEOUT > fe_api_client.API_TIMEOUT
+
+
+def test_direct_frontend_read_timeout_becomes_contained_unavailable_error(
+        fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "_identity_provider", lambda: {})
+    monkeypatch.setattr(
+        fe_api_client.urllib.request, "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError("timed out")))
+
+    with pytest.raises(fe_api_client.BackendUnavailableError):
+        fe_api_client.get_coverage_summary(narrate=True)
+
+
 def test_narration_goes_through_the_api_client_not_the_browser(
         frontend_client, fe_api_client, monkeypatch):
     _stub_summary(monkeypatch, fe_api_client, _ai_summary())
@@ -4099,7 +4119,7 @@ def test_repeated_generation_replaces_rather_than_appends(
     second = frontend_client.get("/partials/summary/ai").data.decode()
     assert first == second
     assert first.count('class="ai-panel"') == 1
-    assert first.count("Regenerate AI summary") == 1
+    assert first.count("Refresh AI summary") == 1
     assert 'hx-target="#summary-panel" hx-swap="innerHTML"' in first
 
 
@@ -4113,10 +4133,10 @@ def test_trigger_is_disabled_while_in_flight(
 
 def test_the_trigger_survives_into_the_ai_result(
         frontend_client, fe_api_client, monkeypatch):
-    """The manager can regenerate without reloading the page."""
+    """The manager can refresh the narration without reloading the page."""
     _stub_summary(monkeypatch, fe_api_client, _ai_summary())
     body = frontend_client.get("/partials/summary/ai").data.decode()
-    assert "Regenerate AI summary" in body
+    assert "Refresh AI summary" in body
     assert 'hx-get="/partials/summary/ai' in body
 
 
@@ -4212,12 +4232,13 @@ def test_trigger_wording_matches_the_state(
     assert expected in body
 
 
-def test_ai_success_offers_regeneration(
+def test_ai_success_offers_refresh(
         frontend_client, fe_api_client, monkeypatch):
     _stub_summary(monkeypatch, fe_api_client, _ai_summary())
     body = frontend_client.get("/partials/summary/ai").data.decode()
-    assert "Regenerate AI summary" in body
-    assert "Generate AI summary" not in body.replace("Regenerate AI summary", "")
+    assert "Refresh AI summary" in body
+    assert "Regenerate AI summary" not in body
+    assert "Generate AI summary" not in body
 
 
 def test_every_non_error_state_offers_an_action(
@@ -4269,3 +4290,178 @@ def test_the_trigger_is_not_gated_behind_an_ai_condition():
     block_start = template.index("{% if is_ai %}")
     block_end = template.index("{% endif %}", block_start)
     assert not block_start < action_start < block_end
+
+
+# ==========================================================================
+# Release 0 chrome and permission polish
+# ==========================================================================
+
+def _overview_stubs(monkeypatch, fe_api_client):
+    monkeypatch.setattr(fe_api_client, "get_coverage", lambda **k: _coverage_body([]))
+    monkeypatch.setattr(fe_api_client, "list_staff", lambda **k: {"count": 0, "staff": []})
+
+
+# ------------------------------------------------------------ HR Core strip
+def test_hr_core_strip_is_present_and_short(frontend_client, fe_api_client, monkeypatch):
+    _overview_stubs(monkeypatch, fe_api_client)
+    body = frontend_client.get("/").data.decode()
+    assert "HR Core" in body
+    assert "Employee reference data is read-only." in body
+    assert "Live HR integration is simulated for Release" in body
+
+
+def test_hr_core_strip_drops_the_long_form_copy(frontend_client, fe_api_client,
+                                                monkeypatch):
+    _overview_stubs(monkeypatch, fe_api_client)
+    body = frontend_client.get("/").data.decode()
+    for gone in ("originates from the external HR system",
+                 "no payroll or HR fields are imported",
+                 "represented locally"):
+        assert gone not in body
+
+
+# ------------------------------------------------------- refresh control
+def test_refresh_control_is_icon_only_with_an_accessible_name(
+        frontend_client, fe_api_client, monkeypatch):
+    _overview_stubs(monkeypatch, fe_api_client)
+    body = frontend_client.get("/").data.decode()
+    assert 'aria-label="Refresh workforce data"' in body
+    assert 'title="Refresh workforce data"' in body
+    assert "btn-icon" in body
+    # The icon is decoration; the name comes from aria-label.
+    assert 'aria-hidden="true"' in body
+    # No visible text label left on the control.
+    assert ">\n        Refresh\n      </button>" not in body
+
+
+def test_refresh_control_still_triggers_the_workforce_refresh(
+        frontend_client, fe_api_client, monkeypatch):
+    _overview_stubs(monkeypatch, fe_api_client)
+    body = frontend_client.get("/").data.decode()
+    assert "refresh-workforce" in body
+
+
+# ------------------------------------------------------------ current time
+def test_context_bar_shows_the_current_time(frontend_client, fe_api_client,
+                                            monkeypatch):
+    _overview_stubs(monkeypatch, fe_api_client)
+    body = frontend_client.get("/").data.decode()
+    assert 'id="context-clock"' in body
+    assert re.search(r'id="context-clock">\d{2}:\d{2}<', body)
+
+
+def test_current_time_is_rendered_server_side_so_it_works_without_js(
+        frontend_client, fe_api_client, monkeypatch):
+    """The script only keeps it ticking; the value is already correct."""
+    _overview_stubs(monkeypatch, fe_api_client)
+    body = frontend_client.get("/").data.decode()
+    assert "{{ now_time }}" not in body
+    assert "getElementById('context-clock')" in body
+
+
+def test_current_time_sits_beside_the_operational_date(
+        frontend_client, fe_api_client, monkeypatch):
+    _overview_stubs(monkeypatch, fe_api_client)
+    body = frontend_client.get("/").data.decode()
+    contextbar = body[body.index("contextbar__end"):body.index("syncstrip")]
+    assert "Scheduling service operational" in contextbar
+    assert "context-clock" in contextbar
+
+
+# ------------------------------------------------------ AI nav stays parked
+def test_ai_recommendations_is_not_active_navigation(
+        frontend_client, fe_api_client, monkeypatch):
+    """Parked for R0: shown as pending, never a link and never focusable."""
+    _overview_stubs(monkeypatch, fe_api_client)
+    body = frontend_client.get("/").data.decode()
+    assert "AI recommendations" in body
+    assert "Soon" in body
+    assert 'href="/ai-recommendations"' not in body
+    assert 'topnav__link--pending" aria-disabled="true"' in body
+
+
+def test_workforce_forecast_stays_coming_soon(frontend_client, fe_api_client,
+                                              monkeypatch):
+    _overview_stubs(monkeypatch, fe_api_client)
+    body = frontend_client.get("/").data.decode()
+    assert "Workforce forecast" in body
+    assert "Coming soon" in body
+    assert "No forecast is" in body
+
+
+def test_overview_prioritises_demand_and_summary_before_compact_forecast(
+        frontend_client, fe_api_client, monkeypatch):
+    _overview_stubs(monkeypatch, fe_api_client)
+    body = frontend_client.get("/").data.decode()
+
+    assert '<div class="overview-secondary-stack">' in body
+    assert '<section class="panel forecast-strip"' in body
+    assert body.index("Operational demand") < body.index("Operational summary")
+    assert body.index("Operational summary") < body.index("Workforce forecast")
+
+
+# ------------------------------ weekly availability: employee owns editing
+def test_manager_drawer_shows_weekly_availability_read_only(
+        frontend_client, fe_api_client, monkeypatch):
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")))
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    # The pattern is still visible to a manager...
+    assert "weekly-cell--available" in body
+    assert "Weekly availability" in body
+    # ...but there is nothing to edit it with.
+    assert "Edit weekly availability" not in body
+    assert "weekly-availability/edit" not in body
+    assert "maintains this pattern from their own workforce page" in body
+
+
+def test_manager_weekly_availability_editor_route_is_gone(frontend_client):
+    assert frontend_client.get(
+        "/partials/staff/1/weekly-availability/edit").status_code == 404
+
+
+def test_manager_weekly_availability_save_route_is_gone(frontend_client):
+    """Read-only means the write path does not exist on this side either."""
+    assert frontend_client.post(
+        "/partials/staff/1/weekly-availability",
+        data={"slot": ["0-0"]}).status_code == 404
+
+
+def test_manager_keeps_operational_availability_control(
+        frontend_client, fe_api_client, monkeypatch):
+    """Operational status is roster state and stays the manager's to set."""
+    _drawer_stubs(monkeypatch, fe_api_client, _weekly())
+    body = frontend_client.get("/partials/staff/1").data.decode()
+    assert 'name="availability_status"' in body
+    assert "/partials/staff/1/availability" in body
+
+
+def test_employee_still_owns_editing_their_own_pattern(
+        employee_client, fe_api_client, monkeypatch):
+    _employee_weekly_stubs(monkeypatch, fe_api_client, _weekly((0, "07:00", "15:00")))
+    body = employee_client.get("/me").get_data(as_text=True)
+    assert 'hx-get="/partials/me/weekly-availability/edit"' in body
+    assert "Edit availability" in body
+
+
+# --------------------------------------------- demand stays real data only
+def test_operational_demand_invents_no_occupancy_data(
+        frontend_client, fe_api_client, monkeypatch):
+    """R0 models staffing demand, not patients. Nothing here may imply it."""
+    _daily_stubs(monkeypatch, fe_api_client, [
+        _cov(1, "Emergency", required=4, assigned=3)])
+    body = frontend_client.get("/partials/demand").data.decode()
+    for invented in ("Occupancy", "occupancy", "Patients", "patients",
+                     "Admissions", "Procedures", "Beds", "Acuity", "Forecast"):
+        assert invented not in body
+    # ...and the real staffing figures are still there.
+    assert "Emergency" in body
+    assert "Gap 1" in body
+
+
+def test_demand_callout_spacing_is_not_an_inline_style(
+        frontend_client, fe_api_client, monkeypatch):
+    _daily_stubs(monkeypatch, fe_api_client, [
+        _cov(1, "Emergency", required=4, assigned=3)])
+    body = frontend_client.get("/partials/demand").data.decode()
+    assert "demand-callout" in body
+    assert "margin-bottom: var(--space-5)" not in body

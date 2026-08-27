@@ -303,10 +303,11 @@
    3. Workforce Overview layout and cells
    ========================================================================== */
 
-/* Three operational panels: demand / forecast / summary. */
+/* Real operational data leads the page: demand gets the wider track and the
+   deterministic/AI-assisted summary stays visible beside it. */
 .panel-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 0.9fr);
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
   gap: var(--gutter);
   align-items: start;
 }
@@ -381,15 +382,36 @@
   flex-shrink: 0;
 }
 
-/* Forecast placeholder — restrained, clearly non-functional. */
-.forecast-pending {
+/* The secondary rail uses its natural content height. Keeping the forecast
+   below the summary fills the otherwise-empty part of that rail without
+   inventing any operational content. */
+.overview-secondary-stack {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--gutter);
+  min-width: 0;
+}
+
+/* Forecast placeholder — a compact strip below the real summary,
+   restrained and explicitly non-functional. */
+
+.forecast-strip__content {
+  display: flex;
+  flex-direction: column;
   align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+}
+
+.forecast-strip__intro {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-4);
+  min-width: 0;
 }
 
 .forecast-pending__body {
+  margin-top: var(--space-1);
   font-size: var(--size-ui-xs);
   line-height: var(--leading-ui);
   color: var(--color-text-muted);
@@ -398,12 +420,6 @@
 /* ==========================================================================
    4. Responsive — desktop first, tablet and narrow remain usable
    ========================================================================== */
-@media (max-width: 1200px) {
-  .panel-row { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
-  /* Summary drops to a full-width third row rather than being squeezed. */
-  .panel-row > :nth-child(3) { grid-column: 1 / -1; }
-}
-
 @media (max-width: 1080px) {
   /* 6 -> 3 + 3: both rows stay full-width, so no empty trailing cell. */
   .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -411,7 +427,6 @@
 
 @media (max-width: 820px) {
   .panel-row { grid-template-columns: minmax(0, 1fr); }
-  .panel-row > :nth-child(3) { grid-column: auto; }
   .shell__page { padding: var(--space-5) var(--space-5) var(--space-8); }
   .contextbar { gap: var(--space-4); }
   .contextbar__end { margin-left: 0; width: 100%; }
@@ -1900,6 +1915,22 @@
 .candidate-note--ok { color: var(--color-success); }
 .candidate-note--warn { color: var(--color-warning); }
 .candidate-note--blocked { color: var(--color-danger); }
+
+/* Leading callout in the Operational demand panel. Was an inline style on two
+   elements; fixed spacing is presentation and belongs here. The meter fill in
+   that panel stays inline — its width is data. */
+.demand-callout { margin-bottom: var(--space-5); }
+
+/* ------------------------------------------------ icon-only control --- */
+/* Square variant of the shared button. The accessible name comes from
+   aria-label, so nothing here should reserve space for text. */
+.btn-icon {
+  width: var(--control-height);
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.btn-icon svg { width: 16px; height: 16px; }
 
 /* ------------------------------------- AI-assisted suggestion panel --- */
 /* The panel itself is the shared design system's .ai-panel / .ai-label /

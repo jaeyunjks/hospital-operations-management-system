@@ -108,18 +108,21 @@
           <span class="status__dot"></span>
           <span>{{ 'Scheduling service unavailable' if service_available is sameas false else 'Scheduling service operational' }}</span>
         </span>
-        <span class="contextbar__date">{{ today }}</span>
+        {#- Server-rendered so it is correct without JavaScript; the script
+            at the end of this file then keeps it ticking in the viewer's own
+            clock, which is the time a manager is actually working to. -#}
+        <span class="contextbar__date">
+          {{ today }} · <time id="context-clock">{{ now_time }}</time>
+        </span>
       </div>
     </div>
 
     <!-- =================================================== HR-Core strip -->
     <div class="syncstrip">
-      <span class="syncstrip__label">HR-Core</span>
+      <span class="syncstrip__label">HR Core</span>
       <p class="syncstrip__body">
-        <span class="syncstrip__lead">Employee reference data is read-only in HOMS.</span>
-        It originates from the external HR system. Live HR integration is not
-        implemented for Release&nbsp;0 — employee reference information is
-        represented locally, and no payroll or HR fields are imported.
+        <span class="syncstrip__lead">Employee reference data is read-only.</span>
+        Live HR integration is simulated for Release&nbsp;0.
       </p>
     </div>
 
@@ -130,5 +133,22 @@
     </main>
 
   </div>
+
+  {#- Keeps the context-bar clock current. The server already rendered a
+      correct value, so this only replaces it with the viewer's own clock and
+      re-checks twice a minute; with JavaScript off the server value stands. -#}
+  <script>
+    (function () {
+      var clock = document.getElementById('context-clock');
+      if (!clock) { return; }
+      function tick() {
+        var now = new Date();
+        var pad = function (n) { return n < 10 ? '0' + n : String(n); };
+        clock.textContent = pad(now.getHours()) + ':' + pad(now.getMinutes());
+      }
+      tick();
+      setInterval(tick, 30000);
+    })();
+  </script>
 </body>
 </html>

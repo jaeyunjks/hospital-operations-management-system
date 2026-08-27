@@ -47,6 +47,11 @@ def _today() -> str:
     return datetime.date.today().isoformat()
 
 
+def _now_time() -> str:
+    """Current wall-clock time as HH:MM, for the context bar."""
+    return datetime.datetime.now().strftime("%H:%M")
+
+
 def _today_long() -> str:
     """Human-readable date for the page header (e.g. "Wed, 26 Aug 2026")."""
     # %-d is POSIX-only but this service targets Linux/macOS containers;
@@ -933,6 +938,10 @@ def create_app() -> Flask:
             "is_employee": demo_identity.is_employee(),
             "ROLE_MANAGER": ROLE_MANAGER,
             "ROLE_EMPLOYEE": ROLE_EMPLOYEE,
+            # Injected here rather than per route so the chrome has it on every
+            # page. Rendered server-side so the clock is right without
+            # JavaScript; layout.html then keeps it ticking.
+            "now_time": _now_time(),
         }
 
     # Display helpers shared by the table and the drawer. Presentation only —
@@ -1676,28 +1685,12 @@ def create_app() -> Flask:
         response.headers["HX-Trigger"] = "staff-updated"
         return response
 
-    @app.get("/partials/staff/<int:staff_id>/weekly-availability/edit")
-    def weekly_availability_editor(staff_id: int):
-        """Matrix editor. Renders the stored pattern as toggleable band cells;
-        roster overlay is deliberately excluded here — you edit availability,
-        not assignments."""
-        try:
-            record = api_client.get_staff(staff_id)["staff"]
-            periods = api_client.get_weekly_availability(staff_id)["periods"]
-        except NotFoundError:
-            return render_template("partials/staff_detail.html",
-                                    person=None, error=None, notice=None,
-                                    not_found=True), 404
-        except (BackendUnavailableError, BackendError) as error:
-            return render_template("partials/weekly_availability_edit.html",
-                                    person=None, grid=None, error=str(error))
-
-        grid = _build_weekly_grid(periods, [], _week_start())
-        return render_template("partials/weekly_availability_edit.html",
-                                person=record, grid=grid, error=None)
-
     def _periods_from_weekly_slots():
-        """Expand the shared 3x7 editor values into the existing API shape."""
+        """Expand the shared 3x7 editor values into the existing API shape.
+
+        Used by the employee's own save route, which is the only place a
+        recurring pattern is written from.
+        """
         periods = []
         for key in request.form.getlist("slot"):
             try:
@@ -1711,30 +1704,6 @@ def create_app() -> Flask:
                                 "start_time": start, "end_time": end})
         return periods
 
-    @app.post("/partials/staff/<int:staff_id>/weekly-availability")
-    def weekly_availability_save(staff_id: int):
-        """Persist the submitted matrix as structured weekly periods.
-
-        Checkbox names carry "<day>-<band index>"; they are expanded back into
-        real start/end times here. UI symbols are never persisted.
-        """
-        periods = _periods_from_weekly_slots()
-
-        try:
-            api_client.replace_weekly_availability(staff_id, periods)
-        except NotFoundError:
-            return _render_detail(staff_id)
-        except (BackendUnavailableError, BackendError) as error:
-            return _render_detail(
-                staff_id,
-                notice={"kind": "danger",
-                        "text": "Weekly availability was not saved. " + str(error)})
-
-        return _render_detail(
-            staff_id,
-            notice={"kind": "success", "text": "Weekly availability updated."})
-
-    # ---------------------------------------------------------------- partials
     @app.get("/partials/kpis")
     def kpis_partial():
         today = request.args.get("date") or _today()

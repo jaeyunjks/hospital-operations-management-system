@@ -209,12 +209,16 @@
     </p>
     {% endif %}
 
-    <button class="btn-secondary btn-compact" type="button"
-            hx-get="/partials/staff/{{ person.staff_id }}/weekly-availability/edit"
-            hx-target="#staff-drawer" hx-swap="innerHTML"
-            hx-indicator="#loading-indicator">
-      Edit weekly availability
-    </button>
+    {#- READ-ONLY for a manager. The recurring pattern is the employee's own
+        statement of when they can work, so they own editing it from My
+        workforce; a manager editing it would be recording an availability
+        the employee never gave. What a manager DOES control is unchanged and
+        sits above: operational status, and approving absence requests. -#}
+    <p class="drawer__muted">
+      {{ person.name }} maintains this pattern from their own workforce page.
+      Use operational status above, or the request queue, to change what they
+      can be rostered for.
+    </p>
     {% endif %}
   </section>
 
