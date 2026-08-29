@@ -26,4 +26,7 @@ OLLAMA_RETRIES = int(os.getenv("OLLAMA_RETRIES", "2"))
 
 # Domain Vocabulary
 PATIENT_STATUSES = ("Active", "Inactive", "Deceased", "Transferred")
+PATIENT_SEX = ("Male", "Female", "Alternate", "Unassigned")
+PATIENT_STATE = ("New South Wales", "Victoria", "Queensland", "Western Australia", "South Australia", "Tasmania", "Northern Territory", "Australian Capital Territory")
+
 ADMISSION_STATUS = ("Pending", "Active", "Cancelled", "Completed")
