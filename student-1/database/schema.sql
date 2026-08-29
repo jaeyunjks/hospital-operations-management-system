@@ -13,6 +13,7 @@ DROP TABLE IF EXISTS admissions;
 
 -- Tables:
 --      patients --> Core patient identity / contact information
+--      patient_medical_information --> A patient's insurance and medicare information
 --      patient_contacts --> Emergency contacts for a patient
 --      patientAdminNotes --> Administrative notes
 --      admissions --> A patient's individual admissions information 
@@ -58,15 +59,11 @@ CREATE TABLE patients (
         -- Contact information
     p_mobile TEXT NOT NULL,
 
-    -- Key:
-    -- 0 --> Post
-    -- 1 --> Email
-    -- 2 --> Text
-    p_method_of_contact INTEGER
+    p_method_of_contact TEXT
         CHECK (p_method_of_contact IN (
-            0,
-            1,
-            2
+            'Post',
+            'Email',
+            'Text'
         )),
 
     -- Optional identification information
@@ -83,49 +80,24 @@ CREATE TABLE patients (
     p_email_address TEXT,
     p_landline TEXT,
 
-    -- Key:
-    -- 0 --> Single
-    -- 1 --> Married
-    -- 2 --> De-Facto
-    -- 3 --> Widowed
-    -- 4 --> Separated
-    -- 5 --> Divorced
-    p_marital_status INTEGER NOT NULL DEFAULT 0
+    p_marital_status INTEGER NOT NULL DEFAULT 'Single'
         CHECK (p_marital_status IN (
-            0,
-            1,
-            2,
-            3,
-            4,
-            5
-        )),
-
-    -- Core medical information
-    p_medicare_number TEXT NOT NULL,
-    p_medicare_individual_reference_number TEXT NOT NULL,
-    p_medicare_expiry_date TEXT NOT NULL,
-
-        -- Does the patient have private insurance / travel insurance (in the case of an international traveller)
-    p_private_insurance INTEGER NOT NULL DEFAULT 0
-        CHECK (p_private_insurance IN (
-            0,
-            1
+            'Single',
+            'Married',
+            'De-Facto',
+            'Widowed',
+            'Separated',
+            'Divorced'
         )),
 
     -- Legal requirement to ask if a patient is of Aboriginal or Torres Strait Islander heritage.
-    -- Key:
-    -- 0 --> Unknown
-    -- 1 --> Aboriginal
-    -- 2 --> Torres Strait Islander
-    -- 3 --> Both
-    -- 4 --> Neither
-    p_first_nations_heritage INTEGER NOT NULL DEFAULT 0
+    p_first_nations_heritage TEXT NOT NULL DEFAULT 'Unknown'
         CHECK (p_first_nations_heritage IN (
-            0,
-            1,
-            2,
-            3,
-            4
+            'Unknown',
+            'Aboriginal',
+            'Torres Strait Islander',
+            'Both',
+            'Neither'
         )),
 
     -- Does the patient require a translator or interpreter
@@ -134,9 +106,6 @@ CREATE TABLE patients (
             0,
             1
         )),
-
-    -- Optional medical information
-    p_centrelink_number TEXT,
 
     -- Internal administrative information
     patient_status TEXT NOT NULL DEFAULT 'Active'
@@ -154,9 +123,33 @@ CREATE TABLE patients (
 );
 
 -- -----------------------------------------------------------------------------
+-- patient_insurance
+CREATE TABLE patient_medical_information (
+    insurance_id INTEGER PRIMARY KEY,
+    patient_id INTEGER NOT NULL,
+
+    medicare_number TEXT NOT NULL,
+    medicare_individual_reference_number TEXT NOT NULL,
+    medicare_expiry_date TEXT NOT NULL,
+
+    -- Does the patient have private insurance / travel insurance (in the case of an international traveller)
+    private_insurance INTEGER NOT NULL DEFAULT 0
+        CHECK (private_insurance IN (
+            0,
+            1
+        )),
+
+    p_centrelink_number TEXT,
+
+    FOREIGN KEY (patient_id) 
+        REFERENCES patients (patient_id)
+);
+
+-- -----------------------------------------------------------------------------
 -- patient_contacts
 CREATE TABLE patient_contacts (
     contact_id INTEGER PRIMARY KEY,
+    patient_id INTEGER NOT NULL,
 
     -- Is this the patient's primary emergency contact 
     contact_primary INTEGER NOT NULL DEFAULT 0
@@ -190,6 +183,7 @@ CREATE TABLE patient_contacts (
 -- patient_admin_notes
 CREATE TABLE patient_admin_notes (
     note_id INTEGER PRIMARY KEY,
+
     patient_id INTEGER NOT NULL,
     -- author_id INTEGER NOT NULL,
 
