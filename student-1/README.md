@@ -25,36 +25,40 @@ intentionally out of scope for the current repository-initialisation task.
 
 The student-1 feature area is structured as follows:
 
-├── Dockerfile
-├── README.md
-├── **backend** # Backend microservice
-│   ├── Dockerfile
-│   ├── README.md
-│   ├── app.py # Composition for backend / API routes, error responses, and healthchecks
-│   ├── auth.py # Manages role-based authorisation for backend / API
-│   ├── config.py # Configuration for backend / API services
-│   ├── requirements.txt 
-│   ├── responses.py # Shared standardised response helper
-│   ├── **routes**
-│   │   ├── __init__.py
-│   │   └── ai_endpoints.py # AI-assisted endpoints for AI features
-│   ├── **services**
-│   │   ├── __init__.py
-│   │   └── ollama_client.py # Client for the local Ollama LLM
-│   └── validation.py # Input validation helper
-├── **database** # Database microservice
-│   ├── Dockerfile
-│   ├── README.md 
-│   ├── app.py # Composition for database services, including resources, CRUD routes, and views
-│   ├── database.py # SQLite access helper
-│   ├── init_database.py # Creates and populates the Patient & Admissions database
-│   ├── requirements.txt
-│   ├── schema.sql # Patient & Admissions database schema
-│   └── seed_data.sql # Patient & Admissions seed data
-├── **frontend** # Frontend microservice
-│   ├── Dockerfile
-│   ├── README.md
-│   ├── app.py # Renders pages, calls backend API
-│   ├── **static** 
-│   └── **templates**
-└── **tests**
+<pre>
+<code>
+    ├── Dockerfile
+    ├── README.md
+    ├── <b>backend</b> <i># Backend microservice</i>
+    │   ├── Dockerfile
+    │   ├── README.md
+    │   ├── app.py <i># Composition for backend / API routes, error responses, and healthchecks</i>
+    │   ├── auth.py <i># Manages role-based authorisation for backend / API</i>
+    │   ├── config.py <i># Configuration for backend / API services</i>
+    │   ├── requirements.txt 
+    │   ├── responses.py <i># Shared standardised response helper</i>
+    │   ├── <b>routes</b>
+    │   │   ├── __init__.py
+    │   │   └── ai_endpoints.py <i># AI-assisted endpoints for AI features</i>
+    │   ├── <b>services</b>
+    │   │   ├── __init__.py
+    │   │   └── ollama_client.py <i># Client for the local Ollama LLM</i>
+    │   └── validation.py # Input validation helper
+    ├── <b>database</b>> <i># Database microservice</i>
+    │   ├── Dockerfile
+    │   ├── README.md 
+    │   ├── app.py <i># Composition for database services, including resources, CRUD routes, and views</i>
+    │   ├── database.py <i># SQLite access helper</i>
+    │   ├── init_database.py <i># Creates and populates the Patient & Admissions database</i>
+    │   ├── requirements.txt
+    │   ├── schema.sql <i># Patient & Admissions database schema</i>
+    │   └── seed_data.sql <i># Patient & Admissions seed data</i>
+    ├── <b>frontend</b> <i># Frontend microservice</i>
+    │   ├── Dockerfile
+    │   ├── README.md
+    │   ├── app.py <i># Renders pages, calls backend API</i>
+    │   ├── <b>static</b> 
+    │   └── <b>templates</b>
+    └── <b>tests</b>
+</code>
+</pre>
