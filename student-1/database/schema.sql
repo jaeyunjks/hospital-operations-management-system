@@ -1,4 +1,4 @@
--- Database schema for the Patient & Admissions Management databse
+-- Database schema for the Patient & Admissions Management database
 -- Creation date: 29/08/2026
 
 -- Owned data:
@@ -7,15 +7,19 @@
 
 PRAGMA foreign_keys = ON;
 
-DROP TABLE IF EXISTS patients;
-DROP TABLE IF EXISTS patient_admin_notes;
 DROP TABLE IF EXISTS admissions;
+DROP TABLE IF EXISTS patient_admin_notes;
+DROP TABLE IF EXISTS patient_contacts;
+DROP TABLE IF EXISTS patient_medical_information;
+DROP TABLE IF EXISTS patient_addresses;
+DROP TABLE IF EXISTS patients;
 
 -- Tables:
 --      patients --> Core patient identity / contact information
+--      patient_addresses --> A patient's address information
 --      patient_medical_information --> A patient's insurance and medicare information
 --      patient_contacts --> Emergency contacts for a patient
---      patientAdminNotes --> Administrative notes
+--      patient_admin_notes --> Administrative notes
 --      admissions --> A patient's individual admissions information 
 
 -- -----------------------------------------------------------------------------
@@ -38,24 +42,6 @@ CREATE TABLE patients (
             'Unassigned'
         )),
 
-        -- Residential information
-    p_street_address TEXT NOT NULL,
-    p_suburb TEXT NOT NULL,
-
-    p_state TEXT NOT NULL
-        CHECK (p_state IN (
-            'New South Wales',
-            'Victoria',
-            'Queensland',
-            'Western Australia',
-            'South Australia',
-            'Tasmania',
-            'Northern Territory',
-            'Australian Capital Territory'
-        )),
-
-    p_postcode TEXT NOT NULL,
-
         -- Contact information
     p_mobile TEXT NOT NULL,
 
@@ -67,6 +53,7 @@ CREATE TABLE patients (
         )),
 
     -- Optional identification information
+    p_middle_name TEXT,
     p_preferred_name TEXT,
     p_maiden_name TEXT,
     p_previous_last_name TEXT,
@@ -80,7 +67,7 @@ CREATE TABLE patients (
     p_email_address TEXT,
     p_landline TEXT,
 
-    p_marital_status INTEGER NOT NULL DEFAULT 'Single'
+    p_marital_status TEXT NOT NULL DEFAULT 'Single'
         CHECK (p_marital_status IN (
             'Single',
             'Married',
@@ -123,6 +110,38 @@ CREATE TABLE patients (
 );
 
 -- -----------------------------------------------------------------------------
+-- patient_addresses
+CREATE TABLE patient_addresses (
+    address_id INTEGER PRIMARY KEY,
+    patient_id INTEGER NOT NULL,
+
+    address_street TEXT NOT NULL,
+    address_suburb TEXT NOT NULL,
+    address_state TEXT NOT NULL
+        CHECK (address_state IN (
+            'New South Wales',
+            'Victoria',
+            'Queensland',
+            'Western Australia',
+            'South Australia',
+            'Tasmania',
+            'Northern Territory',
+            'Australian Capital Territory'
+        )),
+
+    address_postcode TEXT NOT NULL,
+
+    address_is_primary INTEGER NOT NULL DEFAULT 0
+        CHECK (address_is_primary IN (
+            0,
+            1
+        )),
+
+    FOREIGN KEY (patient_id) 
+        REFERENCES patients (patient_id)
+);
+
+-- -----------------------------------------------------------------------------
 -- patient_insurance
 CREATE TABLE patient_medical_information (
     insurance_id INTEGER PRIMARY KEY,
@@ -153,7 +172,7 @@ CREATE TABLE patient_contacts (
 
     -- Is this the patient's primary emergency contact 
     contact_primary INTEGER NOT NULL DEFAULT 0
-        CHECK (contact_address_same_as_patient IN (
+        CHECK (contact_primary IN (
             0,
             1
         )),
@@ -171,9 +190,10 @@ CREATE TABLE patient_contacts (
         )),
 
     contact_address TEXT NOT NULL,
-    contact_mobile TEXT NOT NULL,
 
+    contact_mobile TEXT NOT NULL,
     contact_landline TEXT,
+    contact_email TEXT,
 
     FOREIGN KEY (patient_id)
         REFERENCES patients (patient_id)
