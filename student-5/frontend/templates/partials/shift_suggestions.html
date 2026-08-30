@@ -23,7 +23,7 @@
   </div>
 </div>
 
-{% elif result.suggestions %}
+{% elif result.suggestions or result.alternatives %}
 {% set is_ai = result.mode == 'ai' %}
 {#- The shared system marks an AI surface by TINT AND LABEL. A deterministic
     ordering gets neither: the indigo header would credit a model that never
@@ -37,12 +37,17 @@
         run would misrepresent how this order was reached. -#}
     <span class="badge-neutral">Standard ordering</span>
     {% endif %}
-    <span class="ai-panel__title" id="{{ heading_id }}">Suggested order</span>
+    <span class="ai-panel__title" id="{{ heading_id }}">Recommended shortlist</span>
   </div>
 
   <div class="ai-panel__body stack stack--sm">
     <p class="ai-disclaimer">{{ result.note }}</p>
 
+    {% if result.assessment %}
+    <p class="ai-basis"><span class="u-label">Staffing context</span> {{ result.assessment }}</p>
+    {% endif %}
+
+    {% if result.suggestions %}
     <ol class="recommendation-list" aria-labelledby="{{ heading_id }}">
       {% for person in result.suggestions %}
       <li class="recommendation">
@@ -88,9 +93,56 @@
       </li>
       {% endfor %}
     </ol>
+    {% endif %}
+
+    {% if result.alternatives %}
+    <div class="stack stack--sm">
+      <p class="u-label">Other eligible alternatives</p>
+      <p class="ai-disclaimer">
+        These staff remain assignable, but do not meet every primary shortlist
+        preference shown by the current roster facts.
+      </p>
+      <ul class="recommendation-list" aria-label="Other eligible alternatives">
+        {% for person in result.alternatives %}
+        <li class="recommendation">
+          <span class="badge-neutral">Alternative</span>
+          <div class="recommendation__main">
+            <p class="recommendation__name">{{ person.name }}</p>
+            <p class="recommendation__meta">
+              {{ person.role }} · {{ person.department }}{% if person.specialisation %} · {{ person.specialisation }}{% endif %}
+            </p>
+            <span class="candidate-flags">
+              <span class="badge-neutral">{{ person.employment_status }}</span>
+              {% if person.department != result.shift.department %}
+              <span class="badge-neutral">Cross-department</span>
+              {% endif %}
+              {% for note in person.notes %}
+              <span class="candidate-note candidate-note--{{ 'ok' if note.ok else 'warn' }}">
+                <span aria-hidden="true">{{ '✓' if note.ok else '!' }}</span>{{ note.text }}
+              </span>
+              {% endfor %}
+            </span>
+            {% if person.rationale %}
+            <p class="ai-basis"><span class="u-label">Context</span> {{ person.rationale }}</p>
+            {% endif %}
+          </div>
+          <div class="recommendation__decision">
+            <form hx-post="/partials/shifts/{{ shift_id }}/assign"
+                  hx-target="{{ detail_target }}" hx-swap="innerHTML"
+                  hx-indicator="#loading-indicator">
+              <input type="hidden" name="staff_id" value="{{ person.staff_id }}">
+              {% if embedded %}<input type="hidden" name="panel" value="1">{% endif %}
+              <button class="btn-primary btn-compact" type="submit">Assign</button>
+            </form>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
 
     <p class="ai-disclaimer">
-      A suggestion is not an assignment. Nobody is rostered until you choose
+      A recommendation or alternative is not an assignment. Nobody is rostered until you choose
       Assign.
     </p>
   </div>
@@ -100,7 +152,6 @@
 <div class="ai-panel" role="status">
   <div class="ai-panel__body">
     <p class="ai-disclaimer">
-      No staff are eligible for this shift, so there is nothing to rank.
       {{ result.note }}
     </p>
   </div>

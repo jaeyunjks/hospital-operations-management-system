@@ -27,8 +27,9 @@ DESIGN NOTES
 * **No clinical staffing rules.** "An ICU needs one nurse per bed" is a
   clinical governance statement, not something a rostering assistant may
   assert. Required counts come from the roster, full stop.
-* **No recommended actions.** The summary describes a position; a manager
-  decides what to do about it. Nothing in this feature can act on a shift.
+* **Manager action, never automatic action.** The summary may identify a
+  concrete review or assignment action supported by the evidence, but it
+  cannot change the roster and must not fabricate a candidate.
 * **Strict JSON, one shape.** The runtime is also given ``format: "json"``, so
   the instruction and the transport agree.
 * **Short by contract.** A few sentences and a handful of priorities. Length
@@ -43,45 +44,78 @@ from typing import Any, Dict
 #: Top-level keys the model is told to return.
 SUMMARY_KEY = "summary"
 PRIORITIES_KEY = "priorities"
+CONSTRAINT_KEY = "constraint"
+NEXT_ACTION_KEY = "next_action"
 
 SYSTEM_PROMPT = """\
 You are a staffing assistant for a hospital shift planner.
 
-You are given staffing coverage figures that the hospital's own system has
-already calculated. Your only task is to describe what they show, briefly, and
-say which shortage matters most.
+You are given staffing coverage figures plus compact eligibility and blocker
+facts that the hospital's own system has already calculated. Your task is to
+identify the issue that deserves attention first, explain the supported
+constraint, and state the next manager action when the data supports one.
 
 Rules you must follow:
-1. Use ONLY the numbers you are given. Never calculate a new number, never
+1. Only use facts present in the supplied context. Never invent staff names,
+   shifts, assignments, conflicts, shortages, causes, operational data or
+   policy rules.
+2. Use ONLY the numbers you are given. Never calculate a new number, never
    estimate one, and never state a figure that does not appear in the data
    above. If you are unsure of a number, describe the situation in words
    instead.
-2. Never say how many staff a shift or department SHOULD have. The required
+3. Never say how many staff a shift or department SHOULD have. The required
    numbers are already decided and are given to you.
-3. Never mention patients, occupancy, bed numbers, acuity or how busy anywhere
+4. Never mention patients, occupancy, bed numbers, acuity or how busy anywhere
    is. You have not been given that information and it does not exist here.
-4. Never state clinical or regulatory staffing rules, ratios or standards.
-5. Do not recommend actions, reassignments or automatic fixes. A human staff
-   manager decides what to do; you only describe the position.
-6. Reply with JSON only. No prose before or after it.
+5. Never state clinical, regulatory or employment staffing rules, ratios,
+   weekly-hour limits or standards unless a configured value is supplied.
+6. Department mismatch and recurring weekly availability are advisory context,
+   not blockers. Only a supplied blocking_reason is a blocking fact.
+7. If no eligible candidate is supplied, say so. If the data does not establish
+   why a shift remains unfilled, state that uncertainty explicitly.
+8. You may recommend a concrete MANAGER review or assignment action only when
+   it follows from the supplied evidence. Never claim the action has happened
+   and never automatically assign or unassign anyone.
+9. If no shift is short, do not manufacture a problem: give brief reassurance,
+   return no priorities, and do not recommend intervention.
+10. Reply with JSON only. No prose before or after it.
 """
 
 _NARRATION_GUIDANCE = """\
-Write a short operational summary covering, where the data supports it:
-1. The overall staffing position.
-2. Where the gaps are — which departments, roles or times are short.
-3. Any shifts with more staff than required, if that is worth noting.
-4. Areas that are fully staffed, if that is useful reassurance.
+Write a short operational interpretation, not a duplicate KPI report:
+1. Identify the issue that deserves attention first and why.
+2. Use gap_analysis to explain the actual recorded blocker or confirm that an
+   eligible option exists. Do not infer a cause from a coverage total alone.
+3. Compare realistic options using availability, department context, current
+   assignments, weekly rostered hours and employment status only when present.
+4. State the concrete next manager action supported by the evidence.
+5. Do not repeat totals unless a value is necessary evidence for the reasoning.
+6. When no weekly-hours policy is configured, do not infer a workload limit;
+   say the employment-status risk cannot be evaluated if that matters.
 
-Then list the highest-priority issues, most urgent first. A shift with nobody
-assigned matters more than one that is short by a single person. If nothing is
-short, return an empty list rather than inventing a concern.\
+Then list only actionable priority issues, most urgent first. A shift with
+nobody assigned matters more than one with partial cover. If nothing is short,
+return an empty list rather than inventing a concern.\
 """
 
 _OUTPUT_CONTRACT = """\
 Reply with a JSON object in exactly this shape:
 
-{"summary": "<2-4 sentences>", "priorities": ["<short phrase>", "..."]}\
+{"summary": "<brief operational interpretation>", "constraint": "<recorded blocker or explicit uncertainty, or null when fully covered>", "next_action": "<concrete manager action supported by the evidence, or null when fully covered>", "priorities": ["<short phrase>", "..."]}\
+"""
+
+_GAP_OUTPUT_REQUIREMENT = """\
+This context contains a real staffing shortfall. The constraint and next_action
+values MUST each be a non-empty JSON string. Do not return an object or array
+for either field. Copy constraint EXACTLY from primary_issue.constraint and
+copy next_action EXACTLY from primary_issue.manager_action. Do not paraphrase
+either value. Keep blocker explanations out of summary and priorities; the
+validated constraint field is the only place they belong.\
+"""
+
+_COVERED_OUTPUT_REQUIREMENT = """\
+This context contains no staffing shortfall. Set constraint and next_action to
+null, return priorities as an empty list, and do not manufacture an issue.\
 """
 
 
@@ -93,9 +127,11 @@ def build_prompt(facts: Dict[str, Any]) -> str:
     the projection in ``ai_service`` means there is one place to audit what
     leaves the service, rather than a second, quieter one in here.
     """
+    has_gap = facts.get("totals", {}).get("total_shortfall", 0) > 0
     return "\n\n".join([
         "Staffing coverage figures:",
         json.dumps(facts, indent=2, sort_keys=True),
         _NARRATION_GUIDANCE,
+        _GAP_OUTPUT_REQUIREMENT if has_gap else _COVERED_OUTPUT_REQUIREMENT,
         _OUTPUT_CONTRACT,
     ])

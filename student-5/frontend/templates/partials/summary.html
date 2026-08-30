@@ -70,7 +70,15 @@
       <span class="ai-panel__title" id="summary-narrative-heading">Operational summary</span>
     </div>
     <div class="ai-panel__body stack stack--sm">
+      {% if summary.narrative %}
       <p class="ai-basis">{{ summary.narrative }}</p>
+      {% endif %}
+      {% if summary.constraint %}
+      <p class="ai-basis"><span class="u-label">Constraint</span> {{ summary.constraint }}</p>
+      {% endif %}
+      {% if summary.next_action %}
+      <p class="ai-basis"><span class="u-label">Manager action</span> {{ summary.next_action }}</p>
+      {% endif %}
       {% if summary.priorities %}
       <ol class="summary-priorities" aria-labelledby="summary-narrative-heading">
         {% for priority in summary.priorities %}

@@ -275,9 +275,10 @@ class TestAiReadyEndpoints:
     cover what this endpoint adds on top — filtering to the eligible, the
     shortlist cap, what the LLM context may carry, and who may call it.
 
-    Fixture shape: shift 2 requires a Doctor. Staff 2 is Available, staff 3 is
-    On Leave — so exactly one of the two is eligible. Shift 1 requires a
-    Registered Nurse, and the only one is already assigned to it.
+    Fixture shape: shift 2 requires a Doctor. Staff 2 is Available but outside
+    their recurring weekly pattern, so remains eligible as an alternative;
+    staff 3 is On Leave. Shift 1 requires a Registered Nurse, and the only one
+    is already assigned to it.
     """
 
     def test_suggest_staff_returns_eligible_candidates(self, client):
@@ -286,7 +287,8 @@ class TestAiReadyEndpoints:
         body = response.get_json()
         assert body["ai_enabled"] is False
         assert body["mode"] == "rule-based"
-        assert [row["staff_id"] for row in body["suggestions"]] == [2]
+        assert body["suggestions"] == []
+        assert [row["staff_id"] for row in body["alternatives"]] == [2]
         assert body["eligible_count"] == 1
 
     def test_suggest_staff_excludes_the_ineligible_rather_than_ranking_them(
@@ -294,14 +296,16 @@ class TestAiReadyEndpoints:
         """An On Leave doctor must be absent, not merely last."""
         body = client.post("/api/shifts/suggest-staff",
                            json={"shift_id": 2}).get_json()
-        assert 3 not in [row["staff_id"] for row in body["suggestions"]]
-        assert all(row["eligible"] for row in body["suggestions"])
+        displayed = body["suggestions"] + body["alternatives"]
+        assert 3 not in [row["staff_id"] for row in displayed]
+        assert all(row["eligible"] for row in displayed)
 
     def test_suggest_staff_carries_no_score(self, client):
         """The additive shortlist score is gone and must not come back."""
         body = client.post("/api/shifts/suggest-staff",
                            json={"shift_id": 2}).get_json()
-        assert all("score" not in row for row in body["suggestions"])
+        displayed = body["suggestions"] + body["alternatives"]
+        assert all("score" not in row for row in displayed)
 
     def test_suggest_staff_is_empty_when_nobody_is_eligible(self, client):
         """A shift whose only qualified nurse is already on it offers nobody."""
@@ -327,13 +331,15 @@ class TestAiReadyEndpoints:
         """Ranking needs role and department, never identity or free text."""
         body = client.post("/api/shifts/suggest-staff",
                            json={"shift_id": 2}).get_json()
-        candidate = body["context"]["candidates"][0]
+        candidate = body["context"]["eligible_alternatives"][0]
         assert candidate["staff_id"] == 2
         assert "name" not in candidate
         assert "notes" not in candidate
         assert candidate["role"] == "Doctor"
 
-    def test_suggest_staff_respects_limit(self, client):
+    def test_suggest_staff_respects_limit(self, client, stub_database):
+        stub_database.replace_weekly_availability(2, [{
+            "day_of_week": 1, "start_time": "08:00", "end_time": "16:00"}])
         body = client.post("/api/shifts/suggest-staff",
                            json={"shift_id": 2, "limit": 1}).get_json()
         assert len(body["suggestions"]) == 1

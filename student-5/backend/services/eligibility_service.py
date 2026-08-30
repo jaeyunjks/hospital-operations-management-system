@@ -29,8 +29,9 @@ CONTEXT ONLY — never blocks, never scores
       surface first, but it must never make anyone unassignable: covering
       another ward's gap is precisely what a manager needs to be able to do.
 
-When AI ranking is added it re-orders and explains the ELIGIBLE list produced
-here. It is never given the ineligible, and it never decides eligibility.
+AI may inspect the complete evaluated list to explain the real constraints,
+but it can only rank and return the ELIGIBLE subset produced here. It never
+decides eligibility.
 """
 
 from __future__ import annotations
@@ -86,6 +87,52 @@ def shifts_overlap(first: Dict[str, Any], second: Dict[str, Any]) -> bool:
     if not a or not b:
         return False
     return a[0] < b[1] and b[0] < a[1]
+
+
+def _weekly_assignment_context(their_shifts: Iterable[Dict[str, Any]],
+                               target_shift: Dict[str, Any]):
+    """Active assignments in the target shift's Monday-to-Sunday week.
+
+    This is descriptive workload context only. The application has no weekly
+    hours limit, so the calculated total must never be treated as an
+    eligibility rule or an employment-policy threshold.
+    """
+    try:
+        target_date = datetime.datetime.strptime(
+            target_shift["shift_date"], "%Y-%m-%d").date()
+    except (KeyError, TypeError, ValueError):
+        return [], None
+
+    week_start = target_date - datetime.timedelta(days=target_date.weekday())
+    week_end = week_start + datetime.timedelta(days=6)
+    assignments = []
+    minutes = 0
+    for row in their_shifts:
+        if row.get("assignment_status") in INACTIVE_ASSIGNMENT:
+            continue
+        try:
+            shift_date = datetime.datetime.strptime(
+                row["shift_date"], "%Y-%m-%d").date()
+        except (KeyError, TypeError, ValueError):
+            continue
+        if not week_start <= shift_date <= week_end:
+            continue
+        span = _shift_minutes_on(row)
+        if not span:
+            continue
+        minutes += span[1] - span[0]
+        assignments.append({
+            "shift_id": row.get("shift_id"),
+            "department": row.get("department"),
+            "shift_date": row.get("shift_date"),
+            "start_time": row.get("start_time"),
+            "end_time": row.get("end_time"),
+            "required_role": row.get("required_role"),
+            "assignment_status": row.get("assignment_status"),
+        })
+    assignments.sort(key=lambda row: (
+        row.get("shift_date") or "", row.get("start_time") or ""))
+    return assignments, round(minutes / 60, 2)
 
 
 def weekly_covers_shift(periods: Sequence[Dict[str, Any]],
@@ -167,8 +214,10 @@ def evaluate_candidate(person: Dict[str, Any], shift: Dict[str, Any],
     The rules are ordered so the reported reason is the most fundamental one —
     being unavailable is a truer explanation than a downstream rota clash.
     """
+    their_shifts = list(their_shifts)
     notes: List[Dict[str, Any]] = []
     blocked: Optional[str] = None
+    clash = None
     approved = request_service.blocking_request_in(
         approved_requests, shift.get("shift_date"))
 
@@ -198,6 +247,9 @@ def evaluate_candidate(person: Dict[str, Any], shift: Dict[str, Any],
                   "text": "Weekly availability matches" if covered
                           else "Outside weekly availability"})
 
+    weekly_assignments, weekly_hours = _weekly_assignment_context(
+        their_shifts, shift)
+
     return {
         "staff_id": person["staff_id"],
         "name": person.get("name"),
@@ -209,6 +261,10 @@ def evaluate_candidate(person: Dict[str, Any], shift: Dict[str, Any],
         "eligible": blocked is None,
         "blocked_reason": blocked,
         "weekly_ok": covered,
+        "department_match": person.get("department") == shift.get("department"),
+        "weekly_rostered_hours": weekly_hours,
+        "current_assignments": weekly_assignments,
+        "conflicting_assignment": clash,
         "notes": notes,
         "approved_request": approved,
     }

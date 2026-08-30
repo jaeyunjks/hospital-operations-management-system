@@ -51,10 +51,22 @@ NARRATIVE = ("Emergency and Surgery both carry shortages. Surgery has nobody "
              "assigned at all, so it is the more pressing of the pair.")
 PRIORITIES = ["Surgery shift has nobody assigned",
               "Emergency night cover still short"]
+GROUNDED_NARRATIVE = (
+    "Eligible staff are identified, so this gap is not caused by a lack of "
+    "candidates.")
+DEFAULT_CONSTRAINT = (
+    "Eligible staff are identified; the available data does not indicate why "
+    "this shift remains unfilled.")
+DEFAULT_ACTION = (
+    "Review the eligible candidates and assign one if operationally appropriate.")
 
 
-def _reply(summary=NARRATIVE, priorities=None):
+def _reply(summary=NARRATIVE, priorities=None,
+           constraint=DEFAULT_CONSTRAINT,
+           next_action=DEFAULT_ACTION):
     return {coverage_prompt.SUMMARY_KEY: summary,
+            coverage_prompt.CONSTRAINT_KEY: constraint,
+            coverage_prompt.NEXT_ACTION_KEY: next_action,
             coverage_prompt.PRIORITIES_KEY:
                 PRIORITIES if priorities is None else priorities}
 
@@ -83,11 +95,17 @@ class TestSuccessfulNarration:
     def test_narrative_is_returned(self, client, ai_on):
         ai_on()
         body = _summarise(client)
-        assert body["narrative"] == NARRATIVE
+        assert body["narrative"] == GROUNDED_NARRATIVE
 
-    def test_priorities_are_returned_in_order(self, client, ai_on):
+    def test_model_priorities_do_not_duplicate_grounded_action(self, client, ai_on):
         ai_on()
-        assert _summarise(client)["priorities"] == PRIORITIES
+        assert _summarise(client)["priorities"] == []
+
+    def test_constraint_and_manager_action_are_returned(self, client, ai_on):
+        ai_on(_reply())
+        body = _summarise(client)
+        assert body["constraint"] == DEFAULT_CONSTRAINT
+        assert body["next_action"] == DEFAULT_ACTION
 
     def test_provenance_reports_ai(self, client, ai_on):
         ai_on()
@@ -106,17 +124,15 @@ class TestSuccessfulNarration:
         assert body["summary"]["coverage_pct"] == 33
         assert len(body["gaps"]) == 2
 
-    def test_narrative_is_flattened_and_capped(self, client, ai_on):
+    def test_model_kpi_restatement_is_not_rendered(self, client, ai_on):
         ai_on(_reply(summary="Emergency\n\tis   short " + "x" * 900))
         narrative = _summarise(client)["narrative"]
-        assert "\n" not in narrative and "   " not in narrative
-        assert len(narrative) <= 600
+        assert narrative == GROUNDED_NARRATIVE
+        assert "Emergency" not in narrative
 
-    def test_priorities_are_capped_in_number_and_length(self, client, ai_on):
+    def test_model_priority_list_is_suppressed_for_compact_summary(self, client, ai_on):
         ai_on(_reply(priorities=["Surgery short " + "y" * 400] * 9))
-        priorities = _summarise(client)["priorities"]
-        assert len(priorities) <= 5
-        assert all(len(item) <= 120 for item in priorities)
+        assert _summarise(client)["priorities"] == []
 
     def test_empty_priorities_are_allowed(self, client, ai_on):
         ai_on(_reply(priorities=[]))
@@ -202,7 +218,106 @@ class TestPromptPayload:
         assert "use only the numbers you are given" in system
         assert "never calculate a new number" in system
         assert "occupancy" in system
-        assert "do not recommend actions" in system
+        assert "only use facts present in the supplied context" in system
+        assert "never invent staff names" in system
+        assert "concrete manager" in system
+
+    def test_gap_context_contains_real_eligible_and_blocked_facts(
+            self, client, ai_on):
+        fake = ai_on(_reply(
+            summary=("Surgery has an eligible cross-department option, while "
+                     "Emergency has no eligible staff currently identified."),
+            priorities=["Review the eligible Surgery option first"]))
+        _summarise(client)
+        facts = json.loads(fake.prompt.split("\n\n")[1])
+
+        by_department = {
+            row["shift"]["department"]: row for row in facts["gap_analysis"]}
+        surgery = by_department["Surgery"]
+        emergency = by_department["Emergency"]
+        assert surgery["eligible_candidates_total"] == 1
+        assert surgery["eligible_candidates"][0]["department_matches_shift"] is False
+        assert surgery["ineligible_candidates"][0]["blocking_reason"] == "On Leave"
+        assert emergency["eligible_candidates_total"] == 0
+        assert emergency["ineligible_candidates"][0]["blocking_reason"] == \
+            "Already assigned to this shift"
+        assert facts["configured_policies"]["weekly_hours_limit"]["configured"] is False
+
+    def test_context_has_no_names_ids_or_private_reasons_after_enrichment(
+            self, client, ai_on, stub_database):
+        stub_database.requests[2]["reason"] = "Private medical detail"
+        fake = ai_on()
+        _summarise(client)
+        assert "staff_id" not in fake.prompt
+        assert "shift_id" not in fake.prompt
+        assert "Daniel Reyes" not in fake.prompt
+        assert "Private medical detail" not in fake.prompt
+
+
+class TestGroundedOperationalInterpretation:
+    def test_fully_covered_roster_cannot_acquire_priorities(
+            self, client, ai_on, stub_database):
+        stub_database.shifts[1]["required_staff_count"] = 1
+        stub_database.shifts[2]["required_staff_count"] = 0
+        ai_on(_reply(
+            summary="The roster is fully covered; no manager intervention is required.",
+            priorities=["Review staffing anyway"]))
+        body = _summarise(client)
+        assert body["mode"] == "ai"
+        assert body["summary"]["total_shortfall"] == 0
+        assert body["priorities"] == []
+
+    def test_fully_covered_roster_rejects_invented_problem(
+            self, client, ai_on, stub_database):
+        stub_database.shifts[1]["required_staff_count"] = 1
+        stub_database.shifts[2]["required_staff_count"] = 0
+        ai_on(_reply(summary="Emergency has an unfilled shift.", priorities=[]))
+        body = _summarise(client)
+        assert body["mode"] == "rule-based"
+        assert body["generation"]["fallback_reason"] == REASON_INVALID_OUTPUT
+
+    def test_missing_candidate_context_can_state_uncertainty(
+            self, client, ai_on, stub_database):
+        stub_database.shifts[3] = {
+            "shift_id": 3, "department": "Radiology",
+            "shift_date": "2026-08-24", "start_time": "08:00",
+            "end_time": "16:00", "required_role": "Radiographer",
+            "required_staff_count": 1, "shift_status": "Planned", "notes": None}
+        ai_on(_reply(
+            summary=("No eligible staff are currently identified for Radiology. "
+                     "The available data does not indicate why the shift remains unfilled."),
+            constraint=("No eligible staff are currently identified. The available "
+                        "data does not indicate why this shift remains unfilled."),
+            next_action=("Review the shift and workforce records; no eligible "
+                         "candidate is currently identified."),
+            priorities=["Manager review is required because no candidate evidence exists"]))
+        body = _summarise(client)
+        analysis = next(row for row in body["context"]["gap_analysis"]
+                        if row["shift"]["department"] == "Radiology")
+        assert analysis["eligible_candidates_total"] == 0
+        assert analysis["ineligible_candidates_total"] == 0
+        assert body["narrative"] is None
+        assert "does not indicate why" in body["constraint"]
+
+    def test_unconfigured_weekly_hours_policy_cannot_be_asserted(
+            self, client, ai_on):
+        ai_on(_reply(
+            summary="A part-time candidate exceeds the weekly limit.",
+            priorities=[]))
+        body = _summarise(client)
+        assert body["mode"] == "rule-based"
+        assert body["generation"]["fallback_reason"] == \
+            ai_service.FALLBACK_UNSUPPORTED_POLICY
+
+    def test_explicit_policy_uncertainty_is_allowed(self, client, ai_on):
+        ai_on(_reply(
+            summary=("No weekly-hours policy is configured, so employment-status "
+                     "risk cannot be evaluated."),
+            priorities=[]))
+        body = _summarise(client)
+        assert body["mode"] == "ai"
+        assert body["narrative"] == GROUNDED_NARRATIVE
+        assert "cannot be evaluated" not in body["narrative"]
 
 
 # ------------------------------------------------- number safety
@@ -235,7 +350,8 @@ class TestUnsupportedNumbersRejected:
                      priorities=[]))
         body = _summarise(client)
         assert body["mode"] == "ai"
-        assert body["narrative"] == "Coverage is 33% across 2 shifts."
+        assert body["narrative"] == GROUNDED_NARRATIVE
+        assert "33%" not in body["narrative"]
 
     def test_a_supported_number_word_is_allowed(self, client, ai_on):
         ai_on(_reply(summary="Both shifts are short.", priorities=[]))
@@ -263,6 +379,8 @@ class TestFallback:
         assert body["generation"]["source"] == "deterministic"
         assert body["generation"]["fallback_reason"] == reason
         assert body["narrative"] is None
+        assert body["constraint"] is None
+        assert body["next_action"] is None
         assert body["priorities"] == []
         # The authoritative figures survive every fallback.
         assert body["headline"]
@@ -275,6 +393,10 @@ class TestFallback:
 
     def test_missing_summary_key_falls_back(self, client, ai_on):
         ai_on({"something_else": "text"})
+        self._assert_deterministic(_summarise(client), REASON_INVALID_OUTPUT)
+
+    def test_gap_response_missing_manager_action_falls_back(self, client, ai_on):
+        ai_on(_reply(next_action=None))
         self._assert_deterministic(_summarise(client), REASON_INVALID_OUTPUT)
 
     def test_blank_summary_falls_back(self, client, ai_on):
@@ -337,6 +459,7 @@ class TestFallback:
                        ai_service.FALLBACK_AI_DISABLED,
                        ai_service.FALLBACK_NO_SHIFTS,
                        ai_service.FALLBACK_UNSUPPORTED_NUMBERS,
+                       ai_service.FALLBACK_UNSUPPORTED_POLICY,
                        REASON_UNAVAILABLE, REASON_INVALID_OUTPUT):
             assert ai_service._COVERAGE_FALLBACK_NOTES[reason].strip()
 

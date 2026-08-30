@@ -279,6 +279,7 @@ GAPS = [{"department": "Radiology", "required_role": "Radiographer",
 
 
 def _summary_result(mode="rule-based", narrative=None, priorities=None,
+                    constraint=None, next_action=None,
                     fallback_reason="not_requested", note=None):
     """A coverage-summary response in the shape the backend returns.
 
@@ -296,6 +297,8 @@ def _summary_result(mode="rule-based", narrative=None, priorities=None,
         "summary": {"total_shifts": 1, "total_shortfall": 2, "coverage_pct": 33},
         "gaps": GAPS,
         "narrative": narrative,
+        "constraint": constraint,
+        "next_action": next_action,
         "priorities": priorities or [],
         "context": {"task": "summarise_staffing_coverage", "model": "llama3"},
     }
@@ -3575,8 +3578,10 @@ def _suggestion(staff_id=1, name="Amara Okafor", role="Registered Nurse",
     return row
 
 
-def _suggest_result(mode="ai", suggestions=None, note=None, fallback_reason=None):
+def _suggest_result(mode="ai", suggestions=None, alternatives=None, note=None,
+                    fallback_reason=None, assessment=None):
     suggestions = suggestions if suggestions is not None else [_suggestion()]
+    alternatives = alternatives if alternatives is not None else []
     return {
         "ai_enabled": mode == "ai",
         "mode": mode,
@@ -3586,8 +3591,10 @@ def _suggest_result(mode="ai", suggestions=None, note=None, fallback_reason=None
                     "model": "llama3", "fallback_reason": fallback_reason},
         "shift": SHIFT_FIXTURE,
         "already_assigned_staff_ids": [],
-        "eligible_count": len(suggestions),
+        "eligible_count": len(suggestions) + len(alternatives),
         "suggestions": suggestions,
+        "alternatives": alternatives,
+        "assessment": assessment,
         "context": {"task": "suggest_staff_for_shift", "model": "llama3",
                     "candidate_count": len(suggestions), "candidates": []},
     }
@@ -3704,6 +3711,16 @@ def test_rationale_is_rendered_when_present(
     assert "ai-basis" in body
 
 
+def test_grounded_staffing_assessment_is_rendered_when_present(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(
+        assessment=("An eligible cross-department option exists; review the "
+                    "candidate before assigning.")))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "Staffing context" in body
+    assert "eligible cross-department option" in body
+
+
 def test_missing_rationale_renders_no_empty_basis(
         frontend_client, fe_api_client, monkeypatch):
     _stub_suggest(monkeypatch, fe_api_client, _suggest_result(suggestions=[
@@ -3732,6 +3749,24 @@ def test_cross_department_is_context_not_a_block(
     body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
     assert "Cross-department" in body
     assert ">Assign</button>" in body
+
+
+def test_eligible_alternatives_are_separate_and_remain_assignable(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_suggest(monkeypatch, fe_api_client, _suggest_result(
+        suggestions=[],
+        alternatives=[_suggestion(
+            2, "Daniel Reyes", dept="Surgery", weekly_ok=False,
+            rationale=("Full-Time; Cross-department; outside weekly "
+                       "availability; 0 rostered hours this week."))],
+        mode="rule-based", fallback_reason="no_primary_candidates"))
+    body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
+    assert "Other eligible alternatives" in body
+    assert "Daniel Reyes" in body
+    assert "Outside weekly availability" in body
+    assert "Alternative" in body
+    assert ">Assign</button>" in body
+    assert "Recommended shortlist" in body
 
 
 def test_no_internal_scoring_is_displayed(
@@ -3791,7 +3826,8 @@ def test_no_eligible_candidates_state(
         mode="rule-based", suggestions=[], fallback_reason="no_candidates",
         note="No staff are eligible for this shift, so no ranking was requested."))
     body = frontend_client.get("/partials/shifts/11/suggest").data.decode()
-    assert "nothing to rank" in body
+    assert "No staff are eligible for this shift" in body
+    assert body.count("No staff are eligible for this shift") == 1
     assert ">Assign</button>" not in body
 
 
@@ -3905,6 +3941,8 @@ AI_PRIORITIES = ["Surgery shift has nobody assigned",
 
 def _ai_summary(**kwargs):
     return _summary_result(mode="ai", narrative=AI_NARRATIVE,
+                           constraint="The recorded blocker is staff unavailability.",
+                           next_action="Review eligible cover before assigning.",
                            priorities=AI_PRIORITIES, fallback_reason=None,
                            note="Narrated by the local model from the "
                                 "roster's own figures.", **kwargs)
@@ -3996,6 +4034,16 @@ def test_ai_narrative_and_priorities_render(
     for priority in AI_PRIORITIES:
         assert priority in body
     assert "summary-priorities" in body
+
+
+def test_ai_constraint_and_manager_action_render(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_summary(monkeypatch, fe_api_client, _ai_summary())
+    body = frontend_client.get("/partials/summary/ai").data.decode()
+    assert "Constraint" in body
+    assert "recorded blocker is staff unavailability" in body
+    assert "Manager action" in body
+    assert "Review eligible cover" in body
 
 
 def test_ai_result_is_labelled_as_ai_assisted(

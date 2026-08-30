@@ -37,6 +37,16 @@ SHIFT = 2
 DETERMINISTIC = [3, 4, 2]
 
 
+def _add_weekly_match(stub_database, staff_id):
+    """Make the doctor available for the Tuesday 08:00-16:00 test shift."""
+    row_id = stub_database._next_weekly_id
+    stub_database._next_weekly_id += 1
+    stub_database.weekly[row_id] = {
+        "availability_id": row_id, "staff_id": staff_id, "day_of_week": 1,
+        "start_time": "08:00", "end_time": "16:00", "notes": None,
+    }
+
+
 class FakeOllama:
     """Stands in for OllamaClient, recording what it was asked."""
 
@@ -71,6 +81,8 @@ def three_doctors(stub_database):
         "availability_status": "Available", "employment_status": "Part-Time",
         "notes": None,
     }
+    for staff_id in (2, 3, 4):
+        _add_weekly_match(stub_database, staff_id)
     return stub_database
 
 
@@ -104,7 +116,7 @@ class TestSuccessfulRanking:
     def test_model_order_is_applied(self, client, three_doctors, ai_on):
         ai_on(_ranking(_entry(2), _entry(4), _entry(3)))
         body = _suggest(client)
-        assert [row["staff_id"] for row in body["suggestions"]] == [2, 4, 3]
+        assert [row["staff_id"] for row in body["suggestions"]] == [4, 3, 2]
 
     def test_mode_and_ranking_envelope_report_ai(self, client, three_doctors, ai_on):
         ai_on(_ranking(_entry(2), _entry(4), _entry(3)))
@@ -118,24 +130,29 @@ class TestSuccessfulRanking:
         ai_on(_ranking(_entry(2, "Knows the ward"), _entry(4, "Orthopaedic cover"),
                        _entry(3, "Anaesthetics on site")))
         body = _suggest(client)
-        assert [row["rationale"] for row in body["suggestions"]] == [
-            "Knows the ward", "Orthopaedic cover", "Anaesthetics on site"]
+        rationales = [row["rationale"] for row in body["suggestions"]]
+        assert "Same department" in rationales[0]
+        assert "Cross-department" in rationales[2]
+        assert all("rostered hours this week" in text for text in rationales)
+        assert all(model_text not in " ".join(rationales) for model_text in (
+            "Knows the ward", "Orthopaedic cover", "Anaesthetics on site"))
 
     def test_rationale_is_flattened_and_capped(self, client, three_doctors, ai_on):
-        """Model text is untrusted: one line, bounded length, before rendering."""
+        """Model prose is ignored; the fact-composed explanation stays bounded."""
         ai_on(_ranking(_entry(2, "Knows\n\tthe   ward " + "x" * 300),
                        _entry(4), _entry(3)))
         rationale = _suggest(client)["suggestions"][0]["rationale"]
         assert "\n" not in rationale and "\t" not in rationale
         assert "   " not in rationale
         assert len(rationale) <= 120
+        assert "x" * 20 not in rationale
 
     def test_a_candidate_without_a_rationale_is_still_ranked(
             self, client, three_doctors, ai_on):
         ai_on(_ranking({"staff_id": 2}, _entry(4), _entry(3)))
         body = _suggest(client)
-        assert [row["staff_id"] for row in body["suggestions"]] == [2, 4, 3]
-        assert "rationale" not in body["suggestions"][0]
+        assert [row["staff_id"] for row in body["suggestions"]] == [4, 3, 2]
+        assert "Cross-department" in body["suggestions"][2]["rationale"]
 
     def test_ranking_never_creates_an_assignment(self, client, three_doctors, ai_on):
         """Suggesting is not assigning, whatever the model recommends."""
@@ -146,13 +163,69 @@ class TestSuccessfulRanking:
         assert before == after == 0
 
 
+class TestShortlistSelection:
+    def test_primary_shortlist_is_capped_and_remaining_staff_are_alternatives(
+            self, client, three_doctors, ai_on):
+        three_doctors.staff[5] = {
+            "staff_id": 5, "name": "Zoe Walsh", "role": "Doctor",
+            "department": "Surgery", "specialisation": "General Surgery",
+            "availability_status": "Available", "employment_status": "Full-Time",
+            "notes": None,
+        }
+        _add_weekly_match(three_doctors, 5)
+        fake = ai_on(_ranking(_entry(3), _entry(4), _entry(5)))
+
+        body = _suggest(client, limit=5)
+
+        assert [row["staff_id"] for row in body["suggestions"]] == [3, 4, 5]
+        assert [row["staff_id"] for row in body["alternatives"]] == [2]
+        assert len(body["suggestions"]) == 3
+        assert '"staff_id": 2' in fake.prompt
+        assert "eligible_alternatives" in fake.prompt
+
+    def test_outside_weekly_availability_is_an_assignable_alternative(
+            self, client, stub_database, ai_on):
+        fake = ai_on(_ranking(_entry(2)))
+
+        body = _suggest(client)
+
+        assert fake.calls == []
+        assert body["suggestions"] == []
+        assert [row["staff_id"] for row in body["alternatives"]] == [2]
+        assert body["alternatives"][0]["eligible"] is True
+        assert body["ranking"]["fallback_reason"] == \
+            ai_service.FALLBACK_NO_PRIMARY_CANDIDATES
+        assert "not caused by a lack of candidates" in body["assessment"]
+
+    def test_lower_real_rostered_hours_win_within_same_department(
+            self, client, three_doctors, ai_on):
+        three_doctors.shifts[3] = {
+            "shift_id": 3, "department": "Surgery",
+            "shift_date": "2026-08-24", "start_time": "07:00",
+            "end_time": "17:00", "required_role": "Doctor",
+            "required_staff_count": 1, "shift_status": "Planned", "notes": None,
+        }
+        three_doctors.assignments[2] = {
+            "assignment_id": 2, "shift_id": 3, "staff_id": 3,
+            "assignment_status": "Assigned", "approved_by": None,
+            "approved_at": None,
+        }
+        ai_on(_ranking(_entry(3), _entry(4), _entry(2)))
+
+        body = _suggest(client)
+
+        assert [row["staff_id"] for row in body["suggestions"]] == [4, 3, 2]
+        assert body["suggestions"][0]["weekly_rostered_hours"] == 0
+        assert body["suggestions"][1]["weekly_rostered_hours"] == 10
+
+
 # ------------------------------------------------- defensive validation
 class TestModelOutputIsNotTrusted:
     def test_hallucinated_staff_id_is_ignored(self, client, three_doctors, ai_on):
         ai_on(_ranking(_entry(999), _entry(2), _entry(4), _entry(3)))
         ids = [row["staff_id"] for row in _suggest(client)["suggestions"]]
         assert 999 not in ids
-        assert ids == [2, 4, 3]
+        assert ids == [4, 3, 2]
 
     def test_an_ineligible_candidate_cannot_be_promoted_by_the_model(
             self, client, three_doctors, ai_on):
@@ -161,12 +234,12 @@ class TestModelOutputIsNotTrusted:
         ai_on(_ranking(_entry(3), _entry(2), _entry(4)))
         ids = [row["staff_id"] for row in _suggest(client)["suggestions"]]
         assert 3 not in ids
-        assert ids == [2, 4]
+        assert ids == [4, 2]
 
     def test_duplicate_staff_id_is_taken_once(self, client, three_doctors, ai_on):
         ai_on(_ranking(_entry(2), _entry(2), _entry(4), _entry(3)))
         ids = [row["staff_id"] for row in _suggest(client)["suggestions"]]
-        assert ids == [2, 4, 3]
+        assert ids == [4, 3, 2]
         assert len(ids) == len(set(ids))
 
     def test_omitted_candidate_is_appended_in_deterministic_order(
@@ -174,14 +247,14 @@ class TestModelOutputIsNotTrusted:
         """Silence cannot drop anyone: the rest keep their existing order."""
         ai_on(_ranking(_entry(2)))
         ids = [row["staff_id"] for row in _suggest(client)["suggestions"]]
-        assert ids == [2, 3, 4]
+        assert ids == [3, 4, 2]
 
-    def test_appended_candidates_carry_no_invented_rationale(
+    def test_appended_candidates_carry_only_fact_composed_rationales(
             self, client, three_doctors, ai_on):
         ai_on(_ranking(_entry(2, "Knows the ward")))
         suggestions = _suggest(client)["suggestions"]
-        assert suggestions[0]["rationale"] == "Knows the ward"
-        assert all("rationale" not in row for row in suggestions[1:])
+        assert all("rationale" in row for row in suggestions)
+        assert all("Knows the ward" not in row["rationale"] for row in suggestions)
 
     def test_every_eligible_candidate_survives_a_mangled_ranking(
             self, client, three_doctors, ai_on):
@@ -195,12 +268,12 @@ class TestModelOutputIsNotTrusted:
         """Tolerate a smaller model's shorthand rather than lose the ranking."""
         ai_on(_ranking("2", 4, _entry(3)))
         ids = [row["staff_id"] for row in _suggest(client)["suggestions"]]
-        assert ids == [2, 4, 3]
+        assert ids == [4, 3, 2]
 
     def test_boolean_is_not_read_as_staff_one(self, client, three_doctors, ai_on):
         ai_on(_ranking(True, _entry(2), _entry(4), _entry(3)))
         ids = [row["staff_id"] for row in _suggest(client)["suggestions"]]
-        assert ids == [2, 4, 3]
+        assert ids == [4, 3, 2]
 
 
 # ------------------------------------------------------------- fallback
@@ -210,7 +283,8 @@ class TestFallback:
         assert body["ranking"]["source"] == "deterministic"
         assert body["ranking"]["fallback_reason"] == reason
         assert [row["staff_id"] for row in body["suggestions"]] == DETERMINISTIC
-        assert all("rationale" not in row for row in body["suggestions"])
+        assert all("rostered hours this week" in row["rationale"]
+                   for row in body["suggestions"])
 
     def test_malformed_model_json_falls_back(self, client, three_doctors, ai_on):
         ai_on(error=OllamaError(REASON_INVALID_OUTPUT, "model output was not JSON"))
@@ -219,6 +293,14 @@ class TestFallback:
     def test_missing_ranking_key_falls_back(self, client, three_doctors, ai_on):
         ai_on({"something_else": []})
         self._assert_deterministic(_suggest(client), REASON_INVALID_OUTPUT)
+
+    def test_model_only_needs_to_return_the_ranking(
+            self, client, three_doctors, ai_on):
+        ai_on({suggest_staff_prompt.RANKING_KEY:
+               [_entry(2), _entry(4), _entry(3)]})
+        body = _suggest(client)
+        assert body["mode"] == "ai"
+        assert body["assessment"].startswith("Eligible staff are identified")
 
     def test_ranking_that_is_not_a_list_falls_back(self, client, three_doctors, ai_on):
         ai_on({suggest_staff_prompt.RANKING_KEY: "first pick 2"})
@@ -270,6 +352,9 @@ class TestFallback:
         """A new reason code must not fall through as a blank explanation."""
         for reason in (ai_service.FALLBACK_AI_DISABLED,
                        ai_service.FALLBACK_NO_CANDIDATES,
+                       ai_service.FALLBACK_NO_PRIMARY_CANDIDATES,
+                       ai_service.FALLBACK_UNSUPPORTED_NUMBERS,
+                       ai_service.FALLBACK_UNSUPPORTED_POLICY,
                        REASON_UNAVAILABLE, REASON_INVALID_OUTPUT):
             assert ai_service._FALLBACK_NOTES[reason].strip()
 
@@ -316,7 +401,10 @@ class TestPromptPrivacy:
         })
         assert set(projected) == {
             "staff_id", "role", "department", "specialisation",
-            "employment_status", "weekly_availability_matches"}
+            "employment_status", "availability_status", "eligible",
+            "blocking_reason", "department_matches_shift",
+            "weekly_availability_matches", "weekly_rostered_hours",
+            "current_assignments", "conflicting_assignment"}
 
     def test_shift_projection_is_exactly_the_allowed_fields(self):
         projected = ai_service._llm_shift({
@@ -357,6 +445,110 @@ class TestPromptArtefact:
             {"department": "Surgery"}, [{"staff_id": 2, "role": "Doctor"}])
         assert '"department": "Surgery"' in prompt
         assert '"staff_id": 2' in prompt
+
+    def test_prompt_forbids_invented_operational_facts_and_policy(self):
+        system = suggest_staff_prompt.SYSTEM_PROMPT.lower()
+        assert "only use facts present in the supplied context" in system
+        assert "never invent" in system
+        assert "weekly-hours policy" in system
+        assert "department mismatch is context, not a blocker" in system
+
+
+class TestGroundedReasoningContext:
+    def test_one_eligible_candidate_has_real_gap_and_blocker_context(
+            self, client, stub_database, ai_on):
+        _add_weekly_match(stub_database, 2)
+        fake = ai_on({
+            suggest_staff_prompt.RANKING_KEY: [
+                _entry(2, "Available cross-department option with no current rostered hours")],
+        })
+        body = _suggest(client)
+        facts = body["context"]
+
+        assert body["assessment"].startswith("Eligible staff are identified")
+        assert facts["coverage_gap"]["shortfall"] == 1
+        assert [row["staff_id"] for row in facts["eligible_candidates"]] == [2]
+        assert facts["eligible_candidates"][0]["department_matches_shift"] is False
+        assert facts["eligible_candidates"][0]["weekly_rostered_hours"] == 0
+        assert facts["ineligible_candidates"][0]["blocking_reason"] == "On Leave"
+        assert facts["configured_policies"]["weekly_hours_limit"] == {
+            "configured": False, "value": None,
+            "note": "No weekly-hours policy is configured."}
+        assert '"coverage_gap"' in fake.prompt
+        assert '"blocking_reason": "On Leave"' in fake.prompt
+
+    def test_weekly_hours_come_from_real_active_assignments(
+            self, client, stub_database, ai_on):
+        _add_weekly_match(stub_database, 2)
+        stub_database.shifts[3] = {
+            "shift_id": 3, "department": "Emergency",
+            "shift_date": "2026-08-24", "start_time": "09:00",
+            "end_time": "14:30", "required_role": "Doctor",
+            "required_staff_count": 1, "shift_status": "Planned", "notes": None}
+        stub_database.assignments[2] = {
+            "assignment_id": 2, "shift_id": 3, "staff_id": 2,
+            "assignment_status": "Assigned", "approved_by": None,
+            "approved_at": None}
+        ai_on(_ranking(_entry(2)))
+
+        candidate = _suggest(client)["context"]["eligible_candidates"][0]
+        assert candidate["weekly_rostered_hours"] == 5.5
+        assert candidate["current_assignments"][0]["start_time"] == "09:00"
+
+    def test_overlap_is_supplied_as_a_real_blocking_constraint(
+            self, client, stub_database, ai_on):
+        stub_database.staff[4] = {
+            "staff_id": 4, "name": "Ravi Chandran", "role": "Doctor",
+            "department": "Surgery", "specialisation": "Orthopaedics",
+            "availability_status": "Available", "employment_status": "Part-Time",
+            "notes": None}
+        stub_database.shifts[3] = {
+            "shift_id": 3, "department": "Surgery",
+            "shift_date": "2026-08-25", "start_time": "07:00",
+            "end_time": "10:00", "required_role": "Doctor",
+            "required_staff_count": 1, "shift_status": "Planned", "notes": None}
+        stub_database.assignments[2] = {
+            "assignment_id": 2, "shift_id": 3, "staff_id": 4,
+            "assignment_status": "Assigned", "approved_by": None,
+            "approved_at": None}
+        ai_on(_ranking(_entry(2)))
+
+        blocked = _suggest(client)["context"]["ineligible_candidates"]
+        ravi = next(row for row in blocked if row["staff_id"] == 4)
+        assert ravi["blocking_reason"] == "Already rostered 2026-08-25 07:00-10:00"
+        assert ravi["conflicting_assignment"]["start_time"] == "07:00"
+        assert ravi["weekly_rostered_hours"] == 3
+        assert 4 not in {row["staff_id"] for row in
+                         _suggest(client)["alternatives"]}
+
+    def test_unconfigured_hours_policy_claim_in_model_prose_is_not_rendered(
+            self, client, stub_database, ai_on):
+        _add_weekly_match(stub_database, 2)
+        ai_on({
+            "assessment": "The candidate exceeds the weekly limit and should not work.",
+            suggest_staff_prompt.RANKING_KEY: [_entry(2)],
+        })
+        body = _suggest(client)
+        assert body["mode"] == "ai"
+        assert "weekly limit" not in body["assessment"]
+        assert all("weekly limit" not in row["rationale"]
+                   for row in body["suggestions"])
+
+    def test_model_cannot_invent_a_conflict_in_displayed_reasoning(
+            self, client, stub_database, ai_on):
+        _add_weekly_match(stub_database, 2)
+        ai_on(_ranking(_entry(2, "Candidate has a conflicting assignment")))
+        body = _suggest(client)
+        assert body["mode"] == "ai"
+        assert "conflict" not in body["suggestions"][0]["rationale"].lower()
+        assert body["suggestions"][0]["conflicting_assignment"] is None
+
+    def test_no_eligible_candidate_reports_actual_recorded_reason(
+            self, client, ai_on):
+        fake = ai_on(_ranking(_entry(1)))
+        body = _suggest(client, shift_id=1)
+        assert fake.calls == []
+        assert "Already assigned to this shift (1)" in body["note"]
 
 
 # ------------------------------------------------------ the client itself
