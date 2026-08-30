@@ -1,39 +1,87 @@
-# ==========================================================================
-# Hospital Operations Management System — Root Docker Compose (SCAFFOLD)
-# ==========================================================================
-# STATUS: Initial scaffold only. No service definitions are declared yet
-# because the underlying services do not exist. Adding placeholder/fake
-# services here would fail to build, so they are intentionally omitted.
-#
-# This file is kept syntactically valid so `docker compose config` succeeds.
-#
-# When implementation begins, this file will eventually orchestrate:
-#
-#   * Five frontend services          (student-1..5 frontend)
-#   * Five Flask backend/API services (student-1..5 backend)
-#   * Five database services          (student-1..5 SQLite; volume-backed)
-#   * AI-Mode service                 (ai-services/ai-mode)
-#   * Ollama runtime                  (approved open-source LLM host)
-#   * Later releases:
-#       - MCP server                  (ai-services/mcp-server)      [Release 1]
-#       - RAG server                  (ai-services/rag-server)      [Release 1]
-#       - Multi-Agent server          (ai-services/multi-agent-server) [Release 2]
-#
-# Each service will reference its own Dockerfile (e.g. student-1/Dockerfile)
-# and expose the appropriate ports / networks / volumes once implemented.
-# ==========================================================================
+# Shared HOMS development stack.
+# Student 5 is the first feature wired into this root Compose file. Other
+# students remain untouched and can add their services here independently.
 
-# Compose Specification: the top-level `version` key is obsolete and omitted.
+services:
+  student5-database:
+    build:
+      context: .
+      dockerfile: student-5/database/Dockerfile
+    environment:
+      DATABASE_SERVICE_PORT: "6500"
+      STUDENT5_DATABASE_PATH: /data/staff_shift.db
+    ports:
+      - "6500:6500"
+    volumes:
+      - student5-database-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6500/health', timeout=3)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
 
-services: {}
-# services:
-#   student-1-backend:
-#     build: ./student-1
-#     # ... to be defined when the service exists
+  student5-backend:
+    build:
+      context: .
+      dockerfile: student-5/backend/Dockerfile
+    environment:
+      BACKEND_PORT: "5500"
+      DATABASE_SERVICE_URL: "${STUDENT5_DATABASE_SERVICE_URL:-http://student5-database:6500}"
+      AI_ENABLED: "${STUDENT5_AI_ENABLED:-true}"
+      OLLAMA_URL: "${STUDENT5_OLLAMA_URL:-http://host.docker.internal:11434}"
+      OLLAMA_MODEL: "${STUDENT5_OLLAMA_MODEL:-llama3.1:8b}"
+      OLLAMA_TIMEOUT: "${STUDENT5_OLLAMA_TIMEOUT:-30}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "5500:5500"
+    depends_on:
+      student5-database:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5500/health', timeout=3)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
 
-# networks:
-#   hospital-net:
-#     driver: bridge
+  student5-frontend:
+    build:
+      context: .
+      dockerfile: student-5/frontend/Dockerfile
+    environment:
+      FRONTEND_PORT: "3500"
+      STAFF_SHIFT_API_URL: "${STUDENT5_API_URL:-http://student5-backend:5500}"
+      STAFF_SHIFT_API_TIMEOUT: "5"
+      STAFF_SHIFT_SUMMARY_API_TIMEOUT: "${STUDENT5_SUMMARY_API_TIMEOUT:-35}"
+      HOMS_SECRET_KEY: "${STUDENT5_HOMS_SECRET_KEY:-student5-docker-development-key}"
+    ports:
+      - "3500:3500"
+    depends_on:
+      student5-backend:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3500/', timeout=3)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
 
-# volumes:
-#   student-1-db:
+volumes:
+  student5-database-data:

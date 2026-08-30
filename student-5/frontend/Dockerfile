@@ -1,18 +1,16 @@
-# ==========================================================================
-# student-5 microservice — Dockerfile (PLACEHOLDER)
-# ==========================================================================
-# This is a placeholder. student-5 has no application code yet, so no build
-# instructions are active — this file will NOT build until the service exists.
-#
-# When implementing, use a Flask microservice image along these lines:
-#
-#   FROM python:3.12-slim
-#   WORKDIR /app
-#   COPY backend/requirements.txt .
-#   RUN pip install --no-cache-dir -r requirements.txt
-#   COPY backend/ .
-#   EXPOSE 5000
-#   CMD ["python", "app.py"]
-#
-# Keep this Dockerfile scoped to student-5 only.
-# ==========================================================================
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app/student-5/frontend
+
+COPY student-5/frontend/requirements.txt /tmp/requirements.txt
+RUN pip install --no-cache-dir -r /tmp/requirements.txt
+
+COPY student-5/frontend/ ./
+COPY shared/frontend/ /app/shared/frontend/
+
+EXPOSE 3500
+
+CMD ["python", "app.py"]
