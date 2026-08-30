@@ -1,68 +1,112 @@
 {% extends "base.html" %}
 {% set page = 'dashboard' %}
+{% block title %}Bed availability{% endblock %}
+{% block heading %}Bed availability{% endblock %}
+{% block description %}
+  Live status of every room and bed, with AI-assisted placement suggestions for review.
+{% endblock %}
+
 {% block content %}
 
-<section class="card">
-  <h2>Ward occupancy and theatre utilisation</h2>
-  <p class="hint">AI-generated summary. Runs only when requested, so the page never waits on the model.</p>
-  <button hx-post="/occupancy-summary" hx-target="#summary" hx-swap="innerHTML"
-          hx-indicator="#summary-loading">Generate summary</button>
-  <span id="summary-loading" class="htmx-indicator hint">Asking the model…</span>
-  <div id="summary">
-    {% if theatre_summary %}
-      <div class="stat-row" style="margin-top:14px">
-        <div class="stat"><div class="n">{{ theatre_summary.in_use }}</div><div class="k">theatres in use</div></div>
-        <div class="stat"><div class="n">{{ theatre_summary.free }}</div><div class="k">theatres free</div></div>
-        <div class="stat"><div class="n">{{ theatre_summary.unusable }}</div><div class="k">theatres unusable</div></div>
-      </div>
-    {% endif %}
+{% if theatre_summary %}
+<div class="stat-row">
+  <div class="stat">
+    <span class="stat__label">Theatres in use</span>
+    <span class="stat__value">{{ theatre_summary.in_use }}</span>
+  </div>
+  <div class="stat">
+    <span class="stat__label">Theatres free</span>
+    <span class="stat__value">{{ theatre_summary.free }}</span>
+  </div>
+  <div class="stat">
+    <span class="stat__label">Being cleaned</span>
+    <span class="stat__value">{{ theatre_summary.cleaning }}</span>
+  </div>
+  <div class="stat">
+    <span class="stat__label">Unusable</span>
+    <span class="stat__value">{{ theatre_summary.unusable }}</span>
+  </div>
+</div>
+{% endif %}
+
+<section class="section">
+  <div class="ai-panel">
+    <div class="ai-panel__header">
+      <span class="ai-label">AI</span>
+      <span class="ai-panel__title">Suggest a room</span>
+    </div>
+
+    <form class="panel__body control-bar" hx-post="/suggest" hx-target="#suggestions"
+          hx-swap="innerHTML" hx-indicator="#suggest-loading">
+      <label class="field field--wide">
+        <span class="field__label">Patient requirements</span>
+        <input class="input" name="patient_requirements" required
+               placeholder="Ventilator support, continuous monitoring">
+      </label>
+      <label class="field">
+        <span class="field__label">Preferred ward (optional)</span>
+        <input class="input" name="ward" placeholder="Critical Care">
+      </label>
+      <button class="btn-primary" type="submit">Suggest a room</button>
+      <span id="suggest-loading" class="htmx-indicator u-label">Ranking beds…</span>
+    </form>
+
+    <div id="suggestions"></div>
   </div>
 </section>
 
-<section class="card">
-  <h2>Suggest a room</h2>
-  <p class="hint">Enter the patient's recorded requirements. The service classifies them into a care
-     category, filters the beds available in that category, and asks the model to rank them.</p>
-  <form class="inline" hx-post="/suggest" hx-target="#suggestions" hx-swap="innerHTML"
-        hx-indicator="#suggest-loading">
-    <label class="field">Patient requirements
-      <textarea name="patient_requirements" required
-                placeholder="e.g. Ventilator support, continuous monitoring"></textarea>
-    </label>
-    <label class="field">Preferred ward (optional)
-      <input name="ward" placeholder="Critical Care">
-    </label>
-    <button type="submit">Suggest a room</button>
-    <span id="suggest-loading" class="htmx-indicator hint">Ranking beds…</span>
-  </form>
-  <div id="suggestions"></div>
+<section class="section">
+  <div class="ai-panel">
+    <div class="ai-panel__header">
+      <span class="ai-label">AI</span>
+      <span class="ai-panel__title">Ward occupancy and theatre utilisation</span>
+      <button class="btn-secondary spacer" hx-post="/occupancy-summary"
+              hx-target="#summary" hx-swap="innerHTML" hx-indicator="#summary-loading">
+        Generate summary
+      </button>
+      <span id="summary-loading" class="htmx-indicator u-label">Asking the model…</span>
+    </div>
+    <div id="summary">
+      <div class="panel__body">
+        <p class="u-muted">Runs only when requested, so the page never waits on the model.</p>
+      </div>
+    </div>
+  </div>
 </section>
 
-<section class="card">
-  <h2>Bed availability</h2>
-  <p class="hint">Live status of every bed, filtered by ward, care category and status.</p>
-  <form class="inline" hx-get="/" hx-target="#bed-table" hx-swap="innerHTML" hx-trigger="change, submit">
-    <label class="field">Care category
-      <select name="care_category">
+<section class="section">
+  <div class="section-header">
+    <h2 class="section-header__title">All beds</h2>
+    <span class="section-header__meta u-label">Filter by ward, category and status</span>
+  </div>
+
+  <form class="toolbar control-bar" hx-get="/" hx-target="#bed-table"
+        hx-swap="innerHTML" hx-trigger="change, submit">
+    <label class="field field--narrow">
+      <span class="field__label">Care category</span>
+      <select class="select" name="care_category">
         <option value="">All</option>
         {% for c in care_categories %}
           <option value="{{ c }}" {{ 'selected' if filters.get('care_category') == c }}>{{ c }}</option>
         {% endfor %}
       </select>
     </label>
-    <label class="field">Bed status
-      <select name="bed_status">
+    <label class="field field--narrow">
+      <span class="field__label">Bed status</span>
+      <select class="select" name="bed_status">
         <option value="">All</option>
-        {% for s in ['available','reserved','occupied','maintenance'] %}
+        {% for s in bed_statuses %}
           <option value="{{ s }}" {{ 'selected' if filters.get('bed_status') == s }}>{{ s }}</option>
         {% endfor %}
       </select>
     </label>
-    <label class="field">Ward
-      <input name="ward" value="{{ filters.get('ward','') }}" placeholder="Any ward">
+    <label class="field">
+      <span class="field__label">Ward</span>
+      <input class="input" name="ward" value="{{ filters.get('ward','') }}" placeholder="Any ward">
     </label>
-    <button type="submit" class="secondary">Apply</button>
+    <button class="btn-secondary" type="submit">Apply</button>
   </form>
+
   <div id="bed-table">{% include "partials/bed_table.html" %}</div>
 </section>
 

@@ -9,10 +9,38 @@ microservices independently replaceable.
 
 import os
 
+from pathlib import Path
+
 import requests
-from flask import Flask, redirect, render_template, request, url_for
+from flask import (Flask, redirect, render_template, request,
+                   send_from_directory, url_for)
 
 app = Flask(__name__)
+
+BASE_DIR = Path(__file__).resolve().parent
+
+#: The team design system, served by this service at /shared/ so the templates
+#: can link it with an absolute path, exactly as the other feature
+#: microservices do.
+#:
+#: Running from a checkout it sits two levels up at <repo>/shared/frontend.
+#: In the container it is copied to /app/shared, so the image is
+#: self-contained and needs no bind mount — the Dockerfile sets
+#: SHARED_FRONTEND_DIR accordingly.
+def _default_shared_dir():
+    """Where the theme sits when SHARED_FRONTEND_DIR is not set.
+
+    From a checkout that is <repo>/shared/frontend, two levels above this
+    file. The length guard matters: in the container BASE_DIR is /app, which
+    has only one parent, so indexing blindly would raise IndexError before
+    the environment variable could ever be read.
+    """
+    parents = BASE_DIR.parents
+    root = parents[1] if len(parents) > 1 else BASE_DIR
+    return root / "shared" / "frontend"
+
+
+SHARED_FRONTEND_DIR = Path(os.getenv("SHARED_FRONTEND_DIR") or _default_shared_dir())
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:5400")
 BACKEND_TIMEOUT = int(os.getenv("BACKEND_TIMEOUT", "40"))
@@ -20,6 +48,10 @@ PORT = int(os.getenv("PORT", "3400"))
 
 CARE_CATEGORIES = ("Surgical", "Short-term", "Long-term")
 ROOM_STATUSES = ("Available", "In Use", "Cleaning", "Out of Service")
+BED_STATUSES = ("available", "reserved", "occupied", "maintenance")
+ARRANGEMENT_STATUSES = ("Scheduled", "In Progress", "Completed", "Cancelled")
+URGENCIES = ("Low", "Medium", "High", "Critical")
+SHORTAGE_STATUSES = ("Open", "Option offered", "Resolved", "Escalated", "Cancelled")
 
 
 def api(method, path, **kwargs):
@@ -47,7 +79,14 @@ def api(method, path, **kwargs):
 
 @app.context_processor
 def template_globals():
-    return {"care_categories": CARE_CATEGORIES, "room_statuses": ROOM_STATUSES}
+    return {
+        "care_categories": CARE_CATEGORIES,
+        "room_statuses": ROOM_STATUSES,
+        "bed_statuses": BED_STATUSES,
+        "arrangement_statuses": ARRANGEMENT_STATUSES,
+        "urgencies": URGENCIES,
+        "shortage_statuses": SHORTAGE_STATUSES,
+    }
 
 
 # ---------------------------------------------------------------------
@@ -236,6 +275,16 @@ def decide_shortage(case_id):
     _, error = api("PUT", "/api/shortage-cases/{}/decide".format(case_id), json=payload)
     return redirect(url_for("shortage_detail", case_id=case_id,
                             message=error or "Decision recorded"))
+
+
+@app.get("/shared/<path:filename>")
+def shared_assets(filename):
+    """Serve shared/frontend so pages can link /shared/css/main.css.
+
+    Kept out of Flask's own static folder because the shared theme is owned
+    by the team, not by this feature.
+    """
+    return send_from_directory(SHARED_FRONTEND_DIR, filename)
 
 
 @app.get("/health")

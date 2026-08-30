@@ -1,41 +1,45 @@
 {% extends "base.html" %}
 {% set page = 'theatres' %}
+{% block title %}Operating theatres{% endblock %}
+{% block heading %}Operating theatre board{% endblock %}
+{% block description %}
+  Which theatres are in use, free or unusable, and what is running or scheduled next in each.
+{% endblock %}
+
 {% block content %}
+{% if board %}
 
-<section class="card">
-  <h2>Operating theatre board</h2>
-  <p class="hint">Which theatres are in use, free or unusable, and what is running or scheduled next in each.</p>
+<div class="stat-row">
+  <div class="stat"><span class="stat__label">In use</span><span class="stat__value">{{ board.summary.in_use }}</span></div>
+  <div class="stat"><span class="stat__label">Free</span><span class="stat__value">{{ board.summary.free }}</span></div>
+  <div class="stat"><span class="stat__label">Being cleaned</span><span class="stat__value">{{ board.summary.cleaning }}</span></div>
+  <div class="stat"><span class="stat__label">Unusable</span><span class="stat__value">{{ board.summary.unusable }}</span></div>
+</div>
 
-  {% if board %}
-    <div class="stat-row">
-      <div class="stat"><div class="n">{{ board.summary.in_use }}</div><div class="k">in use</div></div>
-      <div class="stat"><div class="n">{{ board.summary.free }}</div><div class="k">free</div></div>
-      <div class="stat"><div class="n">{{ board.summary.cleaning }}</div><div class="k">being cleaned</div></div>
-      <div class="stat"><div class="n">{{ board.summary.unusable }}</div><div class="k">unusable</div></div>
-    </div>
+<div class="theatre-grid">
+  {% for t in board.theatres %}
+    <article class="theatre theatre--{{ t.room_status | replace(' ','') }}">
+      <div class="row row--between">
+        <span class="theatre__number">{{ t.room_number }}</span>
+        <span class="state state--{{ t.room_status | replace(' ','') }}">{{ t.state_label }}</span>
+      </div>
+      <div class="theatre__ward">{{ t.ward }}</div>
 
-    <div class="table-scroll">
-    <table>
-      <thead>
-        <tr><th>Theatre</th><th>State</th><th>Session</th><th>Procedure</th>
-            <th>Surgeon</th><th>Window</th><th>Patient</th></tr>
-      </thead>
-      <tbody>
-      {% for t in board.theatres %}
-        <tr>
-          <td><strong>{{ t.room_number }}</strong><br><span class="hint">{{ t.ward }}</span></td>
-          <td><span class="pill {{ t.room_status | replace(' ','') }}">{{ t.state_label }}</span></td>
-          <td>{{ t.session_kind or '—' }}</td>
-          <td>{{ t.session.procedure_name if t.session else '—' }}</td>
-          <td>{{ t.session.surgeon_name if t.session else '—' }}</td>
-          <td>{% if t.session %}{{ t.session.start_time }} → {{ t.session.end_time or 'open' }}{% else %}—{% endif %}</td>
-          <td>{{ t.session.patient_id if t.session else '—' }}</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    </div>
-  {% endif %}
-</section>
+      {% if t.session %}
+        <div class="theatre__session">
+          <span class="u-label">{{ 'Current session' if t.session_kind == 'current' else 'Next session' }}</span>
+          <div class="theatre__procedure">{{ t.session.procedure_name }}</div>
+          <div class="u-muted">{{ t.session.surgeon_name }}</div>
+          <div class="u-mono u-muted" style="font-size: var(--size-data-sm)">
+            {{ t.session.start_time }} → {{ t.session.end_time or 'open' }}
+          </div>
+        </div>
+      {% else %}
+        <div class="theatre__idle">No session scheduled.</div>
+      {% endif %}
+    </article>
+  {% endfor %}
+</div>
 
+{% endif %}
 {% endblock %}

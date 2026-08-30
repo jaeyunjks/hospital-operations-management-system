@@ -132,12 +132,15 @@ def suggest_rooms(requirements, ward=None, limit=3):
     try:
         parsed, attempts = ollama_client.generate_json(prompt, system=SYSTEM_PROMPT)
     except ollama_client.AIUnavailable as error:
+        # The raw exception is useful in a log and in the API response, but a
+        # connection stack trace has no place on a coordinator's screen.
         return {
             "plan": plan,
             "suggestions": _fallback_ranking(candidates, "AI unavailable")[:limit],
             "source": "fallback",
             "advisory": True,
-            "message": "AI suggestion unavailable, showing rule-based ordering. " + str(error),
+            "message": "The AI model is unavailable, so beds are ordered by rule instead.",
+            "detail": str(error),
         }
 
     # Observe: keep only beds the model was actually offered.
@@ -195,10 +198,15 @@ def occupancy_summary():
         text = ollama_client.generate(prompt, temperature=0.3)
         source = "ai"
     except ollama_client.AIUnavailable as error:
-        text = _fallback_summary(stats)
-        source = "fallback"
-        return {"summary": text, "stats": stats, "source": source,
-                "advisory": True, "message": str(error)}
+        return {
+            "summary": _fallback_summary(stats),
+            "stats": stats,
+            "source": "fallback",
+            "advisory": True,
+            "message": "The AI model is unavailable; these figures are counted directly "
+                       "from the database.",
+            "detail": str(error),
+        }
 
     return {"summary": text, "stats": stats, "source": source,
             "model": config.OLLAMA_MODEL, "advisory": True}

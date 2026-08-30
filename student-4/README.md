@@ -15,7 +15,7 @@ Ports follow the HOMS architecture diagram — student-4 is the 3400 / 5400 / 64
 
 | Service | Port | Role |
 |---------|------|------|
-| `frontend/` | 3400 | HTMX UI. Calls the backend only; holds no business rules. |
+| `frontend/` | 3400 | HTMX UI on the shared HOMS theme. Calls the backend only; holds no business rules. |
 | `backend/`  | 5400 | Workflow rules, conflict detection, AI integration. |
 | `database/` | 6400 | The only process that opens `rooms.db`. Plain CRUD plus three joined views. |
 
@@ -45,8 +45,50 @@ cd student-4/frontend && pip install -r requirements.txt && python app.py
 
 Then open <http://localhost:3400>.
 
-With Docker Compose from the repository root: `docker compose up student-4-database
-student-4-backend student-4-frontend`.
+## Containers
+
+Three images, one per service, as the team agreed: one container, one process.
+
+```bash
+docker compose up student-4-database student-4-backend student-4-frontend
+```
+
+Compose starts them in order and waits on each health check, so the UI never
+comes up pointing at a backend that is not answering yet.
+
+Building the images by hand:
+
+```bash
+docker build -t student-4-database ./student-4/database
+docker build -t student-4-backend  ./student-4/backend
+docker build -t student-4-frontend -f student-4/frontend/Dockerfile .
+```
+
+The frontend builds from the **repository root**, not from its own folder,
+because the page links the shared theme in `shared/frontend/` and Docker
+cannot copy from outside the build context. The theme is copied into the
+image at `/app/shared` and `SHARED_FRONTEND_DIR` points there, so the image
+is self-contained and needs no bind mount. A `.dockerignore` at the root
+keeps that context small.
+
+## Shared design system
+
+The interface is built on the team theme in `shared/frontend/css/`, which this
+service serves at `/shared/` so the templates can link it exactly as the other
+feature microservices do:
+
+```html
+<link rel="stylesheet" href="/shared/css/main.css">      <!-- team theme  -->
+<link rel="stylesheet" href="/static/css/feature.css">   <!-- this feature -->
+```
+
+Layout, tables, panels, buttons, form controls, alerts and the AI advisory
+panel all use the shared components (`.page`, `.panel`, `.table--zebra`,
+`.btn-primary`, `.field`, `.alert`, `.ai-panel`, `.ai-label`,
+`.ai-disclaimer`). `feature.css` adds only what is specific to rooms and beds —
+the status vocabulary, the theatre board and the shortage-case layout — and
+every value in it reads a shared token, so a change to the team theme carries
+into this feature without edits here.
 
 ## Tests
 

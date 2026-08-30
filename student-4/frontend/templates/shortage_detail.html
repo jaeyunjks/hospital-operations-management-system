@@ -1,62 +1,106 @@
 {% extends "base.html" %}
 {% set page = 'shortages' %}
-{% block content %}
+{% block title %}Shortage case{% endblock %}
+{% block heading %}Shortage case #{{ detail.case.case_id if detail else '' }}{% endblock %}
+{% block description %}
+  Choosing a bed reserves it. It is not occupied until an arrangement is created,
+  so no patient is placed by this screen alone.
+{% endblock %}
+{% block header_actions %}
+  <div class="page-header__actions"><a class="btn-secondary" href="/shortages">All cases</a></div>
+{% endblock %}
 
+{% block content %}
 {% if detail %}
 {% set case = detail.case %}
-<section class="card">
-  <h2>Shortage case #{{ case.case_id }}</h2>
-  <p class="hint">
-    Patient {{ case.patient_id }} · needs {{ case.required_care_category }}
-    {% if case.required_ward %}in {{ case.required_ward }}{% endif %} ·
-    urgency <span class="pill {{ case.urgency }}">{{ case.urgency }}</span> ·
-    waiting at {{ case.holding_location or 'not recorded' }} ·
-    opened {{ case.opened_at }} by {{ case.opened_by }}
-  </p>
-  <p>Status: <span class="pill {{ case.status | replace(' ','') }}">{{ case.status }}</span>
-    {% if case.chosen_option %}— {{ case.chosen_option }}{% endif %}</p>
-  {% if case.decision_reason %}<p class="hint">Reason recorded: {{ case.decision_reason }}
-     ({{ case.decided_by }})</p>{% endif %}
-</section>
 
-<section class="card">
-  <h2>Compatible options</h2>
-  <p class="hint">Free now first, then beds pending cleaning, then approved alternative wards.
-     Escalation is always available. Choosing a bed reserves it — it is not occupied until an
-     arrangement is created.</p>
-
-  <div class="table-scroll">
-  <table>
-    <thead><tr><th>Option</th><th>Bed</th><th>Room</th><th>Ward</th><th>Note</th><th>Choose</th></tr></thead>
-    <tbody>
-    {% for o in detail.options %}
-      <tr>
-        <td>{{ o.kind | replace('_',' ') }}</td>
-        <td>{{ o.bed_number or '—' }}</td>
-        <td>{{ o.room_number or '—' }}</td>
-        <td>{{ o.ward or '—' }}</td>
-        <td>{{ o.note }}</td>
-        <td>
-          <details class="row-actions">
-            <summary>Select</summary>
-            <form method="post" action="/shortages/{{ case.case_id }}/decide" class="inline">
-              <input type="hidden" name="chosen_option" value="{{ o.note }}">
-              {% if o.bed_id %}<input type="hidden" name="resolved_bed_id" value="{{ o.bed_id }}">
-              {% else %}<input type="hidden" name="escalate" value="1">{% endif %}
-              <label class="field">Reason (required)
-                <input name="decision_reason" required placeholder="Why this option">
-              </label>
-              <button type="submit">Record decision</button>
-            </form>
-          </details>
-        </td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+<div class="case-facts">
+  <div class="case-fact">
+    <span class="case-fact__label">Patient</span>
+    <span class="case-fact__value u-mono">{{ case.patient_id }}</span>
   </div>
-  <p class="hint"><a href="/shortages">← Back to all cases</a></p>
-</section>
+  <div class="case-fact">
+    <span class="case-fact__label">Needs</span>
+    <span class="case-fact__value">{{ case.required_care_category }}{% if case.required_ward %} · {{ case.required_ward }}{% endif %}</span>
+  </div>
+  <div class="case-fact">
+    <span class="case-fact__label">Urgency</span>
+    <span class="case-fact__value"><span class="urgency urgency--{{ case.urgency }}">{{ case.urgency }}</span></span>
+  </div>
+  <div class="case-fact">
+    <span class="case-fact__label">Waiting at</span>
+    <span class="case-fact__value">{{ case.holding_location or 'Not recorded' }}</span>
+  </div>
+  <div class="case-fact">
+    <span class="case-fact__label">Opened</span>
+    <span class="case-fact__value u-mono">{{ case.opened_at }}</span>
+    <span class="cell-sub">by {{ case.opened_by }}</span>
+  </div>
+  <div class="case-fact">
+    <span class="case-fact__label">Status</span>
+    <span class="case-fact__value">
+      <span class="state state--{{ case.status | replace(' ','') }}">{{ case.status }}</span>
+    </span>
+  </div>
+</div>
+
+{% if case.decision_reason %}
+<div class="alert alert--info">
+  <div class="alert__body">
+    <strong class="alert__title">{{ case.chosen_option }}</strong><br>
+    {{ case.decision_reason }} — recorded by {{ case.decided_by }}
+  </div>
+</div>
 {% endif %}
 
+<section class="section">
+  <div class="section-header">
+    <h2 class="section-header__title">Compatible options</h2>
+    <span class="section-header__meta u-label">Free now, then pending cleaning, then alternative ward</span>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table table--zebra">
+      <thead>
+        <tr>
+          <th scope="col">Option</th><th scope="col">Bed</th><th scope="col">Room</th>
+          <th scope="col">Ward</th><th scope="col">Note</th><th scope="col">Choose</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for o in detail.options %}
+        <tr>
+          <td><span class="option-kind">{{ o.kind | replace('_',' ') }}</span></td>
+          <td class="table__num">{{ o.bed_number or '—' }}</td>
+          <td class="table__num">{{ o.room_number or '—' }}</td>
+          <td>{{ o.ward or '—' }}</td>
+          <td class="table__muted">{{ o.note }}</td>
+          <td>
+            <details class="row-actions">
+              <summary>Select</summary>
+              <div class="row-actions__body">
+                <form method="post" action="/shortages/{{ case.case_id }}/decide" class="stack stack--sm">
+                  <input type="hidden" name="chosen_option" value="{{ o.note }}">
+                  {% if o.bed_id %}
+                    <input type="hidden" name="resolved_bed_id" value="{{ o.bed_id }}">
+                  {% else %}
+                    <input type="hidden" name="escalate" value="1">
+                  {% endif %}
+                  <label class="field">
+                    <span class="field__label">Reason (required)</span>
+                    <input class="input" name="decision_reason" required placeholder="Why this option">
+                  </label>
+                  <button class="btn-primary" type="submit">Record decision</button>
+                </form>
+              </div>
+            </details>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% endif %}
 {% endblock %}

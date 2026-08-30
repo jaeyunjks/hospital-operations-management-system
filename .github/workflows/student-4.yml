@@ -51,10 +51,12 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build the three images
+        # The frontend builds from the repository root because it serves the
+        # shared theme in shared/frontend/.
         run: |
           docker build -t student-4-database ./student-4/database
           docker build -t student-4-backend  ./student-4/backend
-          docker build -t student-4-frontend ./student-4/frontend
+          docker build -t student-4-frontend -f student-4/frontend/Dockerfile .
 
       - name: Start the stack
         run: |
@@ -87,6 +89,11 @@ jobs:
           curl -sf http://localhost:3400/ -o /dev/null -w 'dashboard HTTP %{http_code}\n'
           echo "— theatre board —"
           curl -sf http://localhost:3400/theatres -o /dev/null -w 'theatres HTTP %{http_code}\n'
+          echo "— shared theme is inside the image —"
+          curl -sf http://localhost:3400/shared/css/main.css -o /dev/null \
+            -w 'shared main.css HTTP %{http_code}\n'
+          curl -sf http://localhost:3400/shared/css/variables.css -o /dev/null \
+            -w 'shared variables.css HTTP %{http_code}\n'
 
       - name: Container logs on failure
         if: failure()
