@@ -7,13 +7,6 @@
 
 PRAGMA foreign_keys = ON;
 
-DROP TABLE IF EXISTS admissions;
-DROP TABLE IF EXISTS patient_admin_notes;
-DROP TABLE IF EXISTS patient_contacts;
-DROP TABLE IF EXISTS patient_medical_information;
-DROP TABLE IF EXISTS patient_addresses;
-DROP TABLE IF EXISTS patients;
-
 -- Tables:
 --      patients --> Core patient identity / contact information
 --      patient_addresses --> A patient's address information

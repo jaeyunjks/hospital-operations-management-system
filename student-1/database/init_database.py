@@ -6,8 +6,11 @@ import sqlite3
 import sys
 from pathlib import Path
 
+from database import drop_all_tables
+
 HERE = Path(__file__).resolve().parent
 DEFAULT_DB = Path(__file__).resolve().parent / "patients.db"
+DB_HELPER = HERE / "database.py"
 SCHEMA_FILE = HERE / "schema.sql"
 SEED_FILE = HERE / "seed_data.sql"
 
@@ -18,9 +21,14 @@ def build(db_path: Path) -> sqlite3.Connection:
     # Apply schema.sql then seed_data.sql to a fresh database
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
+
+    # Clear all existing tables before re-creation
+    drop_all_tables(conn)
+
     conn.executescript(SCHEMA_FILE.read_text(encoding="utf-8"))
     conn.executescript(SEED_FILE.read_text(encoding="utf-8"))
     conn.commit()
+    
     return conn
 
 def healthCheck(conn: sqlite3.Connection) -> bool:
