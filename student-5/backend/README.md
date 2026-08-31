@@ -263,7 +263,7 @@ curl -s http://127.0.0.1:5500/health
 | `DATABASE_SERVICE_TIMEOUT` | `5` | Seconds before a database call times out |
 | `AI_ENABLED` | `false` | AI-Mode switch; no LLM call is attempted while false |
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama runtime base URL |
-| `OLLAMA_MODEL` | `llama3` | Model used to rank staff and narrate coverage |
+| `OLLAMA_MODEL` | `llama3.1:8b` | Model used to rank staff and narrate coverage |
 | `OLLAMA_TIMEOUT` | `8` | Seconds before abandoning the model and serving deterministic output |
 
 ## Error responses

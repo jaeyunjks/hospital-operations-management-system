@@ -24,7 +24,7 @@ class Config:
     #: every AI-ready endpoint serves its deterministic result.
     AI_ENABLED = os.environ.get("AI_ENABLED", "false").lower() == "true"
     OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
-    OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3")
+    OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 
     #: Seconds to wait on Ollama before abandoning the call and serving the
     #: deterministic ordering instead. Deliberately short: ranking is an

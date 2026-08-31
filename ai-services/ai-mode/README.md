@@ -1,5 +1,6 @@
-# AI-Mode (placeholder)
+# AI-Mode
 
-Shared AI-Mode service. To be backed by **Ollama** + an approved open-source
-LLM, implementing the **Plan → Act → Observe → Adapt** agentic loop in
-Release 0. Not implemented yet.
+Student-facing AI-Mode integrations remain within their component boundaries.
+The shared Release 0 **Plan → Act → Observe → Adapt** validation CLI is in
+[`../agentic-loop/`](../agentic-loop/). It uses Ollama with one model and does
+not introduce the Release 2 multi-agent architecture.
