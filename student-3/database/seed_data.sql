@@ -235,3 +235,19 @@ VALUES
     (58, 13, 23, 'receive', 70, 'Emergency medication replenishment', 'pharmacy.staff', '2026-07-21T13:15:00'),
     (59, 13, 23, 'issue', 8, 'Emergency department request', 'pharmacy.staff', '2026-08-13T10:30:00'),
     (60, 13, 23, 'issue', 7, 'Emergency department request', 'pharmacy.staff', '2026-08-28T11:15:00');
+
+-- STAFF
+INSERT INTO staff (name, role, notes)
+VALUES
+    ('Olivia Martin', 'manager', 'Pharmacy operations manager.'),
+    ('James Wilson', 'manager', 'Assistant pharmacy manager.'),
+    ('Amara Okafor', 'staff', 'Pharmacy technician.'),
+    ('Daniel Reyes', 'staff', 'Dispensary staff member.'),
+    ('Priya Nandakumar', 'staff', 'Inventory control staff member.'),
+    ('Liam O''Sullivan', 'staff', 'Pharmacy technician.'),
+    ('Mei Lin Tan', 'staff', 'Dispensary staff member.'),
+    ('Grace Mwangi', 'staff', 'Inventory control staff member.'),
+    ('Hassan Al-Rashid', 'staff', 'Pharmacy technician.'),
+    ('Sofia Petrova', 'staff', 'Dispensary staff member.'),
+    ('Ethan Brooks', 'staff', 'Inventory control staff member.'),
+    ('Rina Kobayashi', 'staff', 'Pharmacy technician.');

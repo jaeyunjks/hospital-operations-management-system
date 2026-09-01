@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pharmacy Operations</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/demo.css') }}">
+</head>
+<body class="demo-entry">
+  <main class="demo-panel">
+    <header class="brand">
+      <span class="brand__name">HOMS</span>
+      <span class="brand__module">Pharmacy Operations</span>
+    </header>
+    <section class="notice">
+      <h1>Demo role selected</h1>
+      <p>You are continuing as <strong>{{ identity.name }}</strong>, simulated <strong>{{ identity.role }}</strong>.</p>
+    </section>
+    <form method="post" action="{{ url_for('demo_exit') }}">
+      <button type="submit">Change selection</button>
+    </form>
+  </main>
+</body>
+</html>

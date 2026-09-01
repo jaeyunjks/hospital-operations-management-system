@@ -1,0 +1,56 @@
+:root {
+  color: #222938;
+  background: #eef1f4;
+  font-family: Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; }
+
+.demo-entry {
+  align-items: center;
+  background: #eef1f4;
+  display: flex;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.demo-panel {
+  background: #fff;
+  border: 1px solid #aeb7c2;
+  max-width: 34rem;
+  padding: 2.5rem;
+  width: 100%;
+}
+
+.brand { border-bottom: 1px solid #d7dce2; padding-bottom: 1.25rem; }
+.brand__name { font-family: Georgia, serif; font-size: 1.5rem; font-weight: 700; }
+.brand__module { color: #596579; font-size: .75rem; letter-spacing: .08em; margin-left: 1rem; text-transform: uppercase; }
+
+.notice { background: #fff4d9; border-left: 4px solid #b57100; margin-top: 1.5rem; padding: 1rem 1.25rem; }
+.notice h1 { font-size: 1rem; margin: 0; text-transform: uppercase; }
+.notice p { line-height: 1.5; margin: .5rem 0 0; }
+.error { background: #fde8e7; border-left: 4px solid #b42318; padding: 1rem; }
+
+.roles { border: 0; margin: 1.75rem 0 0; padding: 0; }
+.roles legend { color: #596579; font-size: .75rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.role-card { border: 1px solid #aeb7c2; cursor: pointer; display: flex; gap: 1rem; margin-top: .75rem; padding: 1rem; }
+.role-card:has(input:checked) { background: #e7f0ff; border-color: #1c5fa8; }
+.role-card input { accent-color: #1c5fa8; margin-top: .25rem; }
+.role-card strong, .role-card small { display: block; }
+.role-card small { color: #596579; line-height: 1.4; margin-top: .25rem; }
+
+.person-picker { margin-top: 1.5rem; }
+.person-picker label { display: block; font-weight: 700; margin-bottom: .5rem; }
+select, button { font: inherit; width: 100%; }
+select { background: #fff; border: 1px solid #8994a3; padding: .75rem; }
+button { background: #1c5fa8; border: 0; color: #fff; cursor: pointer; font-weight: 700; margin-top: 1.5rem; padding: .85rem; }
+button:disabled { background: #aeb7c2; cursor: not-allowed; }
+
+@media (max-width: 600px) {
+  .demo-entry { padding: 1rem; }
+  .demo-panel { padding: 1.5rem; }
+  .brand__module { display: block; margin: .5rem 0 0; }
+}

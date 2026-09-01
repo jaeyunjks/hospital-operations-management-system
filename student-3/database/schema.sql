@@ -1,7 +1,24 @@
 PRAGMA foreign_keys = ON;
 
+-- Staff records owned by Student 3.
+CREATE TABLE IF NOT EXISTS staff (
+    staff_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    role       TEXT NOT NULL,
+    notes      TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_staff_updated_at
+AFTER UPDATE ON staff
+FOR EACH ROW
+BEGIN
+    UPDATE staff SET updated_at = datetime('now') WHERE staff_id = OLD.staff_id;
+END;
+
 -- Supplier master record for pharmaceutical vendors.
-CREATE TABLE suppliers (
+CREATE TABLE IF NOT EXISTS suppliers (
     supplier_id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     contact_email TEXT,
@@ -14,7 +31,7 @@ CREATE TABLE suppliers (
 -- medicines.stock_quantity intentionally duplicates the quantity that could be calculated
 -- from batches. It represents total stock across non-expired batches and must
 -- be updated whenever stock is received, issued, or written off.
-CREATE TABLE medicines (
+CREATE TABLE IF NOT EXISTS medicines (
     medicine_id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     category TEXT NOT NULL,
@@ -30,7 +47,7 @@ CREATE TABLE medicines (
 );
 
 -- Batch records capture per-lot expiry and remaining quantity for traceability.
-CREATE TABLE batches (
+CREATE TABLE IF NOT EXISTS batches (
     batch_id INTEGER PRIMARY KEY AUTOINCREMENT,
     medicine_id INTEGER NOT NULL,
     batch_number TEXT NOT NULL,
@@ -43,7 +60,7 @@ CREATE TABLE batches (
 );
 
 -- Purchase orders track expected replenishment and approval states.
-CREATE TABLE purchase_orders (
+CREATE TABLE IF NOT EXISTS purchase_orders (
     po_id INTEGER PRIMARY KEY,
     medicine_id INTEGER NOT NULL,
     supplier_id INTEGER NOT NULL,
@@ -74,7 +91,7 @@ CREATE TABLE purchase_orders (
 
 -- stock_movements is append-only by application design.
 -- The API layer enforces write rules; this schema intentionally avoids update/delete triggers.
-CREATE TABLE stock_movements (
+CREATE TABLE IF NOT EXISTS stock_movements (
     movement_id INTEGER PRIMARY KEY,
     medicine_id INTEGER NOT NULL,
     batch_id INTEGER,

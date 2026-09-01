@@ -9,4 +9,4 @@ COPY student-3/database/ ./
 
 EXPOSE 6300
 
-CMD ["python", "app.py"]
+CMD ["sh", "-c", "python init_db.py && exec python app.py"]

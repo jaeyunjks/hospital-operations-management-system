@@ -1,11 +1,11 @@
-import os
 import sqlite3
 from datetime import datetime
 
 from flask import Flask, jsonify, request
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "pharmacy.db")
+import db
+
+DB_PATH = str(db.get_database_path())
 
 VALID_MEDICINE_STATUSES = {"active", "discontinued"}
 VALID_SUPPLIER_STATUSES = {"active", "discontinued"}
@@ -24,14 +24,13 @@ app = Flask(__name__)
 
 
 def init_database():
-    return None
+    """Apply the database schema without inserting or modifying data."""
+    with db.get_connection() as connection:
+        db.apply_schema(connection)
 
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
+    return db.connect()
 
 
 def json_error(message, status_code):
@@ -51,6 +50,52 @@ def handle_not_found(_error):
 @app.route("/health", methods=["GET"])
 def health():
     return jsonify({"status": "healthy"})
+
+
+@app.route("/staff", methods=["GET"])
+def get_staff():
+    """Return staff records for the backend/API service.
+
+    ``role`` is optional and is limited to the two database role values used
+    by Student 3's pharmacy demonstration.
+    """
+    role = request.args.get("role")
+    if role not in (None, "manager", "staff"):
+        return json_error("Invalid staff role", 400)
+
+    conn = get_db()
+    try:
+        if role is None:
+            rows = conn.execute(
+                "SELECT staff_id, name, role, notes, created_at, updated_at "
+                "FROM staff ORDER BY name ASC"
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT staff_id, name, role, notes, created_at, updated_at "
+                "FROM staff WHERE role = ? ORDER BY name ASC",
+                (role,),
+            ).fetchall()
+        return jsonify([dict(row) for row in rows])
+    finally:
+        conn.close()
+
+
+@app.route("/staff/<int:staff_id>", methods=["GET"])
+def get_staff_member(staff_id):
+    """Return one staff record for the backend/API service."""
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT staff_id, name, role, notes, created_at, updated_at "
+            "FROM staff WHERE staff_id = ?",
+            (staff_id,),
+        ).fetchone()
+        if row is None:
+            return json_error("Staff member not found", 404)
+        return jsonify(dict(row))
+    finally:
+        conn.close()
 
 
 @app.route("/medicines", methods=["GET"])
