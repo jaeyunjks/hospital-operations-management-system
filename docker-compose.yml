@@ -1,39 +1,47 @@
 # ==========================================================================
-# Hospital Operations Management System — Root Docker Compose (SCAFFOLD)
+# Hospital Operations Management System — Docker Compose
 # ==========================================================================
-# STATUS: Initial scaffold only. No service definitions are declared yet
-# because the underlying services do not exist. Adding placeholder/fake
-# services here would fail to build, so they are intentionally omitted.
+# Runs the integrated multi-container application locally.
 #
-# This file is kept syntactically valid so `docker compose config` succeeds.
+# Ports follow the HOMS architecture diagram: each student owns a
+# 3N00 (UI) / 5N00 (API) / 6N00 (DB) block.
+#   student-1  3100 / 5100 / 6100      student-4  3400 / 5400 / 6400
+#   student-2  3200 / 5200 / 6200      student-5  3500 / 5500 / 6500
+#   student-3  3300 / 5300 / 6300      shared auth 3000 / 5000
 #
-# When implementation begins, this file will eventually orchestrate:
-#
-#   * Five frontend services          (student-1..5 frontend)
-#   * Five Flask backend/API services (student-1..5 backend)
-#   * Five database services          (student-1..5 SQLite; volume-backed)
-#   * AI-Mode service                 (ai-services/ai-mode)
-#   * Ollama runtime                  (approved open-source LLM host)
-#   * Later releases:
-#       - MCP server                  (ai-services/mcp-server)      [Release 1]
-#       - RAG server                  (ai-services/rag-server)      [Release 1]
-#       - Multi-Agent server          (ai-services/multi-agent-server) [Release 2]
-#
-# Each service will reference its own Dockerfile (e.g. student-1/Dockerfile)
-# and expose the appropriate ports / networks / volumes once implemented.
 # ==========================================================================
+services:
+  student-1-database:
+    build:
+      context: ./student-1
+      dockerfile: database/Dockerfile
+    container_name: student-1-database
+    working_dir: /app
+    environment:
+      HOST: 0.0.0.0
+      PORT: 6100
+      FLASK_DEBUG: 0
+    ports:
+      - "6100:6100"
+    command: python -m database.app
 
-# Compose Specification: the top-level `version` key is obsolete and omitted.
+  student-1-backend:
+    build:
+      context: ./student-1
+      dockerfile: backend/Dockerfile
+    container_name: student-1-backend
+    working_dir: /app
+    environment:
+      HOST: 0.0.0.0
+      PORT: 5100
+      DATABASE_URL: http://student-1-database:6100
+      FLASK_DEBUG: 0
+    depends_on:
+      - student-1-database
+    ports:
+      - "5100:5100"
+    command: python -m backend.app
 
-services: {}
-# services:
-#   student-1-backend:
-#     build: ./student-1
-#     # ... to be defined when the service exists
-
-# networks:
-#   hospital-net:
-#     driver: bridge
-
-# volumes:
-#   student-1-db:
+networks:
+  default:
+    name: hospital-operations-management-system_default

@@ -7,7 +7,7 @@ import requests
 
 from backend.config import DATABASE_URL
 
-admissions_bp = Blueprint("admissions", __name__, url_prefix="/admissions")
+admissions_bp = Blueprint("admissions", __name__, url_prefix="/api/admissions")
 DB_BASE_URL = DATABASE_URL.rstrip("/")
 
 # Sends a request to the database microservice and returns JSON plus status.
@@ -37,7 +37,7 @@ def _db_call(method, path, payload=None, params=None):
 # Lists all admissions in the database, with optional query parameters for filtering.
 @admissions_bp.route("", methods=["GET"])
 def list_admissions():
-    payload, status = _db_call("GET", "/admissions", params=request.args.to_dict())
+    payload, status = _db_call("GET", "/api/admissions", params=request.args.to_dict())
     return jsonify(payload), status
 
 # Creates a new admission record in the database.
@@ -45,7 +45,7 @@ def list_admissions():
 def create_admission():
     payload, status = _db_call(
         "POST",
-        "/admissions",
+        "/api/admissions",
         payload=request.get_json(silent=True) or {},
     )
     return jsonify(payload), status
@@ -55,7 +55,7 @@ def create_admission():
 def get_admission(admission_id):
     payload, status = _db_call(
         "GET",
-        f"/admissions/{admission_id}",
+        f"/api/admissions/{admission_id}",
         params=request.args.to_dict(),
     )
     return jsonify(payload), status
@@ -65,7 +65,7 @@ def get_admission(admission_id):
 def update_admission(admission_id):
     payload, status = _db_call(
         request.method,
-        f"/admissions/{admission_id}",
+        f"/api/admissions/{admission_id}",
         payload=request.get_json(silent=True) or {},
     )
     return jsonify(payload), status

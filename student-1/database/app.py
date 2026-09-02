@@ -8,8 +8,8 @@ import os
 
 from flask import Flask, jsonify, request
 
-import database
-from database import DataError
+import database.database as database
+from database.database import DataError
 
 app = Flask(__name__)
 app.teardown_appcontext(database.close_db)
@@ -260,9 +260,14 @@ def validate_payload(resource, payload, mode="create"):
 
     return payload
 
+@app.get("/health")
+@app.get("/api/health")
+def health_check():
+    return successResponse({"status": "ok", "service": "student-1-database"})
+
 # This route lists records in a resource table.
 # By default it shows only active records, but an admin can request an explicit includeInactive=true flag to see deactivated ones for auditing.
-@app.route("/<resource_name>", methods=["GET"])
+@app.route("/api/<resource_name>", methods=["GET"])
 def list_resource(resource_name):
     resource = get_resource_config(resource_name)
     query = f"SELECT * FROM {resource['table']}"
@@ -288,7 +293,7 @@ def list_resource(resource_name):
 
 # This route creates a new record in the chosen table.
 # It accepts JSON, checks the payload is valid, and inserts the data using the table's column list.
-@app.route("/<resource_name>", methods=["POST"])
+@app.route("/api/<resource_name>", methods=["POST"])
 def create_resource(resource_name):
     resource = get_resource_config(resource_name)
     payload = request.get_json(silent=True) or {}
@@ -310,7 +315,7 @@ def create_resource(resource_name):
 # This route fetches one specific record by its ID.
 # It is used when the user wants to view a single patient, admission, address, or note.
 # Soft-deleted records are excluded from normal reads to keep the system aligned with clinical record rules, unless an admin deliberately requests them.
-@app.route("/<resource_name>/<int:record_id>", methods=["GET"])
+@app.route("/api/<resource_name>/<int:record_id>", methods=["GET"])
 def show_resource(resource_name, record_id):
     resource = get_resource_config(resource_name)
     query = f"SELECT * FROM {resource['table']} WHERE {resource['pk']} = ?"
@@ -326,7 +331,7 @@ def show_resource(resource_name, record_id):
 # This route updates an existing record.
 # It allows the user to change one or many fields, while still blocking invalid field names and empty updates.
 # If the record has already been soft-deleted, normal updates are blocked for safety and governance.
-@app.route("/<resource_name>/<int:record_id>", methods=["PUT", "PATCH"])
+@app.route("/api/<resource_name>/<int:record_id>", methods=["PUT", "PATCH"])
 def update_resource(resource_name, record_id):
     resource = get_resource_config(resource_name)
     fetch_or_404(resource_name, record_id)
@@ -358,7 +363,7 @@ def update_resource(resource_name, record_id):
 
 # This route does a soft delete instead of a permanent delete.
 # In clinical systems, records must remain for auditing and legal accountability, so we mark them inactive instead of removing them.
-@app.route("/<resource_name>/<int:record_id>", methods=["DELETE"])
+@app.route("/api/<resource_name>/<int:record_id>", methods=["DELETE"])
 def delete_resource(resource_name, record_id):
     resource = get_resource_config(resource_name)
     fetch_or_404(resource_name, record_id)
@@ -382,7 +387,7 @@ def delete_resource(resource_name, record_id):
 
 # This route reactivates a previously deactivated record.
 # It is used for administrative corrections or if a patient is reactivated after a temporary inactive period.
-@app.route("/<resource_name>/<int:record_id>/restore", methods=["POST", "PUT", "PATCH"])
+@app.route("/api/<resource_name>/<int:record_id>/restore", methods=["POST", "PUT", "PATCH"])
 def restore_resource(resource_name, record_id):
     resource = get_resource_config(resource_name)
 

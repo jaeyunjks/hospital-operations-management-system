@@ -57,28 +57,28 @@ def _normalize_params(include_inactive=False, **filters):
 # Return all records for a given resource, optionally including soft-deleted ones.
 def list_records(resource, include_inactive=False, **filters):
     params = _normalize_params(include_inactive=include_inactive, **filters)
-    return _call("GET", f"/{resource}", params=params)
+    return _call("GET", f"/api/{resource}", params=params)
 
 # Fetch one record by ID.
 def get_record(resource, record_id, include_inactive=False):
     params = _normalize_params(include_inactive=include_inactive)
-    return _call("GET", f"/{resource}/{record_id}", params=params)
+    return _call("GET", f"/api/{resource}/{record_id}", params=params)
 
 # Create a new record for a given resource.
 def create_record(resource, payload):
-    return _call("POST", f"/{resource}", payload=payload or {})
+    return _call("POST", f"/api/{resource}", payload=payload or {})
 
 # Update a record by ID.
 def update_record(resource, record_id, payload):
-    return _call("PATCH", f"/{resource}/{record_id}", payload=payload or {})
+    return _call("PATCH", f"/api/{resource}/{record_id}", payload=payload or {})
 
 # Soft delete a record when supported by the resource.
 def delete_record(resource, record_id):
-    return _call("DELETE", f"/{resource}/{record_id}")
+    return _call("DELETE", f"/api/{resource}/{record_id}")
 
 # Restore a soft-deleted record when supported by the resource.
 def restore_record(resource, record_id):
-    return _call("POST", f"/{resource}/{record_id}/restore")
+    return _call("POST", f"/api/{resource}/{record_id}/restore")
 
 
 # Convenience wrappers for Student-1 domain resources
