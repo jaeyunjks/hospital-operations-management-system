@@ -6,6 +6,12 @@ from flask import Blueprint, jsonify, request
 import requests
 
 from backend.config import DATABASE_URL
+from backend.services.emergency_admission import (
+    assign_emergency_capacity,
+    create_emergency_admission,
+    create_provisional_patient,
+    find_existing_patients,
+)
 
 admissions_bp = Blueprint("admissions", __name__, url_prefix="/api/admissions")
 DB_BASE_URL = DATABASE_URL.rstrip("/")
@@ -49,6 +55,46 @@ def create_admission():
         payload=request.get_json(silent=True) or {},
     )
     return jsonify(payload), status
+
+# Creates a full emergency admission workflow using the Student-1 service-layer logic
+# for provisional identity capture, duplicate review, and emergency capacity allocation.
+# Clinical documentation and task assignment are intentionally excluded because that
+# belongs to the Clinical Staff Management feature (Student-2).
+@admissions_bp.route("/emergency", methods=["POST"])
+def create_emergency_case():
+    payload = request.get_json(silent=True) or {}
+    identity = payload.get("identity") or {}
+
+    if not identity:
+        return jsonify({"error": "Emergency identity data is required."}), 400
+
+    possible_matches = payload.get("possible_matches") or payload.get("candidate_patients") or []
+    match_candidates = find_existing_patients(identity, possible_matches)
+    provisional_patient = create_provisional_patient(identity)
+
+    admission = create_emergency_admission(
+        payload.get("patient_id"),
+        arrival_time=payload.get("arrival_time"),
+        priority=payload.get("priority", "Emergency"),
+        data_quality_flag="provisional" if provisional_patient["requires_reconciliation"] else "confirmed",
+        identifiers=identity,
+    )
+
+    admission_id = payload.get("admission_id") or "emergency-admission"
+    capacity = assign_emergency_capacity(
+        admission_id,
+        capacity_id=payload.get("capacity_id", "unassigned"),
+        assigned_to=payload.get("assigned_to", "emergency team"),
+        reason=payload.get("capacity_reason", "Emergency priority"),
+    )
+
+    return jsonify({
+        "possible_matches": match_candidates,
+        "provisional_patient": provisional_patient,
+        "admission": admission,
+        "capacity": capacity,
+        "identity_review_required": provisional_patient["requires_reconciliation"],
+    })
 
 # Retrieves a single admission record by its database ID.
 @admissions_bp.route("/<int:admission_id>", methods=["GET"])
