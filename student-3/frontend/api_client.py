@@ -7,7 +7,7 @@ import os
 import urllib.error
 import urllib.request
 
-API_BASE_URL = os.environ.get("STUDENT3_BACKEND_API_URL", "http://127.0.0.1:5300").rstrip("/")
+API_BASE_URL = os.environ.get("BACKEND_API_URL", "http://localhost:5300").rstrip("/")
 
 
 class BackendError(RuntimeError):

@@ -4,55 +4,80 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Choose a role — Pharmacy Operations</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/demo.css') }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
 </head>
-<body class="demo-entry">
-  <main class="demo-panel">
-    <header class="brand">
-      <span class="brand__name">HOMS</span>
-      <span class="brand__module">Pharmacy Operations</span>
-    </header>
+<body>
+  <div class="app">
+    <main class="app-main" id="main">
+      <div class="page page--prose">
+        <section class="panel">
+          <header class="panel__header">
+            <div>
+              <span class="page-header__eyebrow">HOMS · Pharmacy Operations</span>
+              <h1 class="panel__title">Release 0 demonstration mode</h1>
+              <p class="panel__meta">Choose a simulated pharmacy role and person.</p>
+            </div>
+          </header>
+          <div class="panel__body stack">
+            <div class="alert alert--warning" aria-label="Demonstration information">
+              <div>
+                <p class="alert__title">This is not a login</p>
+                <p class="alert__body">Choose a role and a seeded staff member to demonstrate the pharmacy workflow.</p>
+              </div>
+            </div>
 
-    <section class="notice" aria-label="Demonstration information">
-      <h1>Release 0 demonstration mode</h1>
-      <p>This is not a login. Choose a role and a seeded staff member to demonstrate the pharmacy workflow.</p>
-    </section>
+            {% if error %}
+            <div class="alert alert--danger" role="alert">
+              <div>
+                <p class="alert__title">Staff records unavailable</p>
+                <p class="alert__body">{{ error }} Run <code>python3 init_db.py --check</code> in <code>student-3/database</code>.</p>
+              </div>
+            </div>
+            {% endif %}
 
-    {% if error %}
-    <p class="error" role="alert">{{ error }} Run <code>python3 init_db.py --check</code> in <code>student-3/database</code>.</p>
-    {% endif %}
+            <form method="post" action="{{ url_for('demo_enter') }}" id="demo-form" class="stack">
+              <fieldset class="stack stack--sm">
+                <legend class="u-label">Continue as</legend>
 
-    <form method="post" action="{{ url_for('demo_enter') }}" id="demo-form">
-      <fieldset class="roles">
-        <legend>Continue as</legend>
+                <label class="card">
+                  <span class="card__body row row--top">
+                    <input type="radio" name="role" value="{{ role_manager }}" {% if selected_role == role_manager %}checked{% endif %}>
+                    <span>
+                      <strong>Pharmacy Manager</strong>
+                      <span class="field__hint">Oversees pharmacy operations, stock, and approvals.</span>
+                    </span>
+                  </span>
+                </label>
 
-        <label class="role-card">
-          <input type="radio" name="role" value="{{ role_manager }}" {% if selected_role == role_manager %}checked{% endif %}>
-          <span>
-            <strong>Pharmacy Manager</strong>
-            <small>Oversees pharmacy operations, stock, and approvals.</small>
-          </span>
-        </label>
+                <label class="card">
+                  <span class="card__body row row--top">
+                    <input type="radio" name="role" value="{{ role_pharmacist }}" {% if selected_role == role_pharmacist %}checked{% endif %}>
+                    <span>
+                      <strong>Pharmacist</strong>
+                      <span class="field__hint">Manages dispensing and day-to-day pharmacy work.</span>
+                    </span>
+                  </span>
+                </label>
+              </fieldset>
 
-        <label class="role-card">
-          <input type="radio" name="role" value="{{ role_pharmacist }}" {% if selected_role == role_pharmacist %}checked{% endif %}>
-          <span>
-            <strong>Pharmacist</strong>
-            <small>Manages dispensing and day-to-day pharmacy work.</small>
-          </span>
-        </label>
-      </fieldset>
+              <div class="field" id="person-picker" hidden>
+                <label class="field__label" for="staff_id">Select a person</label>
+                <select class="select" id="staff_id" name="staff_id" disabled required>
+                  <option value="">Choose a role first</option>
+                </select>
+              </div>
 
-      <div class="person-picker" id="person-picker" hidden>
-        <label for="staff_id">Select a person</label>
-        <select id="staff_id" name="staff_id" disabled required>
-          <option value="">Choose a role first</option>
-        </select>
+              <button type="submit" class="btn btn-primary btn-lg btn-block" id="continue-button" disabled>Continue</button>
+            </form>
+          </div>
+        </section>
       </div>
-
-      <button type="submit" id="continue-button" disabled>Continue</button>
-    </form>
-  </main>
+    </main>
+  </div>
 
   <script>
     const people = {{ people | tojson }};
