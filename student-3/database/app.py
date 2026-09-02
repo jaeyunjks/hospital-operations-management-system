@@ -279,6 +279,92 @@ def get_medicine_batches(medicine_id):
         conn.close()
 
 
+@app.route("/batches", methods=["GET"])
+def get_batches():
+    medicine_id = request.args.get("medicine_id")
+    expiring_before = request.args.get("expiring_before")
+    include_expired = request.args.get("include_expired", "false").lower() == "true"
+    include_empty = request.args.get("include_empty", "false").lower() == "true"
+    if expiring_before:
+        try:
+            datetime.strptime(expiring_before, "%Y-%m-%d")
+        except ValueError:
+            return json_error("expiring_before must be in YYYY-MM-DD format", 400)
+    try:
+        parsed_medicine_id = validate_positive_int(medicine_id, "medicine_id") if medicine_id else None
+    except ValueError as exc:
+        return json_error(str(exc), 400)
+    clauses, values = [], []
+    if parsed_medicine_id is not None:
+        clauses.append("medicine_id = ?")
+        values.append(parsed_medicine_id)
+    if expiring_before:
+        clauses.append("expiry_date <= ?")
+        values.append(expiring_before)
+    if not include_expired:
+        clauses.append("expiry_date >= date('now')")
+    if not include_empty:
+        clauses.append("quantity_remaining > 0")
+    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+    conn = get_db()
+    try:
+        rows = conn.execute(f"SELECT * FROM batches{where} ORDER BY expiry_date ASC", values).fetchall()
+        return jsonify([dict(row) for row in rows])
+    finally:
+        conn.close()
+
+
+@app.route("/batches/<int:batch_id>", methods=["GET"])
+def get_batch(batch_id):
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT * FROM batches WHERE batch_id = ?", (batch_id,)).fetchone()
+        return jsonify(dict(row)) if row else json_error("Batch not found", 404)
+    finally:
+        conn.close()
+
+
+@app.route("/batches", methods=["POST"])
+def create_batch():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict): return json_error("JSON body required", 400)
+    try:
+        medicine_id = validate_positive_int(payload.get("medicine_id"), "medicine_id")
+        batch_number = validate_required_string(payload.get("batch_number"), "batch_number")
+        expiry_date = validate_required_string(payload.get("expiry_date"), "expiry_date")
+        datetime.strptime(expiry_date, "%Y-%m-%d")
+        quantity_received = validate_non_negative_int(payload.get("quantity_received"), "quantity_received")
+        quantity_remaining = validate_non_negative_int(payload.get("quantity_remaining"), "quantity_remaining")
+        received_at = validate_required_string(payload.get("received_at"), "received_at")
+    except ValueError as exc: return json_error(str(exc), 400)
+    conn = get_db()
+    try:
+        if not conn.execute("SELECT 1 FROM medicines WHERE medicine_id = ?", (medicine_id,)).fetchone(): return json_error("Medicine not found", 404)
+        cursor = conn.execute("INSERT INTO batches (medicine_id, batch_number, expiry_date, quantity_received, quantity_remaining, received_at) VALUES (?, ?, ?, ?, ?, ?)", (medicine_id, batch_number, expiry_date, quantity_received, quantity_remaining, received_at))
+        conn.commit()
+        return jsonify(dict(conn.execute("SELECT * FROM batches WHERE batch_id = ?", (cursor.lastrowid,)).fetchone())), 201
+    except sqlite3.IntegrityError:
+        conn.rollback()
+        return json_error("A batch with that number already exists for this medicine", 409)
+    finally: conn.close()
+
+
+@app.route("/batches/<int:batch_id>", methods=["PUT"])
+def update_batch(batch_id):
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict): return json_error("JSON body required", 400)
+    if "quantity_remaining" not in payload: return json_error("No fields supplied for update", 400)
+    try: quantity_remaining = validate_non_negative_int(payload["quantity_remaining"], "quantity_remaining")
+    except ValueError as exc: return json_error(str(exc), 400)
+    conn = get_db()
+    try:
+        cursor = conn.execute("UPDATE batches SET quantity_remaining = ? WHERE batch_id = ?", (quantity_remaining, batch_id))
+        if cursor.rowcount == 0: return json_error("Batch not found", 404)
+        conn.commit()
+        return jsonify(dict(conn.execute("SELECT * FROM batches WHERE batch_id = ?", (batch_id,)).fetchone()))
+    finally: conn.close()
+
+
 @app.route("/suppliers", methods=["GET"])
 def get_suppliers():
     conn = get_db()
@@ -536,6 +622,29 @@ def patch_purchase_order_status(po_id):
         return json_error(f"Database integrity error: {exc}", 400)
     finally:
         conn.close()
+
+
+@app.route("/purchase_orders/<int:po_id>", methods=["PUT"])
+def update_purchase_order(po_id):
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict): return json_error("JSON body required", 400)
+    allowed = {"quantity_received", "status", "approved_by", "decision_reason", "expected_at"}
+    fields, values = [], []
+    for key in allowed.intersection(payload):
+        value = payload[key]
+        try:
+            if key == "quantity_received": value = validate_non_negative_int(value, key)
+            elif key == "status" and value not in VALID_PO_STATUSES: return json_error("Invalid purchase order status", 400)
+        except ValueError as exc: return json_error(str(exc), 400)
+        fields.append(f"{key} = ?"); values.append(value)
+    if not fields: return json_error("No fields supplied for update", 400)
+    conn = get_db()
+    try:
+        cursor = conn.execute(f"UPDATE purchase_orders SET {', '.join(fields)} WHERE po_id = ?", (*values, po_id))
+        if cursor.rowcount == 0: return json_error("Purchase order not found", 404)
+        conn.commit()
+        return jsonify(dict(conn.execute("SELECT * FROM purchase_orders WHERE po_id = ?", (po_id,)).fetchone()))
+    finally: conn.close()
 
 
 @app.route("/stock_movements", methods=["GET"])
