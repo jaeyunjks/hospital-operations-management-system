@@ -1,7 +1,9 @@
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    BACKEND_API_URL=http://localhost:5300 \
+    FLASK_SECRET_KEY=student3-development-only-secret
 
 WORKDIR /app/student-3/frontend
 
