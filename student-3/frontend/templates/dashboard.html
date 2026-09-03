@@ -1,5 +1,27 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>{{ title }}</h1>
-<p>{{ note }}</p>
+<header class="page-header">
+  <div>
+    <span class="page-header__eyebrow">Clinical operations</span>
+    <h1 class="page-header__title">{{ title }}</h1>
+    <p class="page-header__description">{{ note }}</p>
+  </div>
+</header>
+
+<section class="stat-row" aria-label="Medication administration summary">
+  <article class="stat"><span class="stat__label">AI-flagged orders</span><strong class="stat__value stat__value--warning">12</strong><span class="stat__meta"><span class="status status--warning"><span class="status__dot" aria-hidden="true"></span>Pending review</span></span></article>
+  <article class="stat stat--urgent"><span class="stat__label">Expiring within 7 days</span><strong class="stat__value stat__value--danger">8</strong><ul class="expiry-list" aria-label="Medicines expiring soon"><li>Amoxicillin 500 mg <span>2 days</span></li><li>Insulin 100 units/mL <span>4 days</span></li><li>Heparin 5,000 units <span>6 days</span></li></ul></article>
+  <article class="stat stat--urgent"><span class="stat__label">Overdue doses</span><strong class="stat__value stat__value--danger">5</strong><span class="stat__meta"><span class="status status--danger"><span class="status__dot" aria-hidden="true"></span>Requires attention</span></span></article>
+  <article class="stat"><span class="stat__label">Administered today</span><strong class="stat__value stat__value--success">146</strong><span class="stat__meta"><span class="status status--success"><span class="status__dot" aria-hidden="true"></span>Doses recorded</span></span></article>
+</section>
+
+<section class="panel">
+  <header class="panel__header"><div><span class="page-header__eyebrow">Review queue</span><h2 class="panel__title">AI-generated flagged orders</h2></div><span class="panel__meta">Demo review data</span></header>
+  <div class="panel__body panel__body--flush"><div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Patient</th><th>Medicine</th><th>Scheduled time</th><th>Flag reason</th><th>Reviewer action</th></tr></thead><tbody>
+    <tr class="table-row--urgent"><td class="table__name">John Smith</td><td>Insulin 10 units</td><td class="table__num">Today, 08:00</td><td><span class="badge-danger">Overdue</span></td><td class="table__actions"><button class="btn btn-primary btn-compact" type="button" disabled>Approve</button> <button class="btn btn-danger btn-compact" type="button" disabled>Reject</button></td></tr>
+    <tr><td class="table__name">Mary Jones</td><td>Warfarin 5 mg</td><td class="table__num">Today, 09:00</td><td><span class="badge-warning">Dosage mismatch</span></td><td class="table__actions"><button class="btn btn-primary btn-compact" type="button" disabled>Approve</button> <button class="btn btn-danger btn-compact" type="button" disabled>Reject</button></td></tr>
+    <tr><td class="table__name">Ali Khan</td><td>Amoxicillin 500 mg</td><td class="table__num">Today, 10:30</td><td><span class="badge-danger">Allergy interaction</span></td><td class="table__actions"><button class="btn btn-primary btn-compact" type="button" disabled>Approve</button> <button class="btn btn-danger btn-compact" type="button" disabled>Reject</button></td></tr>
+    <tr><td class="table__name">Olivia Brown</td><td>Metoprolol 25 mg</td><td class="table__num">Today, 11:00</td><td><span class="badge-warning">Dose interval</span></td><td class="table__actions"><button class="btn btn-primary btn-compact" type="button" disabled>Approve</button> <button class="btn btn-danger btn-compact" type="button" disabled>Reject</button></td></tr>
+  </tbody></table></div></div>
+</section>
 {% endblock %}

@@ -533,6 +533,30 @@
 /* .stat-card retained as an alias for continuity. */
 .stat-card { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-5); background: var(--color-surface); }
 
+.stat--urgent { background: var(--color-danger-soft); }
+
+.expiry-list {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-secondary);
+}
+
+.expiry-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.expiry-list span {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  color: var(--color-danger);
+}
+
 /* ==========================================================================
    Progress / coverage meter
    ========================================================================== */
@@ -619,6 +643,7 @@
 
 .table--zebra tbody tr:nth-child(even) td { background: var(--color-surface-alt); }
 .table--zebra tbody tr:hover td { background: var(--color-surface-hover); }
+.table-row--urgent td { background: var(--color-danger-soft); }
 
 /* Cell modifiers. */
 .table__id,

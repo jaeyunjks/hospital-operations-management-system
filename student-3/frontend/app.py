@@ -218,8 +218,8 @@ def shared_assets(filename: str):
 def dashboard():
     return render_page(
         "dashboard.html",
-        "Dashboard",
-        "Dashboard summary content will be added here later.",
+        "Medication Administration",
+        "Medication review and administration status for today.",
     )
 
 
