@@ -37,3 +37,27 @@
 
 /* Long operational tables scroll within their own container, never the page. */
 html { scrollbar-gutter: stable; }
+
+/* Pharmacy header uses the light navigation treatment. */
+.app-header {
+  background: var(--white);
+  color: var(--color-text-primary);
+  border-bottom-color: var(--color-border-strong);
+}
+
+.app-header__brand,
+.app-header .user-chip {
+  color: var(--color-text-primary);
+}
+
+.app-header__context,
+.app-header .user-chip__role,
+.app-header .nav-link {
+  color: var(--color-text-muted);
+}
+
+.app-header .nav-link:hover,
+.app-header .nav-link[aria-current="page"],
+.app-header .nav-link.is-active {
+  color: var(--color-text-primary);
+}
