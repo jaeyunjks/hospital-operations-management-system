@@ -98,19 +98,28 @@ VALUES
 -- Surgeries scheduled by Dr Chen (id 1) for active admissions;
 -- historic ones from earlier stays are completed or cancelled.
 -- ------------------------------------------------------------
+--
+-- BED / THEATRE ID MAP (owned by Room & Bed Management service; stored
+-- here as plain integers, looked up for theatre availability at creation
+-- time). bed_id is NULL where no theatre slot was available when the
+-- request was raised (request_id 2), or where the row predates the
+-- Room & Bed integration (historic completed/cancelled requests).
+--   bed_id 21 -> Theatre 1
+--   bed_id 22 -> Theatre 2
+--   bed_id 23 -> Theatre 3 (day-procedure / cath lab)
 INSERT INTO surgery_requests
-    (request_id, patient_id, admission_id, doctor_id, procedure_type, scheduled_at, status, created_at)
+    (request_id, patient_id, admission_id, doctor_id, bed_id, procedure_type, scheduled_at, status, created_at)
 VALUES
-    (1, 2, 2, 1, 'Laparoscopic appendectomy', '2026-08-27 13:00:00', 'scheduled', '2026-08-26 15:45:00'),
-    (2, 3, 3, 1, 'Surgical debridement of diabetic foot ulcer', '2026-08-29 09:00:00', 'scheduled', '2026-08-27 15:00:00'),
-    (3, 4, 4, 1, 'Laparoscopic cholecystectomy', '2026-08-21 08:30:00', 'completed', '2026-08-19 10:00:00'),
-    (4, 1, 1, 1, 'Bronchoscopy for airway sampling', '2026-08-25 14:00:00', 'cancelled', '2026-08-24 09:30:00'),
-    (5, 5, 5, 1, 'Elective DC cardioversion', '2026-09-25 08:00:00', 'scheduled', '2026-08-28 10:00:00'),
-    (6, 3, 7, 2, 'Central line insertion for insulin infusion', '2026-05-02 23:30:00', 'completed', '2026-05-02 22:45:00'),
-    (7, 1, 6, 1, 'Diagnostic pleural aspiration', '2026-06-12 11:00:00', 'completed', '2026-06-12 09:00:00'),
-    (8, 5, 8, 1, 'Tilt table test under monitoring', '2026-04-15 10:00:00', 'completed', '2026-04-14 16:00:00'),
-    (9, 2, 2, 2, 'Diagnostic laparoscopy (standby if appendicitis not confirmed)', '2026-08-27 13:00:00', 'cancelled', '2026-08-26 16:30:00'),
-    (10, 3, 3, 1, 'Repeat wound debridement', '2026-09-02 09:00:00', 'scheduled', '2026-08-28 17:00:00');
+    (1, 2, 2, 1, 21, 'Laparoscopic appendectomy', '2026-08-27 13:00:00', 'scheduled', '2026-08-26 15:45:00'),
+    (2, 3, 3, 1, 56, 'Surgical debridement of diabetic foot ulcer', '2026-08-29 09:00:00', 'scheduled', '2026-08-27 15:00:00'),
+    (3, 4, 4, 1, 72, 'Laparoscopic cholecystectomy', '2026-08-21 08:30:00', 'completed', '2026-08-19 10:00:00'),
+    (4, 1, 1, 1, 93, 'Bronchoscopy for airway sampling', '2026-08-25 14:00:00', 'cancelled', '2026-08-24 09:30:00'),
+    (5, 5, 5, 1, 23, 'Elective DC cardioversion', '2026-09-25 08:00:00', 'scheduled', '2026-08-28 10:00:00'),
+    (6, 3, 7, 2, 45, 'Central line insertion for insulin infusion', '2026-05-02 23:30:00', 'completed', '2026-05-02 22:45:00'),
+    (7, 1, 6, 1, 64, 'Diagnostic pleural aspiration', '2026-06-12 11:00:00', 'completed', '2026-06-12 09:00:00'),
+    (8, 5, 8, 1, 27, 'Tilt table test under monitoring', '2026-04-15 10:00:00', 'completed', '2026-04-14 16:00:00'),
+    (9, 2, 2, 2, 33, 'Diagnostic laparoscopy (standby if appendicitis not confirmed)', '2026-08-27 13:00:00', 'cancelled', '2026-08-26 16:30:00'),
+    (10, 3, 3, 1, 22, 'Repeat wound debridement', '2026-09-02 09:00:00', 'scheduled', '2026-08-28 17:00:00');
 
 
 -- ------------------------------------------------------------
@@ -118,16 +127,20 @@ VALUES
 -- One AI summary per admission, each with a human review outcome.
 -- review_status covers pending, accepted, edited (and rejected) as required.
 -- ------------------------------------------------------------
+-- summary_scope is given explicitly on every row and covers all three
+-- allowed values: 'clinical' (drawn from the admission's clinical_records),
+-- 'consultation' (drawn from its consultation_requests) and 'care_tasks'
+-- (drawn from its care_tasks).
 INSERT INTO ai_summaries
-    (summary_id, admission_id, patient_id, summary_text, model_used, source_reference, generated_at, reviewed_by_staff_id, review_status)
+    (summary_id, admission_id, patient_id, summary_text, model_used, source_reference, summary_scope, generated_at, reviewed_by_staff_id, review_status)
 VALUES
-    (1, 1, 1, 'Patient admitted with left lower lobe community-acquired pneumonia. Started on IV ceftriaxone with chest physiotherapy. Fever and oxygenation improving by day 2; plan to switch to oral antibiotics and discharge if stable.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Respiratory-v2', '2026-08-26 09:00:00', 1, 'accepted'),
-    (2, 2, 2, 'Patient with acute appendicitis awaiting laparoscopic appendectomy. Kept nil by mouth on IV fluids. Anaesthetic assessment complete, ASA II, listed for theatre.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Surgical-v2', '2026-08-27 07:00:00', NULL, 'pending'),
-    (3, 3, 3, 'Diabetic patient admitted with foot ulcer and ascending cellulitis. On IV antibiotics with specialist and vascular input. Surgical debridement scheduled; glycaemic control stable on sliding scale.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Diabetes-v3', '2026-08-28 17:30:00', 1, 'edited'),
-    (4, 4, 4, 'Patient recovering after laparoscopic cholecystectomy. Wounds clean, pain controlled, mobilising and eating. Documentation completed after discharge; tasks closed administratively.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Surgical-v2', '2026-08-29 09:45:00', 1, 'accepted'),
-    (5, 5, 5, 'Patient with new atrial fibrillation and rapid ventricular response. Rate controlled with bisoprolol, anticoagulation started with apixaban. Cardiology recommends elective cardioversion in four weeks if AF persists.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Cardiology-v1', '2026-08-28 10:30:00', NULL, 'pending'),
-    (6, 6, 1, 'Earlier admission for COPD exacerbation, treated with nebulisers and oral steroids, discharged stable on a tapering course with GP follow-up.', 'qwen2.5:0.5b', NULL, '2026-06-15 10:30:00', 2, 'edited'),
-    (7, 7, 3, 'Earlier admission for diabetic ketoacidosis precipitated by gastroenteritis. Managed with insulin infusion and rehydration, resolved, discharged on usual regimen.', 'qwen2.5:0.5b', NULL, '2026-05-06 09:30:00', 1, 'accepted'),
-    (8, 8, 5, 'Earlier admission for vasovagal syncope. Cardiac and neurological workup unremarkable; managed with reassurance and conservative advice, no medication started.', 'qwen2.5:0.5b', NULL, '2026-04-16 08:30:00', 1, 'rejected'),
-    (9, 3, 3, 'Regenerated summary after vascular review added: perfusion confirmed adequate (ABPI 0.9), safe to proceed with debridement. Supersedes summary 3 pending human review.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Diabetes-v3', '2026-08-28 18:00:00', NULL, 'pending'),
-    (10, 1, 1, 'Draft discharge summary: community-acquired pneumonia resolving on oral antibiotics, safe for discharge with GP follow-up and repeat chest X-ray in six weeks.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Respiratory-v2', '2026-08-26 10:00:00', 1, 'edited');
+    (1, 1, 1, 'Patient admitted with left lower lobe community-acquired pneumonia. Started on IV ceftriaxone with chest physiotherapy. Fever and oxygenation improving by day 2; plan to switch to oral antibiotics and discharge if stable.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Respiratory-v2', 'clinical', '2026-08-26 09:00:00', 1, 'accepted'),
+    (2, 2, 2, 'Patient with acute appendicitis awaiting laparoscopic appendectomy. Kept nil by mouth on IV fluids. Anaesthetic assessment complete, ASA II, listed for theatre.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Surgical-v2', 'clinical', '2026-08-27 07:00:00', NULL, 'pending'),
+    (3, 3, 3, 'Diabetic patient admitted with foot ulcer and ascending cellulitis. On IV antibiotics with specialist and vascular input. Surgical debridement scheduled; glycaemic control stable on sliding scale.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Diabetes-v3', 'clinical', '2026-08-28 17:30:00', 1, 'edited'),
+    (4, 3, 3, 'Specialist and vascular consultations for the diabetic foot: debride to healthy tissue, continue IV flucloxacillin plus benzylpenicillin, MRI to exclude osteomyelitis, perfusion confirmed adequate (ABPI 0.9) so safe to proceed to theatre.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Diabetes-v3', 'consultation', '2026-08-27 15:00:00', 1, 'accepted'),
+    (5, 5, 5, 'Cardiology consultation for new atrial fibrillation with RVR: continue rate control, start apixaban now (CHA2DS2-VASc 3), review for elective cardioversion in four weeks if still in AF; echo requested to assess for structural heart disease.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Cardiology-v1', 'consultation', '2026-08-28 10:00:00', NULL, 'pending'),
+    (6, 4, 4, 'Post-op review requested for slow return of bowel function was auto-cancelled after discharge; no specialist recommendation was recorded before closure.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Surgical-v2', 'consultation', '2026-08-29 09:45:00', 1, 'rejected'),
+    (7, 1, 1, 'Nursing tasks for the pneumonia admission: IV ceftriaxone administered without reaction, 4-hourly vital signs ongoing with fever trending down, switch to oral antibiotics pending confirmation of tolerance.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Respiratory-v2', 'care_tasks', '2026-08-26 12:00:00', 1, 'accepted'),
+    (8, 2, 2, 'Pre-operative nursing tasks for acute appendicitis complete: patient kept nil by mouth on IV Hartmann, pre-op checklist done and consent signed and witnessed, ready for theatre.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Surgical-v2', 'care_tasks', '2026-08-27 07:00:00', NULL, 'pending'),
+    (9, 5, 5, 'Nursing tasks for new AF: continuous cardiac monitoring in place with HR settled to 90s after bisoprolol; first apixaban dose and anticoagulation counselling leaflet still outstanding.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Cardiology-v1', 'care_tasks', '2026-08-28 10:30:00', NULL, 'pending'),
+    (10, 4, 4, 'Nursing tasks for the post-cholecystectomy stay: abdominal dressing removed day 3 with clean dry wounds, mobilisation task closed administratively after discharge.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Surgical-v2', 'care_tasks', '2026-08-29 09:30:00', 1, 'edited');

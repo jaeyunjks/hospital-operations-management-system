@@ -151,11 +151,10 @@ CREATE INDEX idx_care_tasks_nurse  ON care_tasks(assigned_nurse_id);
 -- 4. surgery_requests
 -- One row = a doctor scheduling a surgery for an admitted patient.
 -- Creating a row here is what dispatches the request to Room & Bed
--- Management (theatre prep) and Pharmacy & Medication Inventory
--- Management (surgery kit prep) at the same time. Blocked outright if
--- the admission is not active; this table only tracks that the request
--- was made, downstream preparation status lives in those other
--- services' own databases.
+-- Management (theatre prep). Blocked outright if the admission is 
+-- not active; this table only tracks that the request was made, 
+-- downstream preparation status lives in the other service's own 
+-- database.
 -- ------------------------------------------------------------
 CREATE TABLE surgery_requests (
     request_id             INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -164,6 +163,7 @@ CREATE TABLE surgery_requests (
     patient_id              INTEGER NOT NULL,   -- from Patient & Admission service
     admission_id            INTEGER NOT NULL,   -- from Patient & Admission service; the stay this surgery belongs to
     doctor_id                INTEGER NOT NULL,   -- from Staff & Shift service; doctor who scheduled it
+    bed_id                  INTEGER NOT NULL,   -- from Room & Bed service; theatre availability lookup
 
     -- Surgery content
     procedure_type           TEXT NOT NULL,      -- e.g. "Appendectomy"
@@ -206,6 +206,8 @@ CREATE TABLE ai_summaries (
     summary_text              TEXT NOT NULL,      -- the actual generated summary/guidance
     model_used                 TEXT,               -- e.g. 'qwen2.5:0.5b'
     source_reference           TEXT,               -- which policy doc it drew from (used from Release 1 onward, NULL in R0)
+    summary_scope              TEXT NOT NULL DEFAULT 'clinical' 
+                                    CHECK (summary_scope IN ('clinical', 'consultation', 'care_tasks')), 
 
     generated_at                TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
