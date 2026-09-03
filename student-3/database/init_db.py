@@ -23,6 +23,7 @@ EXPECTED_TABLES = (
     "purchase_orders",
     "stock_movements",
 )
+EXPECTED_MINIMUM_ROWS = {table: 40 for table in EXPECTED_TABLES}
 
 
 def initialise(database_path: str | None = None) -> Path:
@@ -51,12 +52,26 @@ def check(database_path: str | None = None) -> None:
         if missing:
             raise RuntimeError(f"Missing tables: {', '.join(sorted(missing))}")
 
+        row_counts = {
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            for table in EXPECTED_TABLES
+        }
+        below_minimum = {
+            table: count for table, count in row_counts.items()
+            if count < EXPECTED_MINIMUM_ROWS[table]
+        }
+        if below_minimum:
+            raise RuntimeError(
+                "Expected at least 40 seed records in every table; "
+                f"found {below_minimum}."
+            )
+
         role_counts = dict(connection.execute(
             "SELECT role, COUNT(*) FROM staff GROUP BY role;"
         ).fetchall())
-        if role_counts.get("manager") != 2 or role_counts.get("staff") != 10:
+        if role_counts.get("manager", 0) < 2 or role_counts.get("staff", 0) < 10:
             raise RuntimeError(
-                "Expected 2 manager and 10 staff seed records; "
+                "Expected at least 2 manager and 10 staff seed records; "
                 f"found {role_counts}."
             )
     print(f"Database check passed for {target}")

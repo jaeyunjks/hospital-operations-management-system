@@ -1,0 +1,27 @@
+<section class="panel" aria-live="polite">
+  <div class="panel__header">
+    <div>
+      <span class="page-header__eyebrow">AI advisory</span>
+      <h2 class="panel__title">Expiry &amp; waste advisory</h2>
+    </div>
+  </div>
+  <div class="panel__body">
+    {% if advisory.source == 'fallback' %}
+      <div class="alert alert--warning"><div><p class="alert__title">AI service unavailable — showing rule-based advisory.</p><p class="alert__body">{{ advisory.fallback_reason }}</p></div></div>
+    {% endif %}
+    {% if advisory.capped %}<p class="table__muted">Showing the 15 soonest-expiring batches sent for review.</p>{% endif %}
+    <p>{{ advisory.summary }}</p>
+    {% for item in advisory["items"] %}
+      <article class="panel" style="margin-top: var(--space-3)">
+        <div class="panel__body">
+          <div class="toolbar"><div><strong>{{ item.medicine_name }}</strong> · Batch {{ item.batch_number }}<br><span class="table__muted">{{ item.days_until_expiry }} days to expiry · {{ item.quantity_remaining }} units remaining</span></div><div class="toolbar__end"><span class="badge {% if item.priority == 'high' %}badge-danger{% elif item.priority == 'medium' %}badge-warning{% else %}badge-success{% endif %}">{{ item.priority }} priority</span><span class="badge badge-info">{{ item.recommended_action|replace('_', ' ') }}</span>{% if not item.ai_reviewed %}<span class="badge badge-neutral">Rule-based · not AI-reviewed</span>{% endif %}</div></div>
+          <p>Projected waste: <strong>{{ item.projected_waste_units }} units</strong> · ${{ '%.2f'|format(item.projected_waste_value) }}</p>
+          <p>{{ item.reasoning }}</p>
+          {% if is_manager and item.recommended_action == 'write_off' and item.quantity_remaining > 0 %}
+            <form hx-post="/batches/{{ item.batch_id }}/write-off" hx-target="this" hx-confirm="Write off {{ item.quantity_remaining }} units of {{ item.medicine_name }}, batch {{ item.batch_number }}? This creates a waste record in the stock ledger and cannot be undone."><input class="input" name="reason" value="Expired" required><button class="btn btn-danger btn-compact">Write off</button></form>
+          {% endif %}
+        </div>
+      </article>
+    {% else %}<p class="table__muted">No batches require advice in this expiry window.</p>{% endfor %}
+  </div>
+</section>

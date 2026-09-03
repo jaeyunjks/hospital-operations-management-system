@@ -1,0 +1,19 @@
+{% if pagination and pagination.total_pages > 1 %}
+<tr>
+  <td colspan="{{ pagination_colspan }}">
+    <nav class="toolbar" aria-label="Pagination">
+      <span class="table__muted">{{ pagination.total_items }} results · page {{ pagination.page }} of {{ pagination.total_pages }}</span>
+      <div class="toolbar__end">
+        <button class="btn btn-secondary btn-compact" type="button"
+                {% if not pagination.has_previous %}disabled{% else %}
+                hx-get="{{ pagination_endpoint }}?page={{ pagination.page - 1 }}"
+                hx-include="#{{ pagination_form_id }}" hx-target="#{{ pagination_target }}" hx-swap="innerHTML"{% endif %}>Previous</button>
+        <button class="btn btn-secondary btn-compact" type="button"
+                {% if not pagination.has_next %}disabled{% else %}
+                hx-get="{{ pagination_endpoint }}?page={{ pagination.page + 1 }}"
+                hx-include="#{{ pagination_form_id }}" hx-target="#{{ pagination_target }}" hx-swap="innerHTML"{% endif %}>Next</button>
+      </div>
+    </nav>
+  </td>
+</tr>
+{% endif %}

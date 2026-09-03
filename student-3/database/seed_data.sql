@@ -251,3 +251,153 @@ VALUES
     ('Sofia Petrova', 'staff', 'Dispensary staff member.'),
     ('Ethan Brooks', 'staff', 'Inventory control staff member.'),
     ('Rina Kobayashi', 'staff', 'Pharmacy technician.');
+
+-- EXTENDED DEMONSTRATION DATA
+-- These deterministic rows keep a clean installation useful for filtering,
+-- pagination, status handling and supplier/medicine relationship demos.
+
+INSERT INTO suppliers
+    (supplier_id, name, contact_email, phone, lead_time_days, status)
+WITH RECURSIVE numbers(n) AS (
+    SELECT 5 UNION ALL SELECT n + 1 FROM numbers WHERE n < 40
+)
+SELECT
+    n,
+    'Pharmacy Supply Partner ' || printf('%02d', n),
+    'orders' || n || '@partner' || n || '.example.com',
+    printf('0%d-9000-%04d', 2 + (n % 7), 1000 + n),
+    2 + (n % 14),
+    CASE WHEN n % 9 = 0 THEN 'discontinued' ELSE 'active' END
+FROM numbers;
+
+INSERT INTO medicines
+    (medicine_id, name, category, unit, unit_price, stock_quantity,
+     reorder_level, storage_instructions, supplier_id, status)
+WITH RECURSIVE numbers(n) AS (
+    SELECT 15 UNION ALL SELECT n + 1 FROM numbers WHERE n < 40
+)
+SELECT
+    n,
+    CASE n % 8
+        WHEN 0 THEN 'Azithromycin 250mg'
+        WHEN 1 THEN 'Diclofenac 50mg'
+        WHEN 2 THEN 'Insulin Regular 100 IU/mL'
+        WHEN 3 THEN 'Salbutamol 2.5mg'
+        WHEN 4 THEN 'Omeprazole 20mg'
+        WHEN 5 THEN 'Ciprofloxacin 500mg'
+        WHEN 6 THEN 'Furosemide 40mg'
+        ELSE 'Sterile Dressing Pack'
+    END || ' (' || printf('%02d', n) || ')',
+    CASE n % 8
+        WHEN 0 THEN 'Antibiotic'
+        WHEN 1 THEN 'Analgesic'
+        WHEN 2 THEN 'Endocrine'
+        WHEN 3 THEN 'Respiratory'
+        WHEN 4 THEN 'Gastrointestinal'
+        WHEN 5 THEN 'Antibiotic'
+        WHEN 6 THEN 'Cardiovascular'
+        ELSE 'Consumable'
+    END,
+    CASE n % 5 WHEN 0 THEN 'vial' WHEN 1 THEN 'tablet' WHEN 2 THEN 'ampoule' WHEN 3 THEN 'inhaler' ELSE 'box' END,
+    round(0.35 + (n * 0.27), 2),
+    20 + (n * 7),
+    25 + ((n % 6) * 20),
+    CASE WHEN n % 3 = 0 THEN 'Store at 2–8°C and protect from light.' WHEN n % 3 = 1 THEN 'Store below 25°C in a dry place.' ELSE 'Keep in original packaging and protect from moisture.' END,
+    n,
+    CASE WHEN n % 11 = 0 THEN 'discontinued' ELSE 'active' END
+FROM numbers;
+
+-- 26 additional lots bring the batch ledger to 50 rows. The dates deliberately
+-- cover expired, near-expiry, long-dated, non-empty and empty stock states.
+INSERT INTO batches
+    (batch_id, medicine_id, batch_number, expiry_date,
+     quantity_received, quantity_remaining, received_at)
+WITH RECURSIVE numbers(n) AS (
+    SELECT 25 UNION ALL SELECT n + 1 FROM numbers WHERE n < 50
+)
+SELECT
+    n,
+    n - 10,
+    'PHM-' || printf('%04d', 2600 + n),
+    CASE
+        WHEN n IN (25, 26, 27) THEN date('2026-08-01', '+' || (n - 25) || ' days')
+        WHEN n BETWEEN 28 AND 34 THEN date('2026-09-05', '+' || (n - 28) || ' days')
+        WHEN n BETWEEN 35 AND 40 THEN date('2026-09-15', '+' || (n - 35) || ' days')
+        ELSE date('2027-02-01', '+' || ((n - 41) * 23) || ' days')
+    END,
+    50 + (n * 10),
+    CASE WHEN n IN (25, 31, 39, 48) THEN 0 ELSE 20 + (n * 7) END,
+    date('2026-05-01', '+' || n || ' days') || 'T09:00:00'
+FROM numbers;
+
+-- All seven purchase-order states, both AI values, partial and complete
+-- deliveries, and a range of suppliers/medicines are represented.
+INSERT INTO purchase_orders
+    (po_id, medicine_id, supplier_id, quantity_ordered, quantity_received,
+     unit_price, status, created_by, approved_by, ai_generated, ai_reasoning,
+     decision_reason, created_at, expected_at)
+WITH RECURSIVE numbers(n) AS (
+    SELECT 13 UNION ALL SELECT n + 1 FROM numbers WHERE n < 40
+)
+SELECT
+    n,
+    n - 10,
+    n - 10,
+    50 + (n * 10),
+    CASE WHEN n % 7 = 4 THEN 50 + (n * 10) WHEN n % 5 = 0 THEN 20 + n ELSE 0 END,
+    round(0.30 + (n * 0.22), 2),
+    CASE n % 7 WHEN 0 THEN 'draft' WHEN 1 THEN 'pending_approval' WHEN 2 THEN 'approved' WHEN 3 THEN 'ordered' WHEN 4 THEN 'received' WHEN 5 THEN 'rejected' ELSE 'cancelled' END,
+    CASE WHEN n % 3 = 0 THEN 'Pharmacy Manager' ELSE 'Reorder assistant' END,
+    CASE WHEN n % 7 IN (1, 2, 3, 4, 5, 6) THEN 'Olivia Martin' ELSE NULL END,
+    CASE WHEN n % 2 = 0 THEN 1 ELSE 0 END,
+    CASE WHEN n % 2 = 0 THEN 'Demand trend and reorder level support this recommendation.' ELSE NULL END,
+    CASE n % 7 WHEN 5 THEN 'Rejected after budget review.' WHEN 6 THEN 'Cancelled because clinical demand changed.' WHEN 4 THEN 'Delivery checked and received.' WHEN 2 THEN 'Approved for routine replenishment.' ELSE NULL END,
+    date('2026-07-01', '+' || n || ' days') || 'T10:00:00',
+    date('2026-09-01', '+' || n || ' days')
+FROM numbers;
+
+-- The original ledger already contains 60 records. Add all movement types and
+-- varied performers/reasons so filtering demonstrations are representative.
+INSERT INTO stock_movements
+    (movement_id, medicine_id, batch_id, movement_type, quantity,
+     reason, performed_by, created_at)
+WITH RECURSIVE numbers(n) AS (
+    SELECT 61 UNION ALL SELECT n + 1 FROM numbers WHERE n < 80
+)
+SELECT
+    n,
+    1 + ((n - 61) % 14),
+    11 + ((n - 61) % 14),
+    CASE n % 4 WHEN 0 THEN 'receive' WHEN 1 THEN 'issue' WHEN 2 THEN 'adjust' ELSE 'waste' END,
+    5 + ((n % 9) * 5),
+    CASE n % 4 WHEN 0 THEN 'Supplier delivery reconciliation' WHEN 1 THEN 'Ward medication request' WHEN 2 THEN 'Cycle count adjustment' ELSE 'Damaged or expired stock disposal' END,
+    CASE n % 5 WHEN 0 THEN 'Olivia Martin' WHEN 1 THEN 'James Wilson' WHEN 2 THEN 'Amara Okafor' WHEN 3 THEN 'Daniel Reyes' ELSE 'Priya Nandakumar' END,
+    date('2026-06-01', '+' || n || ' days') || 'T' || printf('%02d', 8 + (n % 9)) || ':30:00'
+FROM numbers;
+
+INSERT INTO staff (name, role, notes)
+WITH RECURSIVE numbers(n) AS (
+    SELECT 13 UNION ALL SELECT n + 1 FROM numbers WHERE n < 40
+)
+SELECT
+    CASE n % 7
+        WHEN 0 THEN 'Avery Patel'
+        WHEN 1 THEN 'Noah Chen'
+        WHEN 2 THEN 'Mia Thompson'
+        WHEN 3 THEN 'Lucas Romero'
+        WHEN 4 THEN 'Zara Ibrahim'
+        WHEN 5 THEN 'Theo Nguyen'
+        ELSE 'Elena Rossi'
+    END || ' ' || printf('%02d', n),
+    CASE WHEN n IN (14, 21, 28, 35) THEN 'manager' ELSE 'staff' END,
+    CASE n % 4 WHEN 0 THEN 'Pharmacy operations manager.' WHEN 1 THEN 'Clinical pharmacy technician.' WHEN 2 THEN 'Dispensary and ward supply coordinator.' ELSE 'Inventory, expiry and cold-chain coordinator.' END
+FROM numbers;
+
+-- Keep medicine stock quantities coherent with all non-expired seeded batches.
+UPDATE medicines
+SET stock_quantity = COALESCE((
+    SELECT SUM(quantity_remaining)
+    FROM batches
+    WHERE batches.medicine_id = medicines.medicine_id
+      AND batches.expiry_date >= date('now')
+), 0);

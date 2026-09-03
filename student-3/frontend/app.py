@@ -135,12 +135,17 @@ def supplier_filters():
     return request.values.get("status", "active"), request.values.get("search", "").strip()
 
 
+def page_filters():
+    """Use the same compact page size for every paginated list."""
+    return {"page": request.values.get("page", "1"), "page_size": "10"}
+
+
 def supplier_form_data():
     return {key: request.form.get(key, "") for key in ("name", "contact_email", "phone", "lead_time_days")}
 
 
 def medicine_filters():
-    return {"search": request.values.get("search", "").strip(), "category": request.values.get("category", "all"), "status": request.values.get("status", "active"), "stock_status": request.values.get("stock_status", "all"), "expiring_within": request.values.get("expiring_within", "")}
+    return {"search": request.values.get("search", "").strip(), "category": request.values.get("category", "all"), "status": request.values.get("status", "active"), "stock_status": request.values.get("stock_status", "all"), "expiring_within": request.values.get("expiring_within", ""), **page_filters()}
 
 
 def medicine_form_data():
@@ -160,15 +165,23 @@ def issue_medicine(medicine_id):
 def receive_medicine(medicine_id):
     try:return jsonify(api_client.receive_stock({"medicine_id":medicine_id,"batch_number":request.form.get("batch_number"),"expiry_date":request.form.get("expiry_date"),"quantity":request.form.get("quantity"),"po_id":request.form.get("po_id") or None},current_identity()["role"]))
     except api_client.BackendError as exc:return str(exc),exc.status
+
+
+def purchase_order_filters():
+    filters = {key: request.values.get(key, "") for key in ("status", "medicine_id", "supplier_id", "ai_generated")}
+    filters["status"] = filters["status"] or "all"
+    return {**filters, **page_filters()}
+
+
 @app.get("/purchase-orders")
 def purchase_orders_list():
-    filters={k:request.values.get(k,"") for k in ("status","medicine_id","supplier_id","ai_generated")}; filters["status"]=filters["status"] or "all"
-    try: payload=api_client.list_purchase_orders(**filters); meds=api_client.list_medicines(status="all",category="all",stock_status="all",search="",expiring_within="")["medicines"]; sups=api_client.list_suppliers("all"); error=None
+    filters=purchase_order_filters()
+    try: payload=api_client.list_purchase_orders(**filters); meds=api_client.list_medicines(status="all",category="all",stock_status="all",search="",expiring_within="",page_size="100")["medicines"]; sups=api_client.list_suppliers("all"); error=None
     except api_client.BackendError as exc:payload={"purchase_orders":[],"summary":{}};meds=[];sups=[];error=str(exc)
     return render_template("purchase_orders_list.html",identity=current_identity(),is_manager=is_manager(),filters=filters,medicines=meds,suppliers=sups,error=error,**payload)
 @app.get("/purchase-orders/table")
 def purchase_orders_table():
-    try:return render_template("partials/purchase_orders_table.html",is_manager=is_manager(),**api_client.list_purchase_orders(**{k:request.values.get(k,"") for k in ("status","medicine_id","supplier_id","ai_generated")}))
+    try:return render_template("partials/purchase_orders_table.html",is_manager=is_manager(),**api_client.list_purchase_orders(**purchase_order_filters()))
     except api_client.BackendError as exc:return f'<tr><td colspan="10">{exc}</td></tr>',exc.status
 @app.get("/purchase-orders/<int:po_id>/detail")
 def po_detail_panel(po_id):
@@ -176,7 +189,7 @@ def po_detail_panel(po_id):
     except api_client.BackendError as exc:return str(exc),exc.status
 @app.get("/purchase-orders/export")
 def po_export():
-    try:rows=api_client.list_purchase_orders(**{k:request.values.get(k,"") for k in ("status","medicine_id","supplier_id","ai_generated")})["purchase_orders"]
+    try:rows=api_client.list_purchase_orders(**{**purchase_order_filters(),"page":"1","page_size":"100"})["purchase_orders"]
     except api_client.BackendError as exc:return str(exc),exc.status
     out=io.StringIO();w=csv.writer(out);w.writerow(["Order #","Medicine","Supplier","Ordered","Received","Unit price","Total","Expected","Status"])
     for r in rows:w.writerow([r["po_id"],r["medicine_name"],r["supplier_name"],r["quantity_ordered"],r["quantity_received"],r["unit_price"],r["total_value"],r.get("expected_at") or "",r["status"]])
@@ -190,9 +203,9 @@ def po_action(po_id,action):
 
 
 def movement_filters():
-    return {"medicine_id": request.values.get("medicine_id", ""), "movement_type": request.values.get("movement_type", "all"), "from": request.values.get("from", ""), "to": request.values.get("to", ""), "performed_by": request.values.get("performed_by", ""), "limit": "100"}
+    return {"medicine_id": request.values.get("medicine_id", ""), "movement_type": request.values.get("movement_type", "all"), "from": request.values.get("from", ""), "to": request.values.get("to", ""), "performed_by": request.values.get("performed_by", ""), "limit": "100", **page_filters()}
 
-def batch_filters(): return {"medicine_id":request.values.get("medicine_id",""),"expiry_status":request.values.get("expiry_status","all"),"search":request.values.get("search",""),"include_empty":request.values.get("include_empty","false")}
+def batch_filters(): return {"medicine_id":request.values.get("medicine_id",""),"expiry_status":request.values.get("expiry_status","all"),"search":request.values.get("search",""),"include_empty":request.values.get("include_empty","false"),**page_filters()}
 
 
 @app.get("/shared/<path:filename>")
@@ -274,7 +287,7 @@ def medicine_reactivate(medicine_id):
 
 @app.get("/medicines/export")
 def medicines_export():
-    try: medicines = api_client.list_medicines(**medicine_filters())["medicines"]
+    try: medicines = api_client.list_medicines(**{**medicine_filters(), "page": "1", "page_size": "100"})["medicines"]
     except api_client.BackendError as exc: return str(exc), exc.status
     output = io.StringIO(); writer = csv.writer(output)
     writer.writerow(["Name", "Category", "Unit", "Unit price", "Available quantity", "Reorder level", "Supplier", "Status"])
@@ -285,7 +298,7 @@ def medicines_export():
 @app.get("/batches")
 def batches():
     filters=batch_filters()
-    try: payload=api_client.list_batches(**filters); medicines=api_client.list_medicines(status="all",category="all",stock_status="all",search="",expiring_within="")["medicines"]; error=None
+    try: payload=api_client.list_batches(**filters); medicines=api_client.list_medicines(status="all",category="all",stock_status="all",search="",expiring_within="",page_size="100")["medicines"]; error=None
     except api_client.BackendError as exc: payload={"batches":[],"summary":{}}; medicines=[]; error=str(exc)
     return render_template("batches.html",identity=current_identity(),is_manager=is_manager(),filters=filters,medicines=medicines,error=error,**payload)
 @app.get("/batches/table")
@@ -294,7 +307,7 @@ def batches_table():
     except api_client.BackendError as exc: return f'<tr><td colspan="8">{exc}</td></tr>',exc.status
 @app.get("/batches/export")
 def batches_export():
-    try: rows=api_client.list_batches(**batch_filters())["batches"]
+    try: rows=api_client.list_batches(**{**batch_filters(),"page":"1","page_size":"100"})["batches"]
     except api_client.BackendError as exc: return str(exc),exc.status
     output=io.StringIO(); w=csv.writer(output); w.writerow(["Medicine","Batch","Expiry","Days","Quantity","Estimated value","Status"])
     for r in rows:w.writerow([r["medicine_name"],r["batch_number"],r["expiry_date"],r["days_until_expiry"],r["quantity_remaining"],r["estimated_value"],r["expiry_status"]])
@@ -306,11 +319,22 @@ def batch_write_off(batch_id):
     except api_client.BackendError as exc:return str(exc),exc.status
 
 
+@app.post("/batches/ai-advisory")
+def batch_ai_advisory():
+    """Render read-only AI advice for either demonstration role."""
+    try:
+        advisory = api_client.expiry_advisory(request.form.get("days_ahead", 30))
+        return render_template("partials/expiry_advisory.html", advisory=advisory,
+                               is_manager=is_manager())
+    except api_client.BackendError as exc:
+        return render_template("partials/expiry_advisory_error.html", error=str(exc))
+
+
 @app.get("/movements")
 def movements():
     filters = movement_filters()
     try:
-        payload, medicine_rows, error = api_client.list_stock_movements(**filters), api_client.list_medicines(status="all", category="all", stock_status="all", search="", expiring_within="")["medicines"], None
+        payload, medicine_rows, error = api_client.list_stock_movements(**filters), api_client.list_medicines(status="all", category="all", stock_status="all", search="", expiring_within="", page_size="100")["medicines"], None
     except api_client.BackendError as exc:
         payload, medicine_rows, error = {"movements": [], "summary": {}}, [], str(exc)
     return render_template("movements.html", title="Stock Movements", identity=current_identity(), filters=filters, medicines=medicine_rows, error=error, **payload)
@@ -332,7 +356,7 @@ def movements_summary():
 
 @app.get("/movements/export")
 def movements_export():
-    try: movements = api_client.list_stock_movements(**movement_filters())["movements"]
+    try: movements = api_client.list_stock_movements(**{**movement_filters(), "page": "1", "page_size": "100"})["movements"]
     except api_client.BackendError as exc: return str(exc), exc.status
     output = io.StringIO(); writer = csv.writer(output)
     writer.writerow(["Date & time", "Medicine", "Batch", "Type", "Quantity", "Reason", "Performed by"])
@@ -344,22 +368,20 @@ def movements_export():
 def suppliers_list():
     status, search = supplier_filters()
     try:
-        suppliers = api_client.list_suppliers(status, search)
+        payload = api_client.list_suppliers(status, search, **page_filters())
         error = None
     except api_client.BackendError as exc:
-        suppliers, error = [], str(exc)
+        payload, error = {"suppliers": [], "pagination": {}}, str(exc)
     return render_template("suppliers_list.html", title="Suppliers", identity=current_identity(),
-                           is_manager=is_manager(), suppliers=suppliers, status=status,
-                           search=search, error=error)
+                           is_manager=is_manager(), status=status, search=search, error=error, **payload)
 
 
 @app.get("/suppliers/table")
 def suppliers_table():
     status, search = supplier_filters()
     try:
-        suppliers = api_client.list_suppliers(status, search)
-        return render_template("partials/suppliers_table.html", suppliers=suppliers,
-                               is_manager=is_manager(), status=status, search=search)
+        return render_template("partials/suppliers_table.html", is_manager=is_manager(),
+                               **api_client.list_suppliers(status, search, **page_filters()))
     except api_client.BackendError as exc:
         return f'<tr><td colspan="8">{exc}</td></tr>', exc.status
 

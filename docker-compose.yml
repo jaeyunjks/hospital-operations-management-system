@@ -196,6 +196,9 @@ services:
     environment:
       PORT: 5300
       DATABASE_URL: http://student-3-database:6300
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      OLLAMA_TIMEOUT: 90
       FLASK_DEBUG: 0
     ports: ["5300:5300"]
     depends_on:
@@ -216,6 +219,7 @@ services:
     environment:
       PORT: 3300
       BACKEND_API_URL: http://student-3-backend:5300
+      BACKEND_API_TIMEOUT: 120
       FLASK_SECRET_KEY: student3-compose-development-secret
       FLASK_DEBUG: 0
     ports: ["3300:3300"]

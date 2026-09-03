@@ -11,12 +11,17 @@ import urllib.request
 
 from flask import Flask, jsonify, request
 
+from services.ai_client import health_check
+from services.expiry_advisory import advisory as expiry_advisory
+
 DATABASE_SERVICE_URL = os.environ.get(
     "DATABASE_URL", os.environ.get("DATABASE_SERVICE_URL", "http://localhost:6300")
 ).rstrip("/")
 PORT = int(os.environ.get("PORT", os.environ.get("BACKEND_PORT", "5300")))
 MANAGER_ROLE = "Pharmacy Manager"
 OPEN_STATUSES = {"pending_approval", "approved", "ordered"}
+DEFAULT_PAGE_SIZE = 10
+MAX_PAGE_SIZE = 100
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 app = Flask(__name__)
 
@@ -29,6 +34,31 @@ class DatabaseServiceError(RuntimeError):
 
 def fail(message, status):
     return jsonify({"error": message}), status
+
+
+def pagination_from_request():
+    """Validate common list pagination after the endpoint's filters apply."""
+    try:
+        page = int(request.args.get("page", 1))
+        page_size = int(request.args.get("page_size", DEFAULT_PAGE_SIZE))
+    except (TypeError, ValueError):
+        raise ValueError("page and page_size must be positive integers") from None
+    if page < 1 or page_size < 1 or page_size > MAX_PAGE_SIZE:
+        raise ValueError(f"page must be positive and page_size must be between 1 and {MAX_PAGE_SIZE}")
+    return page, page_size
+
+
+def paginate(rows, page, page_size):
+    """Return the requested page and metadata for already-filtered rows."""
+    total_items = len(rows)
+    total_pages = max(1, (total_items + page_size - 1) // page_size)
+    page = min(page, total_pages)
+    start = (page - 1) * page_size
+    return rows[start:start + page_size], {
+        "page": page, "page_size": page_size, "total_items": total_items,
+        "total_pages": total_pages, "has_previous": page > 1,
+        "has_next": page < total_pages,
+    }
 
 
 def database_request(path, method="GET", payload=None):
@@ -166,6 +196,30 @@ def health():
         return jsonify({"status": "degraded", "database_service": "unavailable"}), 503
 
 
+@app.get("/api/ai/health")
+def ai_health():
+    """Expose a non-crashing operational check for the shared Ollama runtime."""
+    return jsonify(health_check())
+
+
+@app.post("/api/ai/expiry-advisory")
+def ai_expiry_advisory():
+    """Return expiry advice only; this endpoint never changes inventory data."""
+    payload = request.get_json(silent=True) or {}
+    try:
+        days_ahead = int(payload.get("days_ahead", 30))
+        if not 0 <= days_ahead <= 365:
+            raise ValueError
+    except (TypeError, ValueError):
+        return fail("days_ahead must be an integer between 0 and 365", 400)
+    try:
+        # Read-only orchestration: the advisory does not write batches, medicines, or movements.
+        result, _input, _model_result = expiry_advisory(database_request, days_ahead)
+        return jsonify(result)
+    except DatabaseServiceError as exc:
+        return fail(str(exc), exc.status)
+
+
 # Existing demo-picker proxies, retained while the supplier slice is added.
 @app.get("/api/staff")
 def staff_list():
@@ -181,7 +235,10 @@ def staff_detail(staff_id):
 
 @app.get("/api/suppliers")
 def supplier_list():
-    try: return jsonify({"suppliers": suppliers_for(request.args.get("status", "active"), request.args.get("search", ""))})
+    try:
+        rows = suppliers_for(request.args.get("status", "active"), request.args.get("search", ""))
+        rows, pagination = paginate(rows, *pagination_from_request())
+        return jsonify({"suppliers": rows, "pagination": pagination})
     except ValueError as exc: return fail(str(exc), 400)
     except DatabaseServiceError as exc: return fail(str(exc), exc.status)
 
@@ -240,7 +297,8 @@ def medicine_list():
     try:
         categories = sorted({row["category"] for row in database_request("/medicines")})
         rows = medicines_for(request.args.get("search", ""), request.args.get("category", "all"), request.args.get("status", "active"), request.args.get("stock_status", "all"), request.args.get("expiring_within"))
-        return jsonify({"medicines": rows, "categories": categories})
+        rows, pagination = paginate(rows, *pagination_from_request())
+        return jsonify({"medicines": rows, "categories": categories, "pagination": pagination})
     except ValueError as exc: return fail(str(exc), 400)
     except DatabaseServiceError as exc: return fail(str(exc), exc.status)
 
@@ -336,7 +394,9 @@ def stock_movements():
         for row in rows:
             summary[row["movement_type"]]["count"] += 1
             summary[row["movement_type"]]["quantity"] += row["quantity"]
-        return jsonify({"movements": rows[:limit], "summary": summary})
+        rows, pagination = paginate(rows[:limit], *pagination_from_request())
+        return jsonify({"movements": rows, "summary": summary, "pagination": pagination})
+    except ValueError as exc: return fail(str(exc), 400)
     except DatabaseServiceError as exc: return fail(str(exc), exc.status)
 
 
@@ -369,7 +429,8 @@ def batches():
     try:
         medicine_id=request.args.get("medicine_id",type=int)
         rows,summary=batch_rows(request.args.get("expiry_status","all"),medicine_id,request.args.get("search",""),request.args.get("include_empty","false")=="true")
-        return jsonify({"batches":rows,"summary":summary})
+        rows, pagination = paginate(rows, *pagination_from_request())
+        return jsonify({"batches":rows,"summary":summary,"pagination":pagination})
     except ValueError as exc: return fail(str(exc),400)
     except DatabaseServiceError as exc: return fail(str(exc),exc.status)
 
@@ -468,7 +529,11 @@ def orders_for_filters():
 @app.get("/api/purchase-orders")
 def purchase_orders():
     try:
-        rows,summary=orders_for_filters(); return jsonify({"purchase_orders":rows,"summary":summary})
+        rows,summary=orders_for_filters()
+        rows.sort(key=lambda row: row["created_at"], reverse=True)
+        rows, pagination = paginate(rows, *pagination_from_request())
+        return jsonify({"purchase_orders":rows,"summary":summary,"pagination":pagination})
+    except ValueError as exc:return fail(str(exc),400)
     except DatabaseServiceError as exc:return fail(str(exc),exc.status)
 @app.get("/api/purchase-orders/open")
 def open_purchase_orders():

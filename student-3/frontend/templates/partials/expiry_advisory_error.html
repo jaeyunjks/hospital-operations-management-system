@@ -1,0 +1,10 @@
+<div class="alert alert--danger" role="alert">
+  <div>
+    <p class="alert__title">Expiry advisory could not be loaded</p>
+    <p class="alert__body">{{ error }}. No inventory data was changed.</p>
+  </div>
+</div>
+<form hx-post="/batches/ai-advisory" hx-target="#expiry-advisory-results" hx-swap="innerHTML" hx-indicator="#expiry-advisory-loading">
+  <input type="hidden" name="days_ahead" value="30">
+  <button class="btn btn-secondary" type="submit">Try again</button>
+</form>

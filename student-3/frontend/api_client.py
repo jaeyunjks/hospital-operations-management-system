@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
 
 API_BASE_URL = os.environ.get("BACKEND_API_URL", "http://localhost:5300").rstrip("/")
+try:
+    BACKEND_API_TIMEOUT = float(os.environ.get("BACKEND_API_TIMEOUT", "120"))
+except ValueError:
+    BACKEND_API_TIMEOUT = 120.0
 
 
 class BackendError(RuntimeError):
@@ -19,20 +24,26 @@ class BackendError(RuntimeError):
 
 
 def _request(path: str, method: str = "GET", payload: dict | None = None,
-             role: str | None = None):
+             role: str | None = None, timeout: float = 5):
     data = json.dumps(payload).encode() if payload is not None else None
     headers = {"Content-Type": "application/json"} if data else {}
     if role:
         headers["X-HOMS-Role"] = role
     call = urllib.request.Request(f"{API_BASE_URL}{path}", data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(call, timeout=5) as response:
+        with urllib.request.urlopen(call, timeout=timeout) as response:
             return json.load(response)
     except urllib.error.HTTPError as exc:
         try: message = json.load(exc).get("error", "Backend request failed")
         except (json.JSONDecodeError, AttributeError): message = "Backend request failed"
         raise BackendError(message, exc.code) from exc
-    except (urllib.error.URLError, json.JSONDecodeError) as exc:
+    except (socket.timeout, TimeoutError):
+        raise BackendError(f"Backend request timed out after {timeout:g} seconds", 504) from None
+    except urllib.error.URLError as exc:
+        if isinstance(getattr(exc, "reason", None), socket.timeout):
+            raise BackendError(f"Backend request timed out after {timeout:g} seconds", 504) from exc
+        raise BackendError("Backend service unavailable") from exc
+    except (json.JSONDecodeError, OSError) as exc:
         raise BackendError("Backend service unavailable") from exc
 
 
@@ -56,9 +67,15 @@ def get_staff(staff_id: int) -> dict:
     return staff
 
 
-def list_suppliers(status="active", search=""):
-    payload = _request("/api/suppliers?" + urllib.parse.urlencode({"status": status, "search": search}))
-    return payload["suppliers"]
+def list_suppliers(status="active", search="", **pagination):
+    """Return paginated data when page arguments are supplied, otherwise all rows.
+
+    Forms and dropdowns need the complete supplier list; list pages pass page
+    arguments and receive backend pagination metadata.
+    """
+    query = {"status": status, "search": search, **(pagination or {"page_size": 100})}
+    payload = _request("/api/suppliers?" + urllib.parse.urlencode(query))
+    return payload if pagination else payload["suppliers"]
 
 
 def get_supplier(supplier_id):
@@ -102,6 +119,12 @@ def reactivate_medicine(medicine_id, role):
 
 def list_stock_movements(**filters):
     return _request("/api/stock/movements?" + urllib.parse.urlencode(filters))
+
+
+def expiry_advisory(days_ahead=30):
+    """Request read-only expiry advice from the backend, never Ollama directly."""
+    return _request("/api/ai/expiry-advisory", "POST", {"days_ahead": days_ahead},
+                    timeout=BACKEND_API_TIMEOUT)
 
 def list_batches(**filters): return _request("/api/batches?" + urllib.parse.urlencode(filters))
 def write_off_batch(batch_id, reason, role): return _request(f"/api/batches/{batch_id}/write-off", "POST", {"reason":reason}, role)
