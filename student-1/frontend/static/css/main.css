@@ -108,7 +108,7 @@
   --control-pad-lg: 8px 14px;
   --control-height: 30px;
   --control-height-lg: 34px;
-  --sidenav-width: 232px;
+  --sidenav-width: 208px;
   --content-max: 1040px;
   --prose-max: 780px;
 
@@ -177,18 +177,27 @@ a:focus-visible {
 
 .app-shell {
   display: grid;
-  grid-template-columns: var(--sidenav-width) minmax(0, 1fr) 320px;
+  grid-template-columns: var(--sidenav-width) minmax(0, 1fr) 280px;
   min-height: 100vh;
   background: var(--surface-page);
 }
 
 .side-nav {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
   border-right: var(--border-strong);
   background: var(--surface-card);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   padding: 20px 0 16px;
+}
+
+.side-nav > nav {
+  flex: 1;
 }
 
 .nav-brand {
@@ -215,7 +224,7 @@ a:focus-visible {
 
 .nav-list {
   list-style: none;
-  padding: 16px 0 0;
+  padding: 0;
   margin: 0;
 }
 
@@ -258,8 +267,8 @@ a:focus-visible {
 }
 
 .page-shell {
-  padding: 20px 24px 24px;
-  max-width: var(--content-max);
+  padding: var(--space-8) var(--gutter) var(--space-9);
+  min-width: 0;
   width: 100%;
   margin: 0 auto;
 }
@@ -268,7 +277,7 @@ a:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: var(--header-pad);
+  padding: var(--space-8);
   background: var(--surface-card);
   border: var(--border-hair);
   margin-bottom: 20px;
@@ -315,6 +324,7 @@ h3 {
 
 .header-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -504,6 +514,8 @@ tbody tr:hover {
 }
 
 .assist-rail {
+  min-width: 0;
+  align-self: start;
   border-left: var(--border-strong);
   background: var(--surface-card);
   padding: 20px 16px;
@@ -548,6 +560,7 @@ tbody tr:hover {
 }
 
 .field-group {
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -609,8 +622,8 @@ tbody tr:hover {
 
 .detail-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 0 20px;
   padding: 20px;
 }
 
@@ -618,9 +631,10 @@ tbody tr:hover {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  padding: 12px 12px 12px 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding: 12px 0;
   border-bottom: var(--border-hair);
-  margin-right: 20px;
 }
 
 .detail-item span {
@@ -644,6 +658,7 @@ tbody tr:hover {
 
 .summary-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-top: 16px;
 }
@@ -692,6 +707,8 @@ tbody tr:hover {
 }
 
 .note-item p {
+  min-width: 0;
+  overflow-wrap: anywhere;
   margin: 0;
   color: var(--text-body);
 }
@@ -758,8 +775,19 @@ tbody tr:hover {
   }
 
   .side-nav {
+    position: static;
+    height: auto;
     border-right: none;
     border-bottom: var(--border-strong);
+  }
+
+  .page-shell {
+    padding: var(--space-7);
+  }
+
+  .form-grid,
+  .search-form {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .metrics-row {
