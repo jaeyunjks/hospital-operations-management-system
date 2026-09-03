@@ -107,3 +107,8 @@ def list_batches(**filters): return _request("/api/batches?" + urllib.parse.urle
 def write_off_batch(batch_id, reason, role): return _request(f"/api/batches/{batch_id}/write-off", "POST", {"reason":reason}, role)
 def issue_stock(payload, role): return _request("/api/stock/issue", "POST", payload, role)
 def receive_stock(payload, role): return _request("/api/stock/receive", "POST", payload, role)
+def list_purchase_orders(**filters): return _request("/api/purchase-orders?"+urllib.parse.urlencode(filters))
+def open_purchase_orders(medicine_id): return _request("/api/purchase-orders/open?"+urllib.parse.urlencode({"medicine_id":medicine_id}))["purchase_orders"]
+def get_purchase_order(po_id): return _request(f"/api/purchase-orders/{po_id}")["purchase_order"]
+def save_purchase_order(payload,role,po_id=None): return _request(f"/api/purchase-orders/{po_id}" if po_id else "/api/purchase-orders","PUT" if po_id else "POST",payload,role)
+def transition_purchase_order(po_id,action,reason,role): return _request(f"/api/purchase-orders/{po_id}/{action}","POST",{"decision_reason":reason},role)

@@ -160,6 +160,33 @@ def issue_medicine(medicine_id):
 def receive_medicine(medicine_id):
     try:return jsonify(api_client.receive_stock({"medicine_id":medicine_id,"batch_number":request.form.get("batch_number"),"expiry_date":request.form.get("expiry_date"),"quantity":request.form.get("quantity"),"po_id":request.form.get("po_id") or None},current_identity()["role"]))
     except api_client.BackendError as exc:return str(exc),exc.status
+@app.get("/purchase-orders")
+def purchase_orders_list():
+    filters={k:request.values.get(k,"") for k in ("status","medicine_id","supplier_id","ai_generated")}; filters["status"]=filters["status"] or "all"
+    try: payload=api_client.list_purchase_orders(**filters); meds=api_client.list_medicines(status="all",category="all",stock_status="all",search="",expiring_within="")["medicines"]; sups=api_client.list_suppliers("all"); error=None
+    except api_client.BackendError as exc:payload={"purchase_orders":[],"summary":{}};meds=[];sups=[];error=str(exc)
+    return render_template("purchase_orders_list.html",identity=current_identity(),is_manager=is_manager(),filters=filters,medicines=meds,suppliers=sups,error=error,**payload)
+@app.get("/purchase-orders/table")
+def purchase_orders_table():
+    try:return render_template("partials/purchase_orders_table.html",is_manager=is_manager(),**api_client.list_purchase_orders(**{k:request.values.get(k,"") for k in ("status","medicine_id","supplier_id","ai_generated")}))
+    except api_client.BackendError as exc:return f'<tr><td colspan="10">{exc}</td></tr>',exc.status
+@app.get("/purchase-orders/<int:po_id>/detail")
+def po_detail_panel(po_id):
+    try:return render_template("partials/purchase_order_detail.html",order=api_client.get_purchase_order(po_id))
+    except api_client.BackendError as exc:return str(exc),exc.status
+@app.get("/purchase-orders/export")
+def po_export():
+    try:rows=api_client.list_purchase_orders(**{k:request.values.get(k,"") for k in ("status","medicine_id","supplier_id","ai_generated")})["purchase_orders"]
+    except api_client.BackendError as exc:return str(exc),exc.status
+    out=io.StringIO();w=csv.writer(out);w.writerow(["Order #","Medicine","Supplier","Ordered","Received","Unit price","Total","Expected","Status"])
+    for r in rows:w.writerow([r["po_id"],r["medicine_name"],r["supplier_name"],r["quantity_ordered"],r["quantity_received"],r["unit_price"],r["total_value"],r.get("expected_at") or "",r["status"]])
+    return Response(out.getvalue(),mimetype="text/csv",headers={"Content-Disposition":f"attachment; filename=purchase_orders_{date.today().isoformat()}.csv"})
+@app.post("/purchase-orders/<int:po_id>/<action>")
+def po_action(po_id,action):
+    if not is_manager(): return "Pharmacy Manager role required",403
+    try: api_client.transition_purchase_order(po_id,action,request.form.get("decision_reason",""),current_identity()["role"])
+    except api_client.BackendError as exc:return str(exc),exc.status
+    return redirect(url_for("purchase_orders_list"))
 
 
 def movement_filters():
@@ -311,15 +338,6 @@ def movements_export():
     writer.writerow(["Date & time", "Medicine", "Batch", "Type", "Quantity", "Reason", "Performed by"])
     for movement in movements: writer.writerow([movement["created_at"], movement.get("medicine_name") or "", movement.get("batch_number") or "", movement["movement_type"], movement["quantity"], movement.get("reason") or "", movement.get("performed_by") or ""])
     return Response(output.getvalue(), mimetype="text/csv", headers={"Content-Disposition": f"attachment; filename=stock_movements_{date.today().isoformat()}.csv"})
-
-
-@app.get("/purchase-orders")
-def purchase_orders_list():
-    return render_page(
-        "purchase_orders_list.html",
-        "Purchase Orders",
-        "The purchase orders list will be added here later.",
-    )
 
 
 @app.get("/suppliers")

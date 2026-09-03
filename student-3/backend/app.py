@@ -448,5 +448,78 @@ def receive_stock():
     except DatabaseServiceError as exc:return fail(str(exc),exc.status)
 
 
+def enrich_order(order, medicines, suppliers):
+    medicine=next((m for m in medicines if m["medicine_id"]==order["medicine_id"]),{})
+    supplier=next((s for s in suppliers if s["supplier_id"]==order["supplier_id"]),{})
+    total=(order.get("quantity_ordered") or 0)*(order.get("unit_price") or 0)
+    return {**order,"medicine_name":medicine.get("name"),"medicine_unit":medicine.get("unit"),"supplier_name":supplier.get("name"),"supplier_lead_time_days":supplier.get("lead_time_days"),"total_value":round(total,2),"outstanding":order["quantity_ordered"]-order["quantity_received"],"is_overdue":bool(order.get("expected_at") and parse_date(order["expected_at"])<date.today() and order["status"] not in {"received","rejected","cancelled"})}
+
+def orders_for_filters():
+    orders=database_request("/purchase_orders"); meds=database_request("/medicines"); sups=database_request("/suppliers")
+    status=request.args.get("status","all"); med=request.args.get("medicine_id",type=int); sup=request.args.get("supplier_id",type=int); ai=request.args.get("ai_generated")
+    rows=[enrich_order(o,meds,sups) for o in orders if (status=="all" or o["status"]==status) and (not med or o["medicine_id"]==med) and (not sup or o["supplier_id"]==sup) and (ai not in {"true","1"} or o["ai_generated"]==1)]
+    summary={};
+    for row in rows:
+        summary.setdefault(row["status"],{"count":0,"total_value":0}); summary[row["status"]]["count"]+=1; summary[row["status"]]["total_value"]+=row["total_value"]
+    return rows,summary
+
+@app.get("/api/purchase-orders")
+def purchase_orders():
+    try:
+        rows,summary=orders_for_filters(); return jsonify({"purchase_orders":rows,"summary":summary})
+    except DatabaseServiceError as exc:return fail(str(exc),exc.status)
+@app.get("/api/purchase-orders/open")
+def open_purchase_orders():
+    try:
+        rows,_=orders_for_filters(); return jsonify({"purchase_orders":[r for r in rows if r["status"] in {"approved","ordered"} and r["outstanding"]>0]})
+    except DatabaseServiceError as exc:return fail(str(exc),exc.status)
+@app.get("/api/purchase-orders/<int:po_id>")
+def purchase_order_detail(po_id):
+    try:
+        order=database_request(f"/purchase_orders/{po_id}"); return jsonify({"purchase_order":enrich_order(order,database_request("/medicines"),database_request("/suppliers"))})
+    except DatabaseServiceError as exc:return fail(str(exc),exc.status)
+
+def transition(po_id,target,reason=""):
+    if denied:=require_manager():return denied
+    try:
+        order=database_request(f"/purchase_orders/{po_id}"); allowed={"approved":{"pending_approval"},"rejected":{"pending_approval"},"ordered":{"approved"},"cancelled":{"draft","pending_approval","approved","ordered"}}
+        if order["status"] not in allowed[target]: return fail(f"Cannot set {target} from {order['status']}",409)
+        if target in {"rejected","cancelled"} and not reason.strip(): return fail("decision_reason is required",400)
+        return jsonify(database_request(f"/purchase_orders/{po_id}","PUT",{"status":target,"approved_by":request.headers.get("X-HOMS-Name","Pharmacy Manager"),"decision_reason":reason or None}))
+    except DatabaseServiceError as exc:return fail(str(exc),exc.status)
+@app.post("/api/purchase-orders/<int:po_id>/approve")
+def po_approve(po_id):return transition(po_id,"approved",(request.get_json(silent=True) or {}).get("decision_reason", ""))
+@app.post("/api/purchase-orders/<int:po_id>/reject")
+def po_reject(po_id):return transition(po_id,"rejected",(request.get_json(silent=True) or {}).get("decision_reason", ""))
+@app.post("/api/purchase-orders/<int:po_id>/mark-ordered")
+def po_ordered(po_id):return transition(po_id,"ordered")
+@app.post("/api/purchase-orders/<int:po_id>/cancel")
+def po_cancel(po_id):return transition(po_id,"cancelled",(request.get_json(silent=True) or {}).get("decision_reason", ""))
+
+def validate_order(payload):
+    try:
+        quantity=int(payload.get("quantity_ordered")); price=float(payload.get("unit_price")); medicine_id=int(payload.get("medicine_id")); supplier_id=int(payload.get("supplier_id"))
+        if quantity<=0 or price<0: raise ValueError
+    except (ValueError,TypeError): raise ValueError("quantity_ordered must be positive and unit_price must be >= 0") from None
+    medicine=database_request(f"/medicines/{medicine_id}"); supplier=database_request(f"/suppliers/{supplier_id}")
+    if medicine["status"]!="active" or supplier["status"]!="active": raise ValueError("medicine and supplier must be active")
+    return {"medicine_id":medicine_id,"supplier_id":supplier_id,"quantity_ordered":quantity,"quantity_received":int(payload.get("quantity_received",0)),"unit_price":price,"status":payload.get("status","draft"),"created_by":payload.get("created_by","Pharmacy Manager"),"approved_by":payload.get("approved_by"),"ai_generated":0,"ai_reasoning":None,"decision_reason":payload.get("decision_reason"),"created_at":payload.get("created_at",date.today().isoformat()+"T00:00:00"),"expected_at":payload.get("expected_at")}
+@app.post("/api/purchase-orders")
+def po_create():
+    if denied:=require_manager():return denied
+    try:return jsonify(database_request("/purchase_orders","POST",validate_order(request.get_json(silent=True) or {}))),201
+    except ValueError as exc:return fail(str(exc),400)
+    except DatabaseServiceError as exc:return fail(str(exc),exc.status)
+@app.put("/api/purchase-orders/<int:po_id>")
+def po_update(po_id):
+    if denied:=require_manager():return denied
+    try:
+        existing=database_request(f"/purchase_orders/{po_id}")
+        if existing["status"] not in {"draft","pending_approval"}:return fail("Only draft or pending approval orders can be edited",409)
+        return jsonify(database_request(f"/purchase_orders/{po_id}","PUT",validate_order({**existing,**(request.get_json(silent=True) or {})})))
+    except ValueError as exc:return fail(str(exc),400)
+    except DatabaseServiceError as exc:return fail(str(exc),exc.status)
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=PORT, debug=False)
