@@ -1,0 +1,264 @@
+{#
+  consultation_form.html - a doctor raises a consultation request, and can
+  withdraw one raised in error.
+
+  app.py wiring (route "/consultations/new", GET + POST):
+    * GET  -> data = None, error = None: a blank form.
+    * POST -> app.py forwards the form to POST /api/consultations/ and
+              re-renders this template with:
+                data  = {"consultation_request": {...}}  on success
+                error = "<backend message>"              on failure
+      The whole page comes back; the HTMX submit pulls only #consult-result
+      out of it (hx-select), so a rejected submit keeps the form.
+
+  Backend rules that shape this screen (routes/consultations.py):
+    * requesting_doctor_id is taken from the caller, never the form.
+    * the clinical record must exist AND belong to the requesting doctor.
+    * the admission must be active, or the create is refused (409).
+    * a doctor may CANCEL (DELETE /api/consultations/<id>) only while the
+      request is still 'requested' - once a specialist opens it ('in_review')
+      or it closes, it is read-only.
+
+  Status values: requested, in_review, completed, cancelled.
+
+  The cancel control posts straight to the backend API because app.py has no
+  proxy route for DELETE yet; a thin /consultations/<id>/cancel route on the
+  frontend would be the tidier long-term home for it.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOMS — Consultation request</title>
+  <meta name="description" content="Clinical Staff Management — a doctor raises a specialist consultation request.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+
+  <link rel="stylesheet" href="/static/shared/css/main.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  {% set consult = data.consultation_request if data else none %}
+  {% set saved = consult is not none and consult.request_id is defined %}
+  {% set can_cancel = saved and consult.status == 'requested' %}
+
+  <div class="app">
+
+    <header class="app-header">
+      <a class="app-header__brand" href="/">
+        HOMS
+        <span class="app-header__context">Clinical Staff</span>
+      </a>
+      <span class="app-header__meta u-label">Signed in · {{ role }}</span>
+    </header>
+
+    <div class="app-body">
+
+      <nav class="app-sidenav" aria-label="Clinical Staff Management">
+        <div class="app-sidenav__group">
+          <span class="app-sidenav__label">Workspace</span>
+          <a class="sidenav-link" href="/">Dashboard</a>
+          <a class="sidenav-link is-active" href="/consultations/new" aria-current="page">Request consult</a>
+          <a class="sidenav-link" href="/consultations/queue">Consultation queue</a>
+        </div>
+      </nav>
+
+      <main class="app-main" id="main">
+        <div class="page page--prose">
+
+          <div class="page-header">
+            <div>
+              <span class="page-header__eyebrow">Clinical Staff Management</span>
+              <h1 class="page-header__title">Raise a consultation request</h1>
+              <p class="page-header__description">
+                Ask a specialist to review one of your clinical records. The
+                request must come from a record you own, on an active admission.
+              </p>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel__header">
+              <h2 class="panel__title">Request details</h2>
+              {% if saved %}<span class="panel__meta">#{{ consult.request_id }}</span>{% endif %}
+            </div>
+
+            <div class="panel__body">
+              {#
+                Submits to the frontend's own /consultations/new (which calls
+                the backend and re-renders this page). hx-select grabs just
+                #consult-result - no full reload, form kept on error.
+              #}
+              <form class="stack"
+                    id="consult-form"
+                    hx-post="/consultations/new"
+                    hx-target="#consult-result"
+                    hx-select="#consult-result"
+                    hx-swap="outerHTML"
+                    hx-disabled-elt="#consult-submit">
+
+                <div class="grid grid--2">
+                  <label class="field">
+                    <span class="field__label">Clinical record ID</span>
+                    <input class="input" type="number" name="clinical_record_id" required
+                           value="{{ consult.clinical_record_id if consult else request.form.get('clinical_record_id', '') }}">
+                    <span class="field__hint">One of your own records.</span>
+                  </label>
+                  <label class="field">
+                    <span class="field__label">Specialist ID</span>
+                    <input class="input" type="number" name="specialist_id" required
+                           value="{{ consult.specialist_id if consult else request.form.get('specialist_id', '') }}">
+                    <span class="field__hint">Staff ID of the specialist to ask.</span>
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span class="field__label">Reason for request</span>
+                  <textarea class="textarea" name="reason_for_request" rows="4" required
+                            placeholder="What you want the specialist to review, and why.">{{ consult.reason_for_request if consult else request.form.get('reason_for_request', '') }}</textarea>
+                  <span class="field__hint">Required.</span>
+                </label>
+
+                <div class="row">
+                  <button class="btn-primary" type="submit" id="consult-submit">Send request</button>
+                  <span class="htmx-indicator u-label">Sending…</span>
+                  <span class="spacer"></span>
+                  <a class="btn-ghost" href="/">Cancel</a>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {#
+            Result region - the only node HTMX swaps in after a submit. Empty
+            on the first GET. After a successful create it also carries the
+            "withdraw" control, usable only while the request is 'requested'.
+          #}
+          <div id="consult-result">
+            {% if error %}
+              <div class="alert alert--danger" role="alert">
+                <div>
+                  <span class="alert__title">Request not sent</span>
+                  <p class="alert__body">{{ error }}</p>
+                </div>
+              </div>
+            {% elif saved %}
+              <div class="alert alert--success" role="alert">
+                <div>
+                  <span class="alert__title">Request #{{ consult.request_id }} sent</span>
+                  <p class="alert__body">
+                    To specialist {{ consult.specialist_id }}, for record
+                    {{ consult.clinical_record_id }}. Current status:
+                    <span class="badge-info">{{ consult.status }}</span>
+                  </p>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel__header">
+                  <h2 class="panel__title">Raised in error?</h2>
+                </div>
+                <div class="panel__body">
+                  {% if can_cancel %}
+                    <p class="u-muted">
+                      You can withdraw this request while it is still
+                      <span class="badge-neutral">requested</span>. Once the
+                      specialist opens it, it can no longer be cancelled.
+                    </p>
+                    {#
+                      app.py has no proxy for the cancel DELETE, so it goes
+                      straight to the backend API (JSON response). The script
+                      at the end of <body> handles the outcome: on success show
+                      a withdrawn note, on failure the backend's message.
+                    #}
+                    <form data-cancel-form
+                          hx-delete="http://localhost:5200/api/consultations/{{ consult.request_id }}"
+                          hx-headers='{"X-User-Role": "{{ role }}"}'
+                          hx-disabled-elt="find button"
+                          hx-confirm="Withdraw consultation request #{{ consult.request_id }}?">
+                      <button class="btn-danger" type="submit">Withdraw request</button>
+                      <span class="htmx-indicator u-label">Withdrawing…</span>
+                    </form>
+                    <div data-cancel-outcome aria-live="polite"></div>
+                  {% else %}
+                    <p class="u-muted">
+                      This request is <span class="badge-neutral">{{ consult.status }}</span>
+                      and can no longer be withdrawn.
+                    </p>
+                  {% endif %}
+                </div>
+              </div>
+            {% endif %}
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  {#
+    Cancel-form outcome. The withdraw DELETE hits the backend API directly and
+    returns JSON, so htmx can't swap it in. On success replace the withdraw
+    control with a confirmation; on failure show the backend's message. All
+    markup uses the shared .alert / .badge classes.
+  #}
+  <script>
+    document.body.addEventListener('htmx:afterRequest', function (event) {
+      var form = event.target.closest && event.target.closest('[data-cancel-form]');
+      if (!form) return;
+
+      var outcome = form.parentNode.querySelector('[data-cancel-outcome]');
+
+      if (event.detail.successful) {
+        form.remove();
+        if (outcome) {
+          var ok = document.createElement('div');
+          ok.className = 'alert alert--success';
+          ok.setAttribute('role', 'alert');
+          var okInner = document.createElement('div');
+          var okTitle = document.createElement('span');
+          okTitle.className = 'alert__title';
+          okTitle.textContent = 'Request withdrawn';
+          var okBody = document.createElement('p');
+          okBody.className = 'alert__body';
+          okBody.textContent = 'The consultation request has been cancelled.';
+          okInner.appendChild(okTitle);
+          okInner.appendChild(okBody);
+          ok.appendChild(okInner);
+          outcome.textContent = '';
+          outcome.appendChild(ok);
+        }
+        return;
+      }
+
+      var message = 'Could not withdraw the request.';
+      try {
+        message = JSON.parse(event.detail.xhr.responseText).error || message;
+      } catch (e) { /* keep default */ }
+
+      if (!outcome) return;
+      outcome.textContent = '';
+      var err = document.createElement('div');
+      err.className = 'alert alert--danger';
+      err.setAttribute('role', 'alert');
+      var errInner = document.createElement('div');
+      var errTitle = document.createElement('span');
+      errTitle.className = 'alert__title';
+      errTitle.textContent = 'Not withdrawn';
+      var errBody = document.createElement('p');
+      errBody.className = 'alert__body';
+      errBody.textContent = message;
+      errInner.appendChild(errTitle);
+      errInner.appendChild(errBody);
+      err.appendChild(errInner);
+      outcome.appendChild(err);
+    });
+  </script>
+</body>
+</html>

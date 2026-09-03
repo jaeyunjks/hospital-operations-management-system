@@ -1,0 +1,420 @@
+{#
+  patient_summary.html - review an AI-generated admission summary.
+
+  SCOPE OF THIS SCREEN
+  --------------------
+  Doctors and specialists reviewing a 'clinical' or 'consultation' scope
+  summary. The nurse 'care_tasks' flow is a different screen and is not
+  handled here.
+
+  app.py wiring (route "/patients/<admission_id>/summary", GET + POST):
+    GET  -> data = {"admission_id": N, "surgery_requests": [...], "ai_summary": None}
+    POST -> app.py calls POST /api/ai/summarise-admission {"admission_id": N}
+            and re-renders with data.ai_summary set to that response:
+              { summary_id, summary, summary_scope, review_status, ai_unavailable }
+    error is a message string on any backend failure.
+
+  DESIGN-SYSTEM RULES ENFORCED HERE (shared/frontend/css/components.css, AI section)
+    * the generated text sits in an .ai-panel and carries an .ai-label
+      ("AI-GENERATED") so its origin is unambiguous;
+    * an .ai-basis line always states what data it was built from
+      (this admission, and the scope);
+    * the text is an EDITABLE <textarea> draft, never plain read-only copy,
+      and the model commits nothing - the only write is the human review below;
+    * a required "I have reviewed every line of this draft" checkbox must be
+      ticked before Approve or Reject will fire.
+
+  REVIEW ENDPOINT
+    PUT /api/ai/summaries/<summary_id>/review
+      body { "review_status": "accepted" | "edited" | "rejected",
+             "reviewed_by_staff_id": <id> }
+    review_status is NEVER anything but those three, and never 'pending'.
+    Approve  -> 'edited'   if the textarea differs from the original text
+                'accepted' if it is byte-for-byte unchanged
+    Reject   -> 'rejected'
+    app.py has no proxy for this PUT, so it is called directly (JSON). The
+    reviewing identity the backend trusts is the X-User-Role header; the
+    reviewed_by_staff_id in the body is the auth.py stand-in id for that role
+    and is sent to satisfy the documented contract.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOMS — AI summary review</title>
+  <meta name="description" content="Clinical Staff Management — review, edit and sign off an AI-generated admission summary.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+
+  <link rel="stylesheet" href="/static/shared/css/main.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/json-enc.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  {% set admission_id = data.admission_id if data else none %}
+  {% set ai = data.ai_summary if data else none %}
+  {% set has_summary = ai is not none and ai.summary_id is defined %}
+  {% set scope = ai.summary_scope if ai else none %}
+
+  {#
+    Stand-in staff id per role, mirroring backend/auth.py's _SAMPLE_USERS.
+    The backend ultimately trusts the X-User-Role header, not this value.
+  #}
+  {% set staff_id_by_role = {'doctor': 1, 'specialist': 3} %}
+  {% set reviewer_id = staff_id_by_role.get(role, 0) %}
+
+  <div class="app">
+
+    <header class="app-header">
+      <a class="app-header__brand" href="/">
+        HOMS
+        <span class="app-header__context">Clinical Staff</span>
+      </a>
+      <span class="app-header__meta u-label">Signed in · {{ role }}</span>
+    </header>
+
+    <div class="app-body">
+
+      <nav class="app-sidenav" aria-label="Clinical Staff Management">
+        <div class="app-sidenav__group">
+          <span class="app-sidenav__label">Workspace</span>
+          <a class="sidenav-link" href="/">Dashboard</a>
+          <a class="sidenav-link is-active" href="#" aria-current="page">AI summary review</a>
+        </div>
+      </nav>
+
+      <main class="app-main" id="main">
+        <div class="page page--prose">
+
+          <div class="page-header">
+            <div>
+              <span class="page-header__eyebrow">Clinical Staff Management</span>
+              <h1 class="page-header__title">
+                Admission {{ admission_id if admission_id is not none else '—' }} — AI summary review
+              </h1>
+              <p class="page-header__description">
+                The system drafts a summary of this admission. It is a draft only:
+                read every line, edit anything that is wrong, and record your
+                decision. Nothing is committed until you do.
+              </p>
+            </div>
+          </div>
+
+          {% if error %}
+            <div class="alert alert--danger" role="alert">
+              <div>
+                <span class="alert__title">Something went wrong</span>
+                <p class="alert__body">{{ error }}</p>
+              </div>
+            </div>
+          {% endif %}
+
+          {% if not has_summary %}
+            {#
+              No summary yet - offer to generate one. POSTs to this same route;
+              app.py generates + logs it and re-renders. hx-select swaps in just
+              the review region.
+            #}
+            <div class="panel">
+              <div class="panel__header">
+                <h2 class="panel__title">No summary generated yet</h2>
+              </div>
+              <div class="panel__body">
+                <p class="u-muted">
+                  Generating a summary logs the attempt for audit and returns an
+                  editable draft. Scope is decided by your role
+                  ({{ 'clinical records' if role == 'doctor' else 'consultation reasons' }}).
+                </p>
+                <form hx-post="/patients/{{ admission_id }}/summary"
+                      hx-target="#review-region"
+                      hx-select="#review-region"
+                      hx-swap="outerHTML"
+                      hx-disabled-elt="find button">
+                  <div class="row">
+                    <button class="btn-primary" type="submit">Generate draft summary</button>
+                    <span class="htmx-indicator u-label">Generating…</span>
+                  </div>
+                </form>
+              </div>
+            </div>
+          {% endif %}
+
+          {#
+            ==================================================== review region
+            Everything HTMX swaps after generate / review lives inside here.
+          #}
+          <div id="review-region">
+          {% if has_summary %}
+
+            {% if ai.ai_unavailable %}
+              <div class="alert alert--warning" role="alert">
+                <div>
+                  <span class="alert__title">Model unavailable — placeholder draft</span>
+                  <p class="alert__body">
+                    The summarisation model could not be reached, so the draft
+                    below is a fallback placeholder. It was still logged. Do not
+                    approve it as-is; edit it to a real summary or reject it.
+                  </p>
+                </div>
+              </div>
+            {% endif %}
+
+            {% if ai.review_status and ai.review_status != 'pending' %}
+              {# Already decided - show the outcome, don't offer the controls again. #}
+              <div class="alert {{ 'alert--success' if ai.review_status in ['accepted', 'edited'] else 'alert--danger' }}"
+                   role="alert">
+                <div>
+                  <span class="alert__title">Summary #{{ ai.summary_id }} — {{ ai.review_status }}</span>
+                  <p class="alert__body">This summary has already been reviewed and cannot be changed.</p>
+                </div>
+              </div>
+            {% endif %}
+
+            <div class="ai-panel">
+              <div class="ai-panel__header">
+                {# Origin marker - required on every AI surface. #}
+                <span class="ai-label">
+                  <span class="ai-label__dot"></span>AI-generated
+                </span>
+                <h2 class="ai-panel__title">Draft admission summary</h2>
+                <span class="panel__meta">#{{ ai.summary_id }}</span>
+              </div>
+
+              <div class="ai-panel__body">
+                {#
+                  Basis line - always states what data the draft was built from.
+                #}
+                <p class="ai-basis">
+                  Basis: generated from admission {{ admission_id }}
+                  ({{ 'clinical records for this admission'
+                      if scope == 'clinical'
+                      else 'consultation request reasons for this admission'
+                      if scope == 'consultation'
+                      else scope }}).
+                  This is the current admission only; earlier stays are not included.
+                </p>
+
+                {#
+                  hx-params limits the JSON body to exactly the two keys the
+                  review endpoint accepts - the edited summary_text is NOT sent
+                  (the backend freezes summary_text and would ignore it anyway).
+                #}
+                <form id="review-form"
+                      hx-put="http://localhost:5200/api/ai/summaries/{{ ai.summary_id }}/review"
+                      hx-ext="json-enc"
+                      hx-headers='{"X-User-Role": "{{ role }}"}'
+                      hx-params="review_status,reviewed_by_staff_id"
+                      hx-disabled-elt="#btn-approve, #btn-reject">
+
+                  {#
+                    Editable draft. The original text is stashed in data-original
+                    so the script can decide accepted vs edited on approve.
+                  #}
+                  <label class="field">
+                    <span class="field__label">Summary text (editable draft)</span>
+                    <textarea class="textarea"
+                              id="summary-text"
+                              name="summary_text"
+                              rows="10"
+                              data-original="{{ ai.summary }}"
+                              {{ 'disabled' if (ai.review_status and ai.review_status != 'pending') }}>{{ ai.summary }}</textarea>
+                    <span class="field__hint">
+                      Edit anything inaccurate. Approving an edited draft is recorded
+                      as <span class="u-mono">edited</span>; an untouched one as
+                      <span class="u-mono">accepted</span>.
+                    </span>
+                  </label>
+
+                  {#
+                    Required review gate. Approve / Reject stay disabled until
+                    this is checked - enforced in the script below, not by CSS.
+                  #}
+                  <label class="field">
+                    <span class="row">
+                      <input type="checkbox"
+                             id="reviewed-checkbox"
+                             {{ 'disabled' if (ai.review_status and ai.review_status != 'pending') }}>
+                      <span class="field__label">I have reviewed every line of this draft</span>
+                    </span>
+                    <span class="field__hint">Required before a decision can be recorded.</span>
+                  </label>
+
+                  {#
+                    review_status is set by the script at submit time to exactly
+                    one of accepted / edited / rejected. This hidden field starts
+                    empty so a stray submit sends nothing usable.
+                  #}
+                  <input type="hidden" name="review_status" id="review-status" value="">
+                  <input type="hidden" name="reviewed_by_staff_id" value="{{ reviewer_id }}">
+
+                  <div class="ai-decision">
+                    <button class="btn-primary" type="button" id="btn-approve" disabled aria-disabled="true">
+                      Approve
+                    </button>
+                    <button class="btn-danger" type="button" id="btn-reject" disabled aria-disabled="true">
+                      Reject
+                    </button>
+                    <span class="htmx-indicator u-label">Recording…</span>
+                  </div>
+
+                  <p class="ai-disclaimer">
+                    AI proposes; you decide. The model has written nothing to any
+                    record — only your decision here is saved.
+                  </p>
+                </form>
+
+                <div id="review-outcome" aria-live="polite"></div>
+              </div>
+            </div>
+          {% endif %}
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  {#
+    Review-gate + submit logic.
+      * Approve / Reject are disabled until the checkbox is ticked - re-checked
+        on every change, and re-applied after any HTMX settle (the region can
+        be swapped in fresh).
+      * Approve chooses 'edited' vs 'accepted' by comparing the textarea to its
+        data-original; Reject always sends 'rejected'. No other value is ever
+        put into #review-status.
+      * The PUT returns JSON, so on success we show a confirmation and lock the
+        form; on failure we surface the backend message. Nothing here can send
+        review_status = 'pending'.
+  #}
+  <script>
+    (function () {
+      var ALLOWED = ['accepted', 'edited', 'rejected'];
+
+      function els() {
+        return {
+          form: document.getElementById('review-form'),
+          checkbox: document.getElementById('reviewed-checkbox'),
+          approve: document.getElementById('btn-approve'),
+          reject: document.getElementById('btn-reject'),
+          text: document.getElementById('summary-text'),
+          status: document.getElementById('review-status'),
+          outcome: document.getElementById('review-outcome')
+        };
+      }
+
+      function syncGate() {
+        var e = els();
+        if (!e.checkbox || !e.approve || !e.reject) return;
+        var locked = e.checkbox.disabled;        // already-reviewed summary
+        var ready = e.checkbox.checked && !locked;
+        [e.approve, e.reject].forEach(function (btn) {
+          btn.disabled = !ready;
+          btn.setAttribute('aria-disabled', String(!ready));
+        });
+      }
+
+      function decideApproveStatus() {
+        var e = els();
+        var original = e.text ? (e.text.getAttribute('data-original') || '') : '';
+        var current = e.text ? e.text.value : '';
+        return current === original ? 'accepted' : 'edited';
+      }
+
+      function submitReview(decision) {
+        var e = els();
+        if (!e.form || !e.checkbox) return;
+        if (!e.checkbox.checked || e.checkbox.disabled) return;   // hard gate
+        if (ALLOWED.indexOf(decision) === -1) return;             // never 'pending' etc.
+        e.status.value = decision;
+        if (typeof e.form.requestSubmit === 'function') e.form.requestSubmit();
+        else e.form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+      }
+
+      function showOutcome(kind, title, message) {
+        var e = els();
+        if (!e.outcome) return;
+        e.outcome.textContent = '';
+        var alert = document.createElement('div');
+        alert.className = 'alert alert--' + kind;
+        alert.setAttribute('role', 'alert');
+        var inner = document.createElement('div');
+        var h = document.createElement('span');
+        h.className = 'alert__title';
+        h.textContent = title;
+        var p = document.createElement('p');
+        p.className = 'alert__body';
+        p.textContent = message;
+        inner.appendChild(h);
+        inner.appendChild(p);
+        alert.appendChild(inner);
+        e.outcome.appendChild(alert);
+      }
+
+      function lockForm() {
+        var e = els();
+        [e.approve, e.reject, e.checkbox, e.text].forEach(function (el) {
+          if (el) { el.disabled = true; el.setAttribute && el.setAttribute('aria-disabled', 'true'); }
+        });
+      }
+
+      function wire() {
+        var e = els();
+        if (!e.form) return;
+
+        syncGate();
+        if (e.checkbox) e.checkbox.addEventListener('change', syncGate);
+        if (e.approve) e.approve.addEventListener('click', function () {
+          submitReview(decideApproveStatus());
+        });
+        if (e.reject) e.reject.addEventListener('click', function () {
+          submitReview('rejected');
+        });
+      }
+
+      document.addEventListener('DOMContentLoaded', wire);
+      document.body.addEventListener('htmx:afterSettle', wire);
+
+      // Belt-and-braces: block the request if the gate isn't satisfied or the
+      // status field somehow holds anything but the three allowed values.
+      document.body.addEventListener('htmx:configRequest', function (event) {
+        var form = event.target;
+        if (!form || form.id !== 'review-form') return;
+        var e = els();
+        var status = event.detail.parameters.review_status;
+        if (!e.checkbox || !e.checkbox.checked || e.checkbox.disabled ||
+            ALLOWED.indexOf(status) === -1) {
+          event.preventDefault();
+        }
+      });
+
+      document.body.addEventListener('htmx:afterRequest', function (event) {
+        var form = event.target;
+        if (!form || form.id !== 'review-form') return;
+
+        if (event.detail.successful) {
+          var decision = els().status.value;
+          lockForm();
+          showOutcome(
+            decision === 'rejected' ? 'danger' : 'success',
+            'Summary ' + decision,
+            'Your decision has been recorded. This summary can no longer be changed.'
+          );
+          return;
+        }
+
+        var message = 'Could not record the review.';
+        try {
+          message = JSON.parse(event.detail.xhr.responseText).error || message;
+        } catch (err) { /* keep default */ }
+        showOutcome('danger', 'Review not recorded', message);
+      });
+    })();
+  </script>
+</body>
+</html>

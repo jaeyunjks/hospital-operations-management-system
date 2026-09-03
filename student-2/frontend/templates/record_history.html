@@ -1,0 +1,185 @@
+{#
+  record_history.html - clinical history for ONE admission.
+
+  app.py wiring (route "/records/admission/<admission_id>", GET):
+    data  = {"admission_id": N, "clinical_records": [ ... ]}
+    error = "<message>" if the backend call failed
+
+  The backend endpoint (GET /api/clinical-records/admission/<id>) is strictly
+  admission-scoped: it only ever returns rows whose admission_id matches, so
+  "this admission only" is guaranteed server-side - this template does no
+  filtering of its own. Records the caller is not entitled to see are already
+  dropped by the backend.
+
+  AUDIT RULE: every record with updated_after_discharge = 1 shows the
+  .alert.alert--warning banner (the audit_banner macro, identical to the one
+  in assessment_form.html). A summary banner also appears at the top if any
+  record on the admission was amended after discharge.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOMS — Admission history</title>
+  <meta name="description" content="Clinical Staff Management — clinical record history for one admission.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+
+  <link rel="stylesheet" href="/static/shared/css/main.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  {#
+    Audit banner - identical to assessment_form.html. Rendered for every
+    record with updated_after_discharge = 1.
+  #}
+  {% macro audit_banner(record) %}
+    {% if record and record.updated_after_discharge %}
+      <div class="alert alert--warning" role="alert">
+        <div>
+          <span class="alert__title">Edited after discharge</span>
+          <p class="alert__body">
+            This clinical record was changed after admission
+            {{ record.admission_id }} was no longer active. The change is kept
+            for the audit trail; confirm it is clinically appropriate before
+            relying on it.
+          </p>
+        </div>
+      </div>
+    {% endif %}
+  {% endmacro %}
+
+  {% set admission_id = data.admission_id if data else none %}
+  {% set records = (data.clinical_records if data else none) or [] %}
+  {% set post_discharge = records | selectattr('updated_after_discharge') | list %}
+
+  <div class="app">
+
+    <header class="app-header">
+      <a class="app-header__brand" href="/">
+        HOMS
+        <span class="app-header__context">Clinical Staff</span>
+      </a>
+      <span class="app-header__meta u-label">Signed in · {{ role }}</span>
+    </header>
+
+    <div class="app-body">
+
+      <nav class="app-sidenav" aria-label="Clinical Staff Management">
+        <div class="app-sidenav__group">
+          <span class="app-sidenav__label">Workspace</span>
+          <a class="sidenav-link" href="/">Dashboard</a>
+          <a class="sidenav-link" href="/assessment/new">New assessment</a>
+          <a class="sidenav-link is-active" href="#" aria-current="page">Admission history</a>
+        </div>
+      </nav>
+
+      <main class="app-main" id="main">
+        <div class="page page--prose">
+
+          <div class="page-header">
+            <div>
+              <span class="page-header__eyebrow">Clinical Staff Management</span>
+              <h1 class="page-header__title">
+                Admission {{ admission_id if admission_id is not none else '—' }} — clinical history
+              </h1>
+              <p class="page-header__description">
+                Every clinical record filed for this admission, oldest first.
+                Records from other admissions for the same patient are not shown.
+              </p>
+            </div>
+          </div>
+
+          {% if error %}
+            <div class="alert alert--danger" role="alert">
+              <div>
+                <span class="alert__title">Could not load history</span>
+                <p class="alert__body">{{ error }}</p>
+              </div>
+            </div>
+          {% endif %}
+
+          {# Admission-level summary if anything here was amended post-discharge. #}
+          {% if post_discharge %}
+            <div class="alert alert--warning" role="alert">
+              <div>
+                <span class="alert__title">
+                  {{ post_discharge | length }}
+                  record{{ 's' if post_discharge | length != 1 }} amended after discharge
+                </span>
+                <p class="alert__body">
+                  One or more records below were changed after this admission
+                  ended. Each is marked individually.
+                </p>
+              </div>
+            </div>
+          {% endif %}
+
+          {% if records %}
+            <div class="stack stack--lg">
+              {% for r in records | sort(attribute='created_at') %}
+                <div class="panel">
+                  <div class="panel__header">
+                    <h2 class="panel__title">Record #{{ r.record_id }}</h2>
+                    <span class="panel__meta">{{ (r.created_at or '')[:16] }}</span>
+                    <div class="panel__actions">
+                      {% if r.updated_after_discharge %}
+                        <span class="badge-warning">Post-discharge edit</span>
+                      {% endif %}
+                      <span class="badge-neutral">{{ r.status }}</span>
+                    </div>
+                  </div>
+
+                  <div class="panel__body">
+                    {# Per-record audit banner - the business rule for viewing. #}
+                    {{ audit_banner(r) }}
+
+                    <div class="stack stack--sm">
+                      <div>
+                        <span class="u-label">Assessment notes</span>
+                        <p>{{ r.assessment_notes }}</p>
+                      </div>
+                      <div>
+                        <span class="u-label">Diagnosis summary</span>
+                        <p>{{ r.diagnosis_summary or '—' }}</p>
+                      </div>
+                      <div>
+                        <span class="u-label">Care plan</span>
+                        <p>{{ r.care_plan or '—' }}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="panel__footer row">
+                    <span class="u-label">Doctor {{ r.doctor_id }}</span>
+                    <span class="spacer"></span>
+                    <span class="u-label">Updated {{ (r.updated_at or '')[:16] }}</span>
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% elif not error %}
+            <div class="panel">
+              <div class="panel__body">
+                <div class="empty">
+                  <span class="empty__title">No clinical records</span>
+                  <p class="empty__body">
+                    This admission has no clinical records you can see.
+                  </p>
+                </div>
+              </div>
+            </div>
+          {% endif %}
+
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
