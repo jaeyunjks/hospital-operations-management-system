@@ -2,6 +2,22 @@
 # Student 4 and Student 5 services are wired into this root Compose file.
 
 services:
+  # --- shared Release 0 home page --------------------------------------
+  homs-homepage:
+    build:
+      context: ./shared/frontend
+    container_name: homs-homepage
+    ports:
+      - "3000:80"
+    networks: [homs-net]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+    restart: unless-stopped
+
   # --- student-5 — Staff & Shift Management ----------------------------
   student5-database:
     build:
