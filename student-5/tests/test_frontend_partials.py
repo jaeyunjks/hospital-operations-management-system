@@ -165,7 +165,7 @@ def test_index_renders_shell_without_calling_backend(frontend_client, fe_api_cli
     assert response.status_code == 200
     assert b"Workforce overview" in response.data
     assert b'class="topnav__brand-logo"' in response.data
-    assert b'/static/images/hospital-operations-logo.png' in response.data
+    assert b'/shared/assets/images/hospital-operations-logo.png' in response.data
     assert b'<span class="topnav__brand-sub">Hospital Operations</span>' in response.data
     assert b"kpi-row" in response.data
     assert b"demand-panel" in response.data
@@ -2440,8 +2440,10 @@ def test_employee_weekly_editor_reuses_three_by_seven_matrix_and_session_id(
 def test_employee_weekly_save_refreshes_grid_and_warns_without_unassigning(
         employee_client, fe_api_client, monkeypatch):
     captured = {}
+    monday = datetime.date.today() - datetime.timedelta(days=datetime.date.today().weekday())
+    shift_date = monday.isoformat()
     shift = {
-        "shift_id": 51, "department": "Emergency", "shift_date": "2026-08-24",
+        "shift_id": 51, "department": "Emergency", "shift_date": shift_date,
         "start_time": "07:00", "end_time": "15:00", "shift_status": "Planned",
         "assignment_id": 71, "assignment_status": "Assigned",
     }
@@ -2467,7 +2469,7 @@ def test_employee_weekly_save_refreshes_grid_and_warns_without_unassigning(
     assert "Weekly availability updated." in body
     assert "1 existing rostered shift" in body
     assert "is now outside your weekly availability" in body
-    assert "Emergency" in body and "2026-08-24" in body and "07:00–15:00" in body
+    assert "Emergency" in body and shift_date in body and "07:00–15:00" in body
     assert "Your roster has not been changed" in body
     assert "weekly-cell--conflict" in body
     assert "Edit availability" in body
