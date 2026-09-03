@@ -2,6 +2,8 @@
 # These endpoints sit in front of the database microservice and expose
 # the admissions table as a normal REST API for the backend app.
 
+from datetime import date
+
 from flask import Blueprint, jsonify, request
 import requests
 
@@ -49,10 +51,14 @@ def list_admissions():
 # Creates a new admission record in the database.
 @admissions_bp.route("", methods=["POST"])
 def create_admission():
+    payload = request.get_json(silent=True) or {}
+    admission_date = payload.get("admission_date")
+    if not admission_date or str(admission_date).strip().lower() in {"datetime('now')", 'datetime("now")'}:
+        payload["admission_date"] = date.today().isoformat()
     payload, status = _db_call(
         "POST",
         "/api/admissions",
-        payload=request.get_json(silent=True) or {},
+        payload=payload,
     )
     return jsonify(payload), status
 
@@ -116,15 +122,11 @@ def update_admission(admission_id):
     )
     return jsonify(payload), status
 
-# The admissions table currently does not support deletion in any form, 
-# so the following endpoints are commented out until the database service 
-# is updated to support it.
 
-# Soft deletes an admission record in the database service. 
-# @admissions_bp.route("/<int:admission_id>", methods=["DELETE"])
-# def delete_admission(admission_id):
-#     payload, status = _db_call("DELETE", f"/admissions/{admission_id}")
-#     return jsonify(payload), status
+@admissions_bp.route("/<int:admission_id>", methods=["DELETE"])
+def delete_admission(admission_id):
+    payload, status = _db_call("DELETE", f"/api/admissions/{admission_id}")
+    return jsonify(payload), status
 
 # Reactivates a previously deactivated admission record in the database service.
 # @admissions_bp.route("/<int:admission_id>/restore", methods=["POST", "PUT", "PATCH"])

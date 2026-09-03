@@ -6,6 +6,7 @@
 
 import os
 import sqlite3
+from datetime import date, datetime
 
 from flask import Flask, jsonify, request
 
@@ -31,6 +32,18 @@ def ensure_database_ready():
         table_names = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('patients', 'admissions')"
         ).fetchall()
+        if len(table_names) >= 2:
+            conn.execute(
+                "UPDATE admissions SET admission_date = ? "
+                "WHERE admission_date IS NULL OR lower(trim(admission_date)) IN (?, ?)",
+                (date.today().isoformat(), "datetime('now')", 'datetime("now")'),
+            )
+            conn.execute(
+                "UPDATE patient_admin_notes SET created_at = ? "
+                "WHERE lower(trim(created_at)) IN (?, ?)",
+                (datetime.now().isoformat(sep=" ", timespec="seconds"), "datetime('now')", 'datetime("now")'),
+            )
+            conn.commit()
         conn.close()
         if len(table_names) < 2:
             init_database.build(db_path)
@@ -283,6 +296,16 @@ def validate_payload(resource, payload, mode="create"):
 
     return payload
 
+
+def normalize_admission_payload(resource_name, payload):
+    if resource_name != "admissions":
+        return payload
+
+    admission_date = payload.get("admission_date")
+    if not admission_date or str(admission_date).strip().lower() in {"datetime('now')", 'datetime("now")'}:
+        payload["admission_date"] = date.today().isoformat()
+    return payload
+
 @app.get("/health")
 @app.get("/api/health")
 def health_check():
@@ -320,6 +343,7 @@ def list_resource(resource_name):
 def create_resource(resource_name):
     resource = get_resource_config(resource_name)
     payload = request.get_json(silent=True) or {}
+    payload = normalize_admission_payload(resource_name, payload)
     cleaned = validate_payload(resource, payload, mode="create")
 
     columns = list(cleaned.keys())
@@ -405,6 +429,13 @@ def delete_resource(resource_name, record_id):
             "id": record_id,
             "message": "Record deactivated instead of being permanently deleted."
         })
+
+    if resource_name == "admissions":
+        database.write_db(
+            f"DELETE FROM {resource['table']} WHERE {resource['pk']} = ?",
+            (record_id,),
+        )
+        return successResponse({"deleted": True, "id": record_id})
 
     raise DataError(f"Resource '{resource_name}' does not support soft deletion", status=400)
 

@@ -1,10 +1,13 @@
 
 
 import os
+import csv
+import io
+from datetime import date
 from pathlib import Path
 
 import requests
-from flask import Flask, redirect, render_template, request, url_for
+from flask import Flask, redirect, render_template, request, url_for, send_file
 
 app = Flask(
     __name__,
@@ -40,6 +43,23 @@ def _api_get(path, params=None):
 def _api_update(path, payload):
     try:
         response = requests.patch(f"{BACKEND_URL}{path}", json=payload, timeout=5)
+        return response.ok
+    except requests.RequestException:
+        return False
+
+
+def _api_post(path, payload):
+    try:
+        response = requests.post(f"{BACKEND_URL}{path}", json=payload, timeout=10)
+        data = response.json() if response.content else {}
+        return data, response.ok
+    except requests.RequestException:
+        return {}, False
+
+
+def _api_delete(path):
+    try:
+        response = requests.delete(f"{BACKEND_URL}{path}", timeout=10)
         return response.ok
     except requests.RequestException:
         return False
@@ -87,7 +107,8 @@ def get_live_snapshot():
     admissions = _api_get("/api/admissions") or []
     addresses = _api_get("/api/patient-addresses") or []
     medical = _api_get("/api/patient-medical-information") or []
-    contacts = _api_get("/api/patient-contacts") or []
+    contacts = _api_get("/api/patients/contacts") or []
+    notes = _api_get("/api/patients/admin-notes") or []
 
     if not patients and not admissions:
         return _fallback_seed_snapshot()
@@ -105,9 +126,14 @@ def get_live_snapshot():
             patient_by_id[row["patient_id"]]["medical"] = row
 
     for row in contacts:
-        if row.get("patient_id") in patient_by_id and row.get("contact_primary") in (1, True):
-            patient_by_id[row["patient_id"]].setdefault("contact", {})
-            patient_by_id[row["patient_id"]]["contact"] = row
+        if row.get("patient_id") in patient_by_id:
+            patient_by_id[row["patient_id"]].setdefault("contacts", []).append(row)
+            if row.get("contact_primary") in (1, True):
+                patient_by_id[row["patient_id"]]["contact"] = row
+
+    for row in notes:
+        if row.get("patient_id") in patient_by_id:
+            patient_by_id[row["patient_id"]].setdefault("admin_notes", []).append(row)
 
     return {"patients": list(patient_by_id.values()), "admissions": admissions}
 
@@ -152,6 +178,19 @@ def generate_ai_summary(patient):
     return " ".join(sections)
 
 
+def export_csv(snapshot):
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Patient ID", "First name", "Last name", "Date of birth", "Status"])
+    for patient in snapshot["patients"]:
+        writer.writerow([
+            patient["patient_id"], patient["p_first_name"], patient["p_last_name"],
+            patient["p_date_of_birth"], patient["patient_status"],
+        ])
+    output.seek(0)
+    return send_file(io.BytesIO(output.getvalue().encode("utf-8")), mimetype="text/csv", as_attachment=True, download_name="patient-census.csv")
+
+
 def find_patient_record(patient_id, snapshot):
     for patient in snapshot["patients"]:
         if patient["patient_id"] == patient_id:
@@ -188,6 +227,11 @@ def census_page():
         page_title="Census",
         page_context="Reception / Census",
     )
+
+
+@app.route("/export")
+def export_page():
+    return export_csv(get_live_snapshot())
 
 
 @app.route("/intake", methods=["GET", "POST"])
@@ -289,8 +333,64 @@ def patient_record(patient_id):
         return render_template("patient.html", active_page="patient", nav=NAV_ITEMS, patient=None, page_title="Patient record", page_context="Patient / Not found")
 
     message = None
-    editing = request.args.get("edit") == "1" or request.method == "POST"
-    if request.method == "POST":
+    editing = request.args.get("edit") == "1"
+    summary_message = None
+    profile_message = None
+    action = request.form.get("profile_action")
+    if request.method == "POST" and request.form.get("summary_action") == "apply":
+        _, saved = _api_post(f"/api/patients/{patient_id}/admin-notes", {"note_text": request.form.get("summary", "")})
+        summary_message = "Summary applied as an administrative note." if saved else "The summary could not be applied. Check that the backend is running and try again."
+    elif request.method == "POST" and request.form.get("summary_action") == "refresh":
+        patient = find_patient_record(patient_id, get_live_snapshot()) or patient
+    elif request.method == "POST" and action == "admission":
+        _, created = _api_post("/api/admissions", {
+            "patient_id": patient_id,
+            "admission_date": request.form.get("admission_date") or date.today().isoformat(),
+            "admission_status": request.form.get("admission_status", "Pending"),
+        })
+        profile_message = "Admission created." if created else "The admission could not be created. Check that the backend is running and try again."
+    elif request.method == "POST" and action == "update_admission":
+        admission_id = request.form.get("admission_id")
+        updated_admission = _api_update(f"/api/admissions/{admission_id}", {
+            "admission_status": request.form.get("admission_status", "Pending"),
+        })
+        profile_message = "Admission status updated." if updated_admission else "The admission could not be updated. Check that the backend is running and try again."
+    elif request.method == "POST" and action == "delete_admission":
+        admission_id = request.form.get("admission_id")
+        deleted_admission = _api_delete(f"/api/admissions/{admission_id}")
+        profile_message = "Admission deleted." if deleted_admission else "The admission could not be deleted. Check that the backend is running and try again."
+    elif request.method == "POST" and action == "admin_note":
+        _, created = _api_post(f"/api/patients/{patient_id}/admin-notes", {"note_text": request.form.get("note_text", "")})
+        profile_message = "Admin note added." if created else "The admin note could not be added. Check that the backend is running and try again."
+    elif request.method == "POST" and action == "contact":
+        _, created = _api_post("/api/patients/contacts", {
+            "patient_id": patient_id,
+            "contact_primary": 1 if request.form.get("contact_primary") else 0,
+            "contact_first_name": request.form.get("contact_first_name", "").strip(),
+            "contact_last_name": request.form.get("contact_last_name", "").strip(),
+            "contact_date_of_birth": request.form.get("contact_date_of_birth") or "1900-01-01",
+            "contact_relationship": request.form.get("contact_relationship", "").strip(),
+            "contact_address_same_as_patient": 1 if request.form.get("contact_address_same_as_patient") else 0,
+            "contact_address": request.form.get("contact_address", "").strip() or "Not provided",
+            "contact_mobile": request.form.get("contact_mobile", "").strip(),
+            "contact_landline": request.form.get("contact_landline", "").strip(),
+            "contact_email": request.form.get("contact_email", "").strip(),
+        })
+        profile_message = "Patient contact added." if created else "The patient contact could not be added. Check that the backend is running and try again."
+    elif request.method == "POST" and action == "edit_contact":
+        contact_id = request.form.get("contact_id")
+        updated_contact = _api_update(f"/api/patients/contacts/{contact_id}", {
+            "contact_first_name": request.form.get("contact_first_name", "").strip(),
+            "contact_last_name": request.form.get("contact_last_name", "").strip(),
+            "contact_date_of_birth": request.form.get("contact_date_of_birth") or "1900-01-01",
+            "contact_relationship": request.form.get("contact_relationship", "").strip(),
+            "contact_address": request.form.get("contact_address", "").strip() or "Not provided",
+            "contact_mobile": request.form.get("contact_mobile", "").strip(),
+            "contact_landline": request.form.get("contact_landline", "").strip(),
+            "contact_email": request.form.get("contact_email", "").strip(),
+        })
+        profile_message = "Patient contact updated." if updated_contact else "The patient contact could not be updated. Check that the backend is running and try again."
+    elif request.method == "POST":
         updated = _api_update(f"/api/patients/{patient_id}", {
             "p_title": request.form.get("title", patient["p_title"]),
             "p_first_name": request.form.get("first_name", patient["p_first_name"]).strip(),
@@ -315,6 +415,10 @@ def patient_record(patient_id):
             return redirect(url_for("patient_record", patient_id=patient_id))
         message = "The patient could not be saved. Check that the backend is running and try again."
 
+    if profile_message:
+        snapshot = get_live_snapshot()
+        patient = find_patient_record(patient_id, snapshot) or patient
+
     patient_summary = generate_ai_summary(patient)
     return render_template(
         "patient.html",
@@ -326,6 +430,14 @@ def patient_record(patient_id):
         page_context="Patient / Record",
         editing=editing,
         message=message,
+        summary_message=summary_message,
+        profile_message=profile_message,
+        today=date.today().isoformat(),
+        admissions=sorted(
+            [row for row in snapshot["admissions"] if row.get("patient_id") == patient_id],
+            key=lambda row: row.get("admission_date") or "",
+            reverse=True,
+        ),
     )
 
 

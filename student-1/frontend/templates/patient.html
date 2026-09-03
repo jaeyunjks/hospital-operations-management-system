@@ -66,6 +66,86 @@
   {% if message %}<div class="banner banner-risk">{{ message }}</div>{% endif %}
 </section>
 
+{% if profile_message %}<div class="banner banner-ok">{{ profile_message }}</div>{% endif %}
+
+<section class="panel">
+  <div class="panel-header"><div><span class="eyebrow">Patient flow</span><h2>Admissions</h2></div></div>
+  <div class="admission-list">
+    {% for admission in admissions %}
+    <div class="admission-row">
+      <div class="admission-meta"><span class="eyebrow">Admission {{ admission.admission_id }}</span><span class="mono-data">{{ admission.admission_date or 'Date not set' }}</span></div>
+      <form class="admission-edit" method="post">
+        <input type="hidden" name="profile_action" value="update_admission" />
+        <input type="hidden" name="admission_id" value="{{ admission.admission_id }}" />
+        <label class="sr-only" for="admission_status_{{ admission.admission_id }}">Admission status</label>
+        <select id="admission_status_{{ admission.admission_id }}" name="admission_status">
+          {% for status in ['Pending', 'Active', 'Cancelled', 'Completed'] %}<option {% if admission.admission_status == status %}selected{% endif %}>{{ status }}</option>{% endfor %}
+        </select>
+        <button class="btn btn-secondary" type="submit">Save status</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="profile_action" value="delete_admission" />
+        <input type="hidden" name="admission_id" value="{{ admission.admission_id }}" />
+        <button class="btn btn-danger" type="submit">Delete</button>
+      </form>
+    </div>
+    {% else %}
+    <div class="empty-state">No admissions recorded</div>
+    {% endfor %}
+  </div>
+  <form class="form-grid profile-form" method="post">
+    <input type="hidden" name="profile_action" value="admission" />
+    <div class="field-group"><label for="admission_date">Admission date</label><input id="admission_date" name="admission_date" type="date" value="{{ today }}" required /></div>
+    <div class="field-group"><label for="admission_status">Status</label><select id="admission_status" name="admission_status"><option>Pending</option><option>Active</option></select></div>
+    <div class="field-group wide submit-row"><button class="btn btn-primary" type="submit">Create admission</button></div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="panel-header"><div><span class="eyebrow">Administrative record</span><h2>Admin notes</h2></div></div>
+  <div class="note-list">
+    {% for note in patient.admin_notes|default([], true) %}
+    <div class="note-item"><p>{{ note.note_text }}</p><span class="mono-data">{{ note.created_at }}</span></div>
+    {% else %}
+    <div class="empty-state">No admin notes recorded</div>
+    {% endfor %}
+  </div>
+  <form class="form-grid profile-form" method="post">
+    <input type="hidden" name="profile_action" value="admin_note" />
+    <div class="field-group wide"><label for="note_text">New admin note</label><textarea id="note_text" name="note_text" rows="3" required></textarea></div>
+    <div class="field-group wide submit-row"><button class="btn btn-primary" type="submit">Add admin note</button></div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="panel-header"><div><span class="eyebrow">People to contact</span><h2>Patient contacts</h2></div></div>
+  {% for contact in patient.contacts|default([], true) %}
+  <form class="form-grid profile-form contact-form" method="post">
+    <input type="hidden" name="profile_action" value="edit_contact" />
+    <input type="hidden" name="contact_id" value="{{ contact.contact_id }}" />
+    <div class="field-group"><label for="contact_first_name_{{ contact.contact_id }}">First name</label><input id="contact_first_name_{{ contact.contact_id }}" name="contact_first_name" value="{{ contact.contact_first_name }}" required /></div>
+    <div class="field-group"><label for="contact_last_name_{{ contact.contact_id }}">Last name</label><input id="contact_last_name_{{ contact.contact_id }}" name="contact_last_name" value="{{ contact.contact_last_name }}" required /></div>
+    <div class="field-group"><label for="contact_relationship_{{ contact.contact_id }}">Relationship</label><input id="contact_relationship_{{ contact.contact_id }}" name="contact_relationship" value="{{ contact.contact_relationship }}" required /></div>
+    <div class="field-group"><label for="contact_date_of_birth_{{ contact.contact_id }}">Date of birth</label><input id="contact_date_of_birth_{{ contact.contact_id }}" name="contact_date_of_birth" type="date" value="{{ contact.contact_date_of_birth }}" required /></div>
+    <div class="field-group"><label for="contact_mobile_{{ contact.contact_id }}">Mobile</label><input id="contact_mobile_{{ contact.contact_id }}" name="contact_mobile" value="{{ contact.contact_mobile }}" required /></div>
+    <div class="field-group"><label for="contact_email_{{ contact.contact_id }}">Email</label><input id="contact_email_{{ contact.contact_id }}" name="contact_email" type="email" value="{{ contact.contact_email or '' }}" /></div>
+    <div class="field-group wide"><label for="contact_address_{{ contact.contact_id }}">Address</label><input id="contact_address_{{ contact.contact_id }}" name="contact_address" value="{{ contact.contact_address }}" /></div>
+    <div class="field-group wide submit-row"><button class="btn btn-secondary" type="submit">Save contact</button></div>
+  </form>
+  {% else %}<div class="detail-grid"><div class="detail-item"><span>Contacts</span><strong>No contacts recorded</strong></div></div>{% endfor %}
+  <form class="form-grid profile-form" method="post">
+    <input type="hidden" name="profile_action" value="contact" />
+    <div class="field-group"><label for="new_contact_first_name">First name</label><input id="new_contact_first_name" name="contact_first_name" required /></div>
+    <div class="field-group"><label for="new_contact_last_name">Last name</label><input id="new_contact_last_name" name="contact_last_name" required /></div>
+    <div class="field-group"><label for="new_contact_relationship">Relationship</label><input id="new_contact_relationship" name="contact_relationship" required /></div>
+    <div class="field-group"><label for="new_contact_date_of_birth">Date of birth</label><input id="new_contact_date_of_birth" name="contact_date_of_birth" type="date" required /></div>
+    <div class="field-group"><label for="new_contact_mobile">Mobile</label><input id="new_contact_mobile" name="contact_mobile" required /></div>
+    <div class="field-group"><label for="new_contact_email">Email</label><input id="new_contact_email" name="contact_email" type="email" /></div>
+    <div class="field-group wide"><label for="new_contact_address">Address</label><input id="new_contact_address" name="contact_address" /></div>
+    <div class="field-group wide submit-row"><button class="btn btn-primary" type="submit">Add patient contact</button></div>
+  </form>
+</section>
+
 <section class="panel">
   <div class="panel-header">
     <div>
@@ -75,12 +155,20 @@
   </div>
 
   <div class="ai-summary-box">
-    <p>{{ ai_summary }}</p>
+    <p id="patient-summary">{{ ai_summary }}</p>
     <div class="summary-actions">
-      <button class="btn btn-secondary">Refresh summary</button>
-      <button class="btn btn-primary">Apply summary</button>
+      <form method="post">
+        <input type="hidden" name="summary_action" value="refresh" />
+        <button class="btn btn-secondary" type="submit">Refresh summary</button>
+      </form>
+      <form method="post">
+        <input type="hidden" name="summary_action" value="apply" />
+        <input type="hidden" name="summary" value="{{ ai_summary }}" />
+        <button class="btn btn-primary" type="submit">Apply summary</button>
+      </form>
     </div>
   </div>
+  {% if summary_message %}<div class="banner banner-ok">{{ summary_message }}</div>{% endif %}
 </section>
 {% endif %}
 {% endblock %}

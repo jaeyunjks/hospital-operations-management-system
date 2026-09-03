@@ -53,8 +53,8 @@
               <h1>{{ page_title }}</h1>
             </div>
             <div class="header-actions">
-              <button class="btn btn-secondary">Export</button>
-              <button class="btn btn-primary">New patient</button>
+              <a class="btn btn-secondary" href="{{ url_for('export_page') }}">Export</a>
+              <a class="btn btn-primary" href="{{ url_for('intake_page') }}">New patient</a>
             </div>
           </div>
 

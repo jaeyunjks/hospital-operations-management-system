@@ -2,6 +2,8 @@
 # These endpoints sit in front of the database microservice and expose
 # the patients table as a normal REST API for the backend app.
 
+from datetime import datetime
+
 from flask import Blueprint, jsonify, request
 import requests
 
@@ -77,4 +79,45 @@ def delete_patient(patient_id):
 @patients_bp.route("/<int:patient_id>/restore", methods=["POST", "PUT", "PATCH"])
 def restore_patient(patient_id):
     payload, status = _db_call(request.method, f"/api/patients/{patient_id}/restore")
+    return jsonify(payload), status
+
+
+@patients_bp.route("/<int:patient_id>/admin-notes", methods=["POST"])
+def create_admin_note(patient_id):
+    payload = request.get_json(silent=True) or {}
+    note_text = str(payload.get("note_text", "")).strip()
+    if not note_text:
+        return jsonify({"error": "note_text is required"}), 400
+
+    note_payload = {
+        "patient_id": patient_id,
+        "note_text": note_text,
+        "created_at": payload.get("created_at") or datetime.now().isoformat(sep=" ", timespec="seconds"),
+    }
+    result, status = _db_call("POST", "/api/patient-admin-notes", payload=note_payload)
+    return jsonify(result), status
+
+
+@patients_bp.route("/contacts", methods=["GET", "POST"])
+def patient_contacts():
+    if request.method == "GET":
+        payload, status = _db_call("GET", "/api/patient-contacts", params=request.args.to_dict())
+    else:
+        payload, status = _db_call("POST", "/api/patient-contacts", payload=request.get_json(silent=True) or {})
+    return jsonify(payload), status
+
+
+@patients_bp.route("/contacts/<int:contact_id>", methods=["PATCH"])
+def update_patient_contact(contact_id):
+    payload, status = _db_call(
+        "PATCH",
+        f"/api/patient-contacts/{contact_id}",
+        payload=request.get_json(silent=True) or {},
+    )
+    return jsonify(payload), status
+
+
+@patients_bp.route("/admin-notes", methods=["GET"])
+def list_admin_notes():
+    payload, status = _db_call("GET", "/api/patient-admin-notes", params=request.args.to_dict())
     return jsonify(payload), status

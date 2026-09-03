@@ -648,6 +648,77 @@ tbody tr:hover {
   margin-top: 16px;
 }
 
+.admission-list,
+.note-list {
+  border-top: var(--border-hair);
+}
+
+.admission-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: var(--border-hair);
+}
+
+.admission-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.admission-edit {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admission-edit select {
+  min-height: 34px;
+  padding: 7px 9px;
+  border: var(--border-strong);
+  background: var(--surface-card);
+  color: var(--text-body);
+}
+
+.note-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 15px 20px;
+  border-bottom: var(--border-hair);
+  background: var(--surface-row-alt);
+}
+
+.note-item p {
+  margin: 0;
+  color: var(--text-body);
+}
+
+.empty-state {
+  padding: 20px;
+  color: var(--text-muted);
+}
+
+.btn-danger {
+  border: 1px solid rgba(133, 62, 30, 0.3);
+  background: var(--risk-tint);
+  color: var(--status-risk);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .status-dot {
   width: var(--dot-size);
   height: var(--dot-size);
@@ -698,5 +769,19 @@ tbody tr:hover {
   .header-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .admission-row {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .admission-edit {
+    flex-wrap: wrap;
+  }
+
+  .note-item {
+    flex-direction: column;
+    gap: 8px;
   }
 }
