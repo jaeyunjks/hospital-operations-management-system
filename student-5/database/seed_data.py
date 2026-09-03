@@ -27,7 +27,7 @@ STAFF_SEED: List[Tuple] = [
     ("Sofia Petrova",     "Physiotherapist",  "Rehabilitation", "Musculoskeletal",     "Available",   "Part-Time", None),
     ("Ethan Brooks",      "Ward Clerk",       "General Ward",   None,                  "Available",   "Casual",    None),
     ("Rina Kobayashi",    "Pharmacist",       "Pharmacy",       "Clinical Pharmacy",   "Available",   "Full-Time", None),
-    ("Tomas Novak",       "Radiographer",     "Radiology",      "Diagnostic Imaging",  "Unavailable", "Contract",  "Unavailable pending contract renewal."),
+    ("Tomas Novak",       "Doctor",           "Emergency",      "Diagnostic Imaging",  "Available",   "Part-Time", "Unavailable pending contract renewal."),
     ("Chloe Bennett",     "Registered Nurse", "Intensive Care", "Critical Care",       "Available",   "Full-Time", None),
 ]
 
@@ -136,10 +136,9 @@ _WEEKLY_PATTERN = {
     # Wed 08:00-16:00 but available only until 15:00, so the final hour falls
     # outside her recurring availability.
     10: [(MON, MORNING), (WED, MORNING), (THU, MORNING)],
-    # Tomas Novak — currently Unavailable. The weekly pattern still exists,
-    # demonstrating that operational status and weekly availability are
-    # independent concepts.
-    11: [(THU, MORNING)],
+    # Tomas Novak — part-time ED doctor. Available for the seeded Mon 15-23
+    # Emergency Doctor shift so he can be used as a matching demo candidate.
+    11: [(MON, AFTERNOON)],
     # Chloe Bennett — ICU RN. Rostered Mon 07-15, the Mon 19:00-07:00 night
     # cover, and the Fri 07:00-19:00 long day.
     12: [(MON, MORNING), (MON, LATE_TWELVE), (THU, NIGHT), (FRI, LONG_DAY)],
