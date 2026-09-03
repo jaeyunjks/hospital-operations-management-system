@@ -11,8 +11,10 @@ import urllib.request
 
 from flask import Flask, jsonify, request
 
-DATABASE_SERVICE_URL = os.environ.get("DATABASE_SERVICE_URL", "http://localhost:6300").rstrip("/")
-PORT = int(os.environ.get("BACKEND_PORT", "5300"))
+DATABASE_SERVICE_URL = os.environ.get(
+    "DATABASE_URL", os.environ.get("DATABASE_SERVICE_URL", "http://localhost:6300")
+).rstrip("/")
+PORT = int(os.environ.get("PORT", os.environ.get("BACKEND_PORT", "5300")))
 MANAGER_ROLE = "Pharmacy Manager"
 OPEN_STATUSES = {"pending_approval", "approved", "ordered"}
 EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")

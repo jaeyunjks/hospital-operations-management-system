@@ -169,6 +169,66 @@ services:
         condition: service_healthy
     networks: [homs-net]
 
+  # --- student-3 — Pharmacy & Medication Inventory Management -----------
+  student-3-database:
+    build:
+      context: .
+      dockerfile: student-3/database/Dockerfile
+    container_name: s3-database
+    environment:
+      PORT: 6300
+      STUDENT3_DATABASE_PATH: /data/pharmacy.db
+    ports: ["6300:6300"]
+    volumes:
+      - student3-database-data:/data
+    networks: [homs-net]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:6300/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  student-3-backend:
+    build:
+      context: .
+      dockerfile: student-3/backend/Dockerfile
+    container_name: s3-backend
+    environment:
+      PORT: 5300
+      DATABASE_URL: http://student-3-database:6300
+      FLASK_DEBUG: 0
+    ports: ["5300:5300"]
+    depends_on:
+      student-3-database:
+        condition: service_healthy
+    networks: [homs-net]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:5300/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  student-3-frontend:
+    build:
+      context: .
+      dockerfile: student-3/frontend/Dockerfile
+    container_name: s3-frontend
+    environment:
+      PORT: 3300
+      BACKEND_API_URL: http://student-3-backend:5300
+      FLASK_SECRET_KEY: student3-compose-development-secret
+      FLASK_DEBUG: 0
+    ports: ["3300:3300"]
+    depends_on:
+      student-3-backend:
+        condition: service_healthy
+    networks: [homs-net]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:3300/')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 networks:
   homs-net:
     driver: bridge
@@ -176,3 +236,4 @@ networks:
 volumes:
   student5-database-data:
   ollama-models:
+  student3-database-data:
