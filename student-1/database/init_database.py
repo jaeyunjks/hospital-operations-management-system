@@ -6,7 +6,10 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from database import drop_all_tables
+try:
+    from database.database import drop_all_tables
+except ModuleNotFoundError:
+    from database import drop_all_tables
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_DB = Path(__file__).resolve().parent / "patients.db"
@@ -40,3 +43,23 @@ def healthCheck(conn: sqlite3.Connection) -> bool:
             return False
     print("Health check passed: All tables have sufficient records.")
     return True
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Build and seed the patient database")
+    parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="SQLite database path")
+    parser.add_argument("--check", action="store_true", help="Run the seed health check after building")
+    args = parser.parse_args()
+
+    conn = build(args.db)
+    try:
+        if args.check and not healthCheck(conn):
+            return 1
+    finally:
+        conn.close()
+    print(f"Database built and seeded at {args.db}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

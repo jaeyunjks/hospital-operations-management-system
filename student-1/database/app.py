@@ -5,10 +5,12 @@
 # Sits on Port 6100
 
 import os
+import sqlite3
 
 from flask import Flask, jsonify, request
 
 import database.database as database
+import database.init_database as init_database
 from database.database import DataError
 
 app = Flask(__name__)
@@ -16,6 +18,27 @@ app.teardown_appcontext(database.close_db)
 
 PORT = int(os.getenv("PORT", "6100"))
 HOST = os.getenv("HOST", "0.0.0.0")
+
+
+def ensure_database_ready():
+    db_path = database.DB_PATH
+    if not db_path.exists():
+        init_database.build(db_path)
+        return
+
+    try:
+        conn = sqlite3.connect(db_path)
+        table_names = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('patients', 'admissions')"
+        ).fetchall()
+        conn.close()
+        if len(table_names) < 2:
+            init_database.build(db_path)
+    except sqlite3.DatabaseError:
+        init_database.build(db_path)
+
+
+ensure_database_ready()
 
 # Response Helpers
 def successResponse(data, status=200):
