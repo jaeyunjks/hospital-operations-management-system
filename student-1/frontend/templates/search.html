@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="page-header">
+  <div class="context-line">{{ page_context }}</div>
+  <div class="header-row">
+    <div>
+      <h1>{{ page_title }}</h1>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary">Reset</button>
+      <button class="btn btn-primary">Search</button>
+    </div>
+  </div>
+</header>
+
+<section class="panel">
+  <div class="panel-header">
+    <div>
+      <span class="eyebrow">Records</span>
+      <h2>Find patient</h2>
+    </div>
+  </div>
+
+  <div class="search-panel">
+    <form class="search-form" method="get">
+      <input type="text" name="q" value="{{ query }}" placeholder="Search patient name or MRN" />
+      <select name="status">
+        <option value="">All statuses</option>
+        <option value="Active" {% if status_filter == 'Active' %}selected{% endif %}>Active</option>
+        <option value="Inactive" {% if status_filter == 'Inactive' %}selected{% endif %}>Inactive</option>
+        <option value="Transferred" {% if status_filter == 'Transferred' %}selected{% endif %}>Transferred</option>
+      </select>
+      <button class="btn btn-primary" type="submit">Apply filters</button>
+    </form>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Patient</th>
+          <th>MRN</th>
+          <th>DOB</th>
+          <th>Status</th>
+          <th>Address</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for patient in results %}
+        <tr>
+          <td><a class="inline-link" href="/patient/{{ patient.patient_id }}">{{ patient.p_first_name }} {{ patient.p_last_name }}</a></td>
+          <td class="mono-data">MRN-{{ patient.patient_id }}</td>
+          <td class="mono-data">{{ patient.p_date_of_birth }}</td>
+          <td><span class="status-pill {{ 'ok' if patient.patient_status == 'Active' else 'warn' if patient.patient_status == 'Transferred' else 'none' }}">{{ patient.patient_status }}</span></td>
+          <td>{{ patient.address.address_suburb if patient.address else 'Unknown' }}</td>
+          <td><a class="inline-link" href="/patient/{{ patient.patient_id }}">Open</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

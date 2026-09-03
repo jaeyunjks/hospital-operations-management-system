@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="page-header">
+  <div class="context-line">{{ page_context }}</div>
+  <div class="header-row">
+    <div>
+      <h1>{{ page_title }}</h1>
+    </div>
+    <div class="header-actions">
+      <button class="btn btn-secondary">Save draft</button>
+      <button class="btn btn-primary">Submit intake</button>
+    </div>
+  </div>
+</header>
+
+<section class="panel">
+  <div class="panel-header">
+    <div>
+      <span class="eyebrow">Entry form</span>
+      <h2>New patient intake</h2>
+    </div>
+  </div>
+
+  <form class="form-grid" method="post">
+    <div class="field-group">
+      <label for="title">Title</label>
+      <select id="title" name="title">
+        <option>Mr</option>
+        <option>Mrs</option>
+        <option>Ms</option>
+        <option>Dr</option>
+      </select>
+    </div>
+
+    <div class="field-group">
+      <label for="first_name">First name</label>
+      <input id="first_name" name="first_name" type="text" value="" placeholder="Enter first name" />
+    </div>
+
+    <div class="field-group">
+      <label for="last_name">Last name</label>
+      <input id="last_name" name="last_name" type="text" value="" placeholder="Enter last name" />
+    </div>
+
+    <div class="field-group">
+      <label for="dob">Date of birth</label>
+      <input id="dob" name="dob" type="date" />
+    </div>
+
+    <div class="field-group">
+      <label for="sex">Sex</label>
+      <select id="sex" name="sex">
+        <option>Male</option>
+        <option>Female</option>
+        <option>Alternate</option>
+        <option>Unassigned</option>
+      </select>
+    </div>
+
+    <div class="field-group">
+      <label for="mobile">Mobile</label>
+      <input id="mobile" name="mobile" type="tel" placeholder="0412 345 678" />
+    </div>
+
+    <div class="field-group">
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" placeholder="patient@email.com" />
+    </div>
+
+    <div class="field-group wide">
+      <label for="address">Address</label>
+      <input id="address" name="address" type="text" placeholder="Street address" />
+    </div>
+
+    <div class="field-group">
+      <label for="suburb">Suburb</label>
+      <input id="suburb" name="suburb" type="text" placeholder="Suburb" />
+    </div>
+
+    <div class="field-group">
+      <label for="state">State</label>
+      <select id="state" name="state">
+        <option>New South Wales</option>
+        <option>Victoria</option>
+        <option>Queensland</option>
+        <option>Western Australia</option>
+        <option>South Australia</option>
+        <option>Tasmania</option>
+        <option>Northern Territory</option>
+        <option>Australian Capital Territory</option>
+      </select>
+    </div>
+
+    <div class="field-group">
+      <label for="postcode">Postcode</label>
+      <input id="postcode" name="postcode" type="text" placeholder="0000" />
+    </div>
+
+    <div class="field-group">
+      <label for="insurance">Insurance</label>
+      <select id="insurance" name="insurance">
+        <option>Medicare</option>
+        <option>Private</option>
+        <option>Centrelink</option>
+      </select>
+    </div>
+
+    <div class="field-group">
+      <label for="medicare_number">Medicare number</label>
+      <input id="medicare_number" name="medicare_number" type="text" placeholder="123456780" />
+    </div>
+
+    <div class="field-group wide">
+      <label for="notes">Brief intake notes</label>
+      <textarea id="notes" name="notes" rows="4" placeholder="Reason for presentation, referral, interpreter needs, family contact..."></textarea>
+    </div>
+
+    <div class="field-group wide submit-row">
+      <button class="btn btn-primary" type="submit">Submit intake</button>
+    </div>
+  </form>
+
+  {% if submitted %}
+  <div class="banner banner-ok">
+    {% if message %}{{ message }}{% else %}Intake details captured. Review the record before final registration.{% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

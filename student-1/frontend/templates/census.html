@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="page-header">
+  <div class="context-line">{{ page_context }}</div>
+  <div class="header-row">
+    <div>
+      <h1>{{ page_title }}</h1>
+    </div>
+    <div class="header-actions">
+      <a class="btn btn-secondary" href="{{ url_for('export_page') }}">Export</a>
+      <a class="btn btn-primary" href="{{ url_for('intake_page') }}">New admission</a>
+    </div>
+  </div>
+
+  <div class="metrics-row" aria-label="Summary metrics">
+    {% for metric in metrics %}
+    <div class="stat-block">
+      <span class="stat-label">{{ metric.label }}</span>
+      <div class="stat-value-row">
+        <span class="stat-value" data-tone="{{ metric.tone }}">{{ metric.value }}</span>
+        <span class="stat-delta {{ metric.tone }}">{{ metric.delta }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</header>
+
+<section class="panel panel-large">
+  <div class="panel-header">
+    <div>
+      <span class="eyebrow">Service snapshot</span>
+      <h2>Admissions queue</h2>
+    </div>
+    <a class="btn btn-ghost" href="/search">Open search</a>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Admission</th>
+          <th>Patient</th>
+          <th>Unit</th>
+          <th>Status</th>
+          <th>Priority</th>
+          <th>Admitted</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for admission in admissions %}
+        <tr>
+          <td class="mono-data">ADM-{{ admission.admission_id }}</td>
+          <td>
+            {% set patient = patients | selectattr('patient_id', 'equalto', admission.patient_id) | list | first %}
+            {% if patient %}
+              <a class="inline-link" href="/patient/{{ patient.patient_id }}">{{ patient.p_first_name }} {{ patient.p_last_name }}</a>
+            {% else %}
+              Unassigned
+            {% endif %}
+          </td>
+          <td>Ward {{ admission.admission_id % 5 + 1 }}</td>
+          <td><span class="status-pill {{ 'ok' if admission.admission_status == 'Active' else 'warn' if admission.admission_status == 'Pending' else 'none' }}">{{ admission.admission_status }}</span></td>
+          <td><span class="tag {{ 'warn' if admission.admission_id % 2 else 'risk' if admission.admission_id % 3 == 0 else 'neutral' }}">{{ 'Emergency' if admission.admission_id % 2 else 'Urgent' if admission.admission_id % 3 == 0 else 'Routine' }}</span></td>
+          <td class="mono-data">{{ admission.admission_date }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

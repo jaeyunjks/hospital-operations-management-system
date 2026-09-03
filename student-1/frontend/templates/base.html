@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ page_title }} | HOMS</title>
+    <meta name="description" content="Patient and admissions operations interface." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:wght@600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="side-nav">
+        <div class="nav-brand">
+          <span class="brand-mark">HOMS</span>
+          <span class="brand-label">Patient &amp; Admissions</span>
+        </div>
+
+        <nav aria-label="Feature navigation">
+          <ul class="nav-list">
+            {% for item in nav %}
+            <li>
+              <a href="{{ item.href }}" class="nav-item {% if item.id == active_page %}is-active{% endif %}">{{ item.label }}</a>
+            </li>
+            {% endfor %}
+          </ul>
+        </nav>
+
+        <div class="nav-user">
+          <span class="user-name">Jesse Keyser</span>
+          <span class="user-role">Reception / Admissions</span>
+        </div>
+      </header>
+
+      <main class="page-shell">
+        {% block content %}{% endblock %}
+      </main>
+
+      <aside class="assist-rail" aria-label="Assistant panel">
+        <div class="assist-card ai-panel">
+          <span class="eyebrow">AI review</span>
+          <h3>Operational summary</h3>
+          <p>Identity checks, capacity pressure, and early discharge review remain the primary reception risks.</p>
+        </div>
+
+        <div class="assist-card suggestion">
+          <div class="suggestion-head">
+            <span class="status-dot warn"></span>
+            <span class="eyebrow">Admission pressure</span>
+          </div>
+          <p>Three active admissions are currently waiting for pending discharge assessment.</p>
+        </div>
+
+        <div class="assist-card suggestion">
+          <div class="suggestion-head">
+            <span class="status-dot risk"></span>
+            <span class="eyebrow">Duplicate review</span>
+          </div>
+          <p>At least one active record requires reconciliation before final registration.</p>
+        </div>
+      </aside>
+    </div>
+
+    <script>
+      window.setInterval(function () {
+        if (document.visibilityState === 'visible' && window.location.pathname !== '/intake') {
+          window.location.reload();
+        }
+      }, 12000);
+    </script>
+  </body>
+</html>

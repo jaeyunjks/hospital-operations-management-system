@@ -1,5 +1,5 @@
 # Shared HOMS development stack.
-# Student 4 and Student 5 services are wired into this root Compose file.
+# Student 1, 3, 4, and 5 services share this stack with the homepage and Ollama.
 
 services:
   # --- shared Release 0 home page --------------------------------------
@@ -233,9 +233,60 @@ services:
       timeout: 5s
       retries: 5
 
+  # --- student-1 — Patient & Admissions Management ---------------------
+  student-1-database:
+    build:
+      context: ./student-1
+      dockerfile: database/Dockerfile
+    container_name: student-1-database
+    working_dir: /app
+    environment:
+      HOST: 0.0.0.0
+      PORT: 6100
+      FLASK_DEBUG: 0
+    ports:
+      - "6100:6100"
+    command: python -m database.app
+
+  student-1-backend:
+    build:
+      context: ./student-1
+      dockerfile: backend/Dockerfile
+    container_name: student-1-backend
+    working_dir: /app
+    environment:
+      HOST: 0.0.0.0
+      PORT: 5100
+      DATABASE_URL: http://student-1-database:6100
+      FLASK_DEBUG: 0
+    depends_on:
+      - student-1-database
+    ports:
+      - "5100:5100"
+    command: python -m backend.app
+
+  student-1-frontend:
+    build:
+      context: ./student-1
+      dockerfile: frontend/Dockerfile
+    container_name: student-1-frontend
+    working_dir: /app
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3100
+      BACKEND_URL: http://student-1-backend:5100
+      FLASK_DEBUG: 0
+    depends_on:
+      - student-1-backend
+    ports:
+      - "3100:3100"
+    command: python app.py
+
 networks:
   homs-net:
     driver: bridge
+  default:
+    name: hospital-operations-management-system_default
 
 volumes:
   student5-database-data:

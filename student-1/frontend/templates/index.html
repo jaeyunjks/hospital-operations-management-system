@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Patient & Admissions</title>
+    <meta
+      name="description"
+      content="Patient and admissions management dashboard for the Hospital Operations Management System."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:wght@600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="side-nav" aria-label="Feature navigation">
+        <div class="nav-brand">
+          <span class="brand-mark">HOMS</span>
+          <span class="brand-label">Patient &amp; Admissions</span>
+        </div>
+
+        <nav>
+          <ul class="nav-list">
+            {% for item in nav %}
+            <li>
+              <a
+                href="{{ item.href }}"
+                class="nav-item {% if item.id == active_page %}is-active{% endif %}"
+              >
+                {{ item.label }}
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
+        </nav>
+
+        <div class="nav-user">
+          <span class="user-name">Jesse Keyser</span>
+          <span class="user-role">Admissions lead</span>
+        </div>
+      </aside>
+
+      <main class="page-shell">
+        <header class="page-header">
+          <div class="context-line">Patient operations / {{ page_title }}</div>
+          <div class="header-row">
+            <div>
+              <h1>{{ page_title }}</h1>
+            </div>
+            <div class="header-actions">
+              <a class="btn btn-secondary" href="{{ url_for('export_page') }}">Export</a>
+              <a class="btn btn-primary" href="{{ url_for('intake_page') }}">New patient</a>
+            </div>
+          </div>
+
+          <div class="metrics-row" aria-label="Summary metrics">
+            {% for metric in metrics %}
+            <div class="stat-block">
+              <span class="stat-label">{{ metric.label }}</span>
+              <div class="stat-value-row">
+                <span class="stat-value" data-tone="{{ metric.tone }}">{{ metric.value }}</span>
+                <span class="stat-delta {{ metric.tone }}">{{ metric.delta }}</span>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </header>
+
+        <section class="panel panel-large">
+          <div class="panel-header">
+            <div>
+              <span class="eyebrow">Current caseload</span>
+              <h2>Patient directory</h2>
+            </div>
+            <button class="btn btn-ghost">Filter</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Patient</th>
+                  <th>MRN</th>
+                  <th>DOB</th>
+                  <th>Status</th>
+                  <th>Risk</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for patient in patients %}
+                <tr>
+                  <td class="patient-name">{{ patient.name }}</td>
+                  <td class="mono-data">{{ patient.mrn }}</td>
+                  <td class="mono-data">{{ patient.dob }}</td>
+                  <td>
+                    <span class="status-pill {% if patient.status == 'Active' %}ok{% elif patient.status == 'Awaiting review' %}warn{% else %}none{% endif %}">
+                      {{ patient.status }}
+                    </span>
+                  </td>
+                  <td>
+                    <span class="status-pill {% if patient.risk == 'High' %}risk{% elif patient.risk == 'Medium' %}warn{% else %}ok{% endif %}">
+                      {{ patient.risk }}
+                    </span>
+                  </td>
+                  <td class="mono-data">{{ patient.updated }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel panel-large">
+          <div class="panel-header">
+            <div>
+              <span class="eyebrow">Flow board</span>
+              <h2>Admissions queue</h2>
+            </div>
+            <button class="btn btn-ghost">Review all</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Admission</th>
+                  <th>Patient</th>
+                  <th>Unit</th>
+                  <th>Priority</th>
+                  <th>Status</th>
+                  <th>Admitted</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for admission in admissions %}
+                <tr>
+                  <td class="mono-data">{{ admission.id }}</td>
+                  <td>{{ admission.patient }}</td>
+                  <td>{{ admission.unit }}</td>
+                  <td>
+                    <span class="tag {% if admission.priority == 'Critical' %}risk{% elif admission.priority == 'Emergency' %}warn{% else %}neutral{% endif %}">{{ admission.priority }}</span>
+                  </td>
+                  <td>
+                    <span class="status-pill {% if admission.status == 'Active' %}ok{% elif admission.status == 'Pending review' %}warn{% elif admission.status == 'Completed' %}none{% else %}risk{% endif %}">
+                      {{ admission.status }}
+                    </span>
+                  </td>
+                  <td class="mono-data">{{ admission.admitted }}</td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+
+      <aside class="assist-rail" aria-label="Assistant panel">
+        <div class="assist-card ai-panel">
+          <span class="eyebrow">AI review</span>
+          <h3>Operational summary</h3>
+          <p>Duplicate identity checks and emergency admissions require manual reconciliation before final billing and registration.</p>
+        </div>
+
+        {% for suggestion in ai_suggestions %}
+        <div class="assist-card suggestion">
+          <div class="suggestion-head">
+            <span class="status-dot {{ suggestion.tone }}"></span>
+            <span class="eyebrow">{{ suggestion.title }}</span>
+          </div>
+          <p>{{ suggestion.text }}</p>
+        </div>
+        {% endfor %}
+      </aside>
+    </div>
+  </body>
+</html>
