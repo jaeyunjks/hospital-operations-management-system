@@ -1,0 +1,37 @@
+{% if error %}
+  <div class="alert alert--danger" role="alert"><div class="alert__body">{{ error }}</div></div>
+{% else %}
+  <div class="ai-plan">
+    Classified as <strong>{{ result.plan.care_category }}</strong> —
+    {{ result.plan.classification_reason }}.
+    {{ result.plan.candidate_count }} candidate bed(s) considered.
+  </div>
+
+  <div class="panel__body">
+    {% if result.suggestions %}
+      {% for s in result.suggestions %}
+        <div class="suggestion">
+          <span class="suggestion__rank">{{ loop.index }}</span>
+          <span class="suggestion__bed">{{ s.bed_number }}</span>
+          <span class="suggestion__where">{{ s.room_number }} · {{ s.ward }} · {{ s.type_name }}</span>
+          <span class="suggestion__reason">{{ s.reason }}</span>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty">
+        <p class="empty__title">No compatible bed available</p>
+        <p class="empty__body">{{ result.message }}</p>
+      </div>
+    {% endif %}
+
+    <p class="ai-disclaimer">
+      <strong>Advisory only — the AI does not allocate beds.</strong>
+      An authorised bed coordinator must approve the placement and create the
+      arrangement. Source: {{ result.source }}{% if result.model %} ({{ result.model }}){% endif %}.
+      {% if result.discarded_ids %}
+        {{ result.discarded_ids | length }} unavailable bed(s) returned by the model were discarded.
+      {% endif %}
+      {% if result.source == 'fallback' %}{{ result.message }}{% endif %}
+    </p>
+  </div>
+{% endif %}

@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% set page = 'shortages' %}
+{% block title %}Shortage cases{% endblock %}
+{% block heading %}Bed shortage cases{% endblock %}
+{% block description %}
+  Raised when no compatible bed is available. The case records the requirement,
+  urgency and where the patient is waiting.
+{% endblock %}
+
+{% block content %}
+
+<section class="section">
+  <div class="panel">
+    <div class="panel__header"><h2 class="panel__title">Open a shortage case</h2></div>
+    <form class="panel__body form-grid" method="post" action="/shortages">
+      <label class="field">
+        <span class="field__label">Patient ID</span>
+        <input class="input" name="patient_id" type="number" required>
+      </label>
+      <label class="field">
+        <span class="field__label">Care category required</span>
+        <select class="select" name="required_care_category" required>
+          {% for c in care_categories %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span class="field__label">Ward required</span>
+        <input class="input" name="required_ward" placeholder="Optional">
+      </label>
+      <label class="field field--narrow">
+        <span class="field__label">Urgency</span>
+        <select class="select" name="urgency">
+          {% for u in urgencies %}
+            <option value="{{ u }}" {{ 'selected' if u == 'Medium' }}>{{ u }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field field--wide">
+        <span class="field__label">Holding location</span>
+        <input class="input" name="holding_location" placeholder="Where the patient is waiting now">
+      </label>
+      <div class="form-grid__actions">
+        <button class="btn-primary" type="submit">Open case</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-header">
+    <h2 class="section-header__title">All cases</h2>
+    <span class="section-header__meta u-label">{{ cases | length }} cases</span>
+  </div>
+
+  <form class="toolbar control-bar" method="get" action="/shortages">
+    <label class="field">
+      <span class="field__label">Status</span>
+      <select class="select" name="status">
+        <option value="">All</option>
+        {% for s in shortage_statuses %}
+          <option value="{{ s }}" {{ 'selected' if filters.get('status') == s }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button class="btn-secondary" type="submit">Filter</button>
+  </form>
+
+  <div class="table-wrap">
+    <table class="table table--zebra">
+      <thead>
+        <tr>
+          <th scope="col">#</th><th scope="col">Patient</th><th scope="col">Needs</th>
+          <th scope="col">Urgency</th><th scope="col">Waiting at</th><th scope="col">Opened</th>
+          <th scope="col">Status</th><th scope="col">Decision</th><th scope="col"></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for c in cases %}
+        <tr>
+          <td class="table__num">{{ c.case_id }}</td>
+          <td class="table__num">{{ c.patient_id }}</td>
+          <td>{{ c.required_care_category }}
+            {% if c.required_ward %}<span class="cell-sub">{{ c.required_ward }}</span>{% endif %}
+          </td>
+          <td><span class="urgency urgency--{{ c.urgency }}">{{ c.urgency }}</span></td>
+          <td class="table__muted">{{ c.holding_location or '—' }}</td>
+          <td class="table__num">{{ c.opened_at }}</td>
+          <td><span class="state state--{{ c.status | replace(' ','') }}">{{ c.status }}</span></td>
+          <td>{{ c.chosen_option or '—' }}
+            {% if c.decision_reason %}<span class="cell-sub">{{ c.decision_reason }}</span>{% endif %}
+          </td>
+          <td><a href="/shortages/{{ c.case_id }}">Review</a></td>
+        </tr>
+      {% else %}
+        <tr><td colspan="9">
+          <div class="empty"><p class="empty__title">No shortage cases match these filters</p></div>
+        </td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% endblock %}

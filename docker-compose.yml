@@ -1,8 +1,8 @@
 # Shared HOMS development stack.
-# Student 5 is the first feature wired into this root Compose file. Other
-# students remain untouched and can add their services here independently.
+# Student 4 and Student 5 services are wired into this root Compose file.
 
 services:
+  # --- student-5 — Staff & Shift Management ----------------------------
   student5-database:
     build:
       context: .
@@ -83,5 +83,80 @@ services:
       start_period: 5s
     restart: unless-stopped
 
+  # --- shared AI runtime ------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: homs-ollama
+    ports: ["11434:11434"]
+    volumes: ["ollama-models:/root/.ollama"]
+    networks: [homs-net]
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  # --- student-4 — Room & Bed Management (Jisoo Jung / Asher) -----------
+  student-4-database:
+    build:
+      context: ./student-4/database
+    container_name: s4-database
+    environment:
+      PORT: 6400
+      DB_PATH: /app/rooms.db
+      FLASK_DEBUG: 0
+    ports: ["6400:6400"]
+    networks: [homs-net]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:6400/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  student-4-backend:
+    build:
+      context: ./student-4/backend
+    container_name: s4-backend
+    environment:
+      PORT: 5400
+      DATABASE_URL: http://student-4-database:6400
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      OLLAMA_TIMEOUT: 30
+      AUTH_ENABLED: 0
+      FLASK_DEBUG: 0
+    ports: ["5400:5400"]
+    depends_on:
+      student-4-database:
+        condition: service_healthy
+    networks: [homs-net]
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:5400/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  student-4-frontend:
+    # Built from the repository root: the page links shared/frontend, which
+    # sits outside this student's folder.
+    build:
+      context: .
+      dockerfile: student-4/frontend/Dockerfile
+    container_name: s4-frontend
+    environment:
+      PORT: 3400
+      BACKEND_URL: http://student-4-backend:5400
+      FLASK_DEBUG: 0
+    ports: ["3400:3400"]
+    depends_on:
+      student-4-backend:
+        condition: service_healthy
+    networks: [homs-net]
+
+networks:
+  homs-net:
+    driver: bridge
+
 volumes:
   student5-database-data:
+  ollama-models:

@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% set page = 'arrangements' %}
+{% block title %}Arrangements{% endblock %}
+{% block heading %}Bed stays and theatre sessions{% endblock %}
+{% block description %}
+  One record covers both. A booking that clashes with an existing one on the same
+  bed is refused by the API.
+{% endblock %}
+
+{% block content %}
+
+<section class="section">
+  <div class="panel">
+    <div class="panel__header"><h2 class="panel__title">Arrange a bed or book a theatre</h2></div>
+    <form class="panel__body form-grid" method="post" action="/arrangements">
+      <label class="field">
+        <span class="field__label">Bed</span>
+        <select class="select" name="bed_id" required>
+          {% for bed in free_beds %}
+            <option value="{{ bed.bed_id }}">{{ bed.bed_number }} — {{ bed.room_number }} ({{ bed.care_category }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="field">
+        <span class="field__label">Patient ID</span>
+        <input class="input" name="patient_id" type="number" required placeholder="1001">
+      </label>
+      <label class="field">
+        <span class="field__label">Purpose</span>
+        <select class="select" name="purpose" required>
+          <option value="Inpatient stay">Inpatient stay</option>
+          <option value="Surgery">Surgery</option>
+        </select>
+      </label>
+      <label class="field">
+        <span class="field__label">Start</span>
+        <input class="input" name="start_time" type="datetime-local" required>
+      </label>
+      <label class="field">
+        <span class="field__label">End (optional)</span>
+        <input class="input" name="end_time" type="datetime-local">
+      </label>
+      <label class="field">
+        <span class="field__label">Procedure (surgery only)</span>
+        <input class="input" name="procedure_name">
+      </label>
+      <label class="field">
+        <span class="field__label">Surgeon (surgery only)</span>
+        <input class="input" name="surgeon_name">
+      </label>
+      <label class="field">
+        <span class="field__label">Status</span>
+        <select class="select" name="status">
+          <option value="Scheduled">Scheduled</option>
+          <option value="In Progress">In Progress</option>
+        </select>
+      </label>
+      <label class="field field--wide">
+        <span class="field__label">Patient requirements</span>
+        <input class="input" name="patient_requirements" placeholder="Optional">
+      </label>
+      <div class="form-grid__actions">
+        <button class="btn-primary" type="submit">Create arrangement</button>
+      </div>
+    </form>
+  </div>
+</section>
+
+<section class="section">
+  <div class="section-header">
+    <h2 class="section-header__title">All arrangements</h2>
+    <span class="section-header__meta u-label">Never deleted, only cancelled or completed</span>
+  </div>
+
+  <form class="toolbar control-bar" method="get" action="/arrangements">
+    <label class="field field--narrow">
+      <span class="field__label">Status</span>
+      <select class="select" name="status">
+        <option value="">All</option>
+        {% for s in arrangement_statuses %}
+          <option value="{{ s }}" {{ 'selected' if filters.get('status') == s }}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="field field--narrow">
+      <span class="field__label">Purpose</span>
+      <select class="select" name="purpose">
+        <option value="">All</option>
+        <option value="Inpatient stay" {{ 'selected' if filters.get('purpose') == 'Inpatient stay' }}>Inpatient stay</option>
+        <option value="Surgery" {{ 'selected' if filters.get('purpose') == 'Surgery' }}>Surgery</option>
+      </select>
+    </label>
+    <button class="btn-secondary" type="submit">Filter</button>
+  </form>
+
+  <div class="table-wrap">
+    <table class="table table--zebra">
+      <thead>
+        <tr>
+          <th scope="col">#</th><th scope="col">Bed</th><th scope="col">Patient</th>
+          <th scope="col">Purpose</th><th scope="col">Procedure</th><th scope="col">Window</th>
+          <th scope="col">Status</th><th scope="col">Arranged by</th><th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for a in arrangements %}
+        <tr>
+          <td class="table__num">{{ a.arrangement_id }}
+            {% if a.transferred_from_id %}<span class="cell-sub">from #{{ a.transferred_from_id }}</span>{% endif %}
+          </td>
+          <td class="table__num">{{ a.bed_id }}</td>
+          <td class="table__num">{{ a.patient_id }}</td>
+          <td>{{ a.purpose }}<span class="cell-sub">{{ a.care_category }}</span></td>
+          <td>{{ a.procedure_name or '—' }}
+            {% if a.surgeon_name %}<span class="cell-sub">{{ a.surgeon_name }}</span>{% endif %}
+          </td>
+          <td class="table__num">{{ a.start_time }}<span class="cell-sub">→ {{ a.end_time or 'open' }}</span></td>
+          <td><span class="state state--{{ a.status | replace(' ','') }}">{{ a.status }}</span></td>
+          <td class="table__muted">{{ a.arranged_by }}</td>
+          <td>
+            {% if a.status in ['Scheduled', 'In Progress'] %}
+            <details class="row-actions">
+              <summary>Actions</summary>
+              <div class="row-actions__body">
+                {% if a.status == 'In Progress' %}
+                  <form method="post" action="/arrangements/{{ a.arrangement_id }}/release">
+                    <button class="btn-secondary" type="submit">Release / discharge</button>
+                  </form>
+                  <form method="post" action="/arrangements/{{ a.arrangement_id }}/transfer" class="stack stack--sm">
+                    <label class="field">
+                      <span class="field__label">Move to bed</span>
+                      <select class="select" name="to_bed_id" required>
+                        {% for bed in free_beds %}
+                          <option value="{{ bed.bed_id }}">{{ bed.bed_number }} — {{ bed.room_number }}</option>
+                        {% endfor %}
+                      </select>
+                    </label>
+                    <label class="field">
+                      <span class="field__label">Reason</span>
+                      <input class="input" name="reason" placeholder="Why the move">
+                    </label>
+                    <button class="btn-secondary" type="submit">Transfer</button>
+                  </form>
+                {% else %}
+                  <form method="post" action="/arrangements/{{ a.arrangement_id }}/cancel" class="stack stack--sm">
+                    <label class="field">
+                      <span class="field__label">Reason</span>
+                      <input class="input" name="reason" placeholder="Why cancelled">
+                    </label>
+                    <button class="btn-danger" type="submit">Cancel booking</button>
+                  </form>
+                {% endif %}
+              </div>
+            </details>
+            {% else %}<span class="table__muted">—</span>{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="9">
+          <div class="empty"><p class="empty__title">No arrangements match these filters</p></div>
+        </td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% endblock %}

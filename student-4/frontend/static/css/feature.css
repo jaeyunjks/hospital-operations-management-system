@@ -1,0 +1,321 @@
+/* ==========================================================================
+   Room & Bed Management — feature-local styles (student-4)
+   --------------------------------------------------------------------------
+   Loads AFTER shared/frontend/css/main.css and builds on its tokens.
+   Nothing reusable belongs here: if another feature would want it, it
+   belongs in the shared components.css instead.
+
+   No colour, size or radius is hard-coded — every value reads a shared
+   token, so a change to the team theme carries into this feature for free.
+   ========================================================================== */
+
+
+/* --------------------------------------------------------------------------
+   Status vocabulary
+   Rooms, beds, arrangements, shortage cases and theatres each have their own
+   enumeration. Mapping every value onto the shared status colours in one
+   place keeps the meaning consistent across all five screens: green reads
+   "free to use", indigo "in use right now", amber "committed but not yet
+   in use", red "unusable or stopped".
+   -------------------------------------------------------------------------- */
+.state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--size-ui-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.state::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-dot);
+  background: var(--color-neutral-mark);
+  flex-shrink: 0;
+}
+
+/* free to use */
+.state--available::before,
+.state--Available::before,
+.state--Completed::before  { background: var(--color-success-mark); }
+
+/* in use right now */
+.state--occupied::before,
+.state--InUse::before,
+.state--InProgress::before { background: var(--color-info-mark); }
+
+/* committed, not yet in use */
+.state--reserved::before,
+.state--Scheduled::before,
+.state--Cleaning::before,
+.state--Optionoffered::before { background: var(--color-warning-mark); }
+
+/* unusable or stopped */
+.state--maintenance::before,
+.state--OutofService::before,
+.state--Cancelled::before,
+.state--Escalated::before  { background: var(--color-danger-mark); }
+
+/* awaiting a decision */
+.state--Open::before       { background: var(--color-warning-mark); }
+
+
+/* --------------------------------------------------------------------------
+   Urgency — shortage cases only. Reads as a badge rather than a status dot
+   because it is a property of the case, not a lifecycle state.
+   -------------------------------------------------------------------------- */
+.urgency {
+  display: inline-block;
+  padding: 1px var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  border: 1px solid transparent;
+}
+
+.urgency--Low      { color: var(--color-text-muted); background: var(--color-neutral-soft); }
+.urgency--Medium   { color: var(--color-warning);    background: var(--color-warning-soft); }
+.urgency--High     { color: var(--color-danger);     background: var(--color-danger-soft); }
+.urgency--Critical {
+  color: var(--color-text-on-accent);
+  background: var(--color-danger-mark);
+}
+
+
+/* --------------------------------------------------------------------------
+   Filter and form bars
+   The toolbar component gives the frame; these rules only lay the controls
+   out inside it.
+   -------------------------------------------------------------------------- */
+.control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-4);
+}
+
+.control-bar .field { min-width: 150px; }
+.control-bar .field--wide { min-width: 280px; flex: 1; }
+.control-bar .field--narrow { min-width: 110px; }
+.control-bar .btn,
+.control-bar .btn-primary,
+.control-bar .btn-secondary { align-self: flex-end; }
+
+/* A form that fills the panel body rather than sitting in a toolbar. */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: var(--space-4);
+  align-items: end;
+}
+
+.form-grid__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: var(--border-hair);
+}
+
+
+/* --------------------------------------------------------------------------
+   Row-level actions
+   Release, cancel and transfer are destructive or state-changing, so they
+   stay collapsed until the coordinator opens them deliberately.
+   -------------------------------------------------------------------------- */
+.row-actions > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-2);
+  font-size: var(--size-ui-xs);
+  font-weight: var(--weight-medium);
+  color: var(--color-link);
+  cursor: pointer;
+  list-style: none;
+}
+
+.row-actions > summary::-webkit-details-marker { display: none; }
+.row-actions > summary::after { content: "▸"; font-size: var(--size-label); }
+.row-actions[open] > summary::after { content: "▾"; }
+.row-actions > summary:hover { color: var(--color-link-hover); }
+
+.row-actions__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  min-width: 200px;
+  background: var(--color-surface-muted);
+  border: var(--border-hair);
+}
+
+
+/* --------------------------------------------------------------------------
+   Theatre board
+   Three states the coordinator must read at a glance, so each theatre is a
+   card rather than a table row. The left rule carries the state.
+   -------------------------------------------------------------------------- */
+.theatre-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1px;
+  background: var(--color-border-strong);
+  border: var(--border-strong);
+}
+
+.theatre {
+  padding: var(--space-5);
+  background: var(--color-surface);
+  border-left: 3px solid var(--color-neutral-mark);
+}
+
+.theatre--InUse         { border-left-color: var(--color-info-mark); }
+.theatre--Available     { border-left-color: var(--color-success-mark); }
+.theatre--Cleaning      { border-left-color: var(--color-warning-mark); }
+.theatre--OutofService  { border-left-color: var(--color-danger-mark); }
+
+.theatre__number {
+  font-family: var(--font-mono);
+  font-size: var(--size-data-lg);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.theatre__ward {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+.theatre__session {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: var(--border-hair);
+  font-size: var(--size-ui-sm);
+}
+
+.theatre__procedure {
+  font-weight: var(--weight-medium);
+  color: var(--color-text-primary);
+}
+
+.theatre__idle {
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: var(--border-hair);
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-muted);
+}
+
+
+/* --------------------------------------------------------------------------
+   AI results
+   The shared ai-panel / ai-label / ai-disclaimer components carry the
+   framing. These rules only lay out the ranked list inside them.
+   -------------------------------------------------------------------------- */
+.ai-plan {
+  padding: var(--space-3) var(--space-5);
+  background: var(--color-surface-muted);
+  border-bottom: var(--border-hair);
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-muted);
+}
+
+.suggestion {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-4) 0;
+  border-bottom: var(--border-hair);
+}
+
+.suggestion:last-child { border-bottom: none; }
+
+.suggestion__rank {
+  font-family: var(--font-mono);
+  font-size: var(--size-data);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-label);
+  min-width: 1.5em;
+}
+
+.suggestion__bed {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+  min-width: 8em;
+}
+
+.suggestion__where {
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-muted);
+  min-width: 12em;
+}
+
+.suggestion__reason {
+  flex: 1;
+  font-size: var(--size-ui-sm);
+  color: var(--color-text-secondary);
+}
+
+
+/* --------------------------------------------------------------------------
+   Shortage case options
+   -------------------------------------------------------------------------- */
+.option-kind {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+.case-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1px;
+  background: var(--color-border-strong);
+  border: var(--border-strong);
+  margin-bottom: var(--space-6);
+}
+
+.case-fact { padding: var(--space-4) var(--space-5); background: var(--color-surface); }
+
+.case-fact__label {
+  display: block;
+  margin-bottom: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+.case-fact__value { font-size: var(--size-ui-sm); color: var(--color-text-primary); }
+
+
+/* --------------------------------------------------------------------------
+   Small helpers
+   -------------------------------------------------------------------------- */
+.count-note {
+  margin-top: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--size-data-sm);
+  color: var(--color-text-label);
+}
+
+.cell-sub {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--size-ui-xs);
+  color: var(--color-text-muted);
+}
