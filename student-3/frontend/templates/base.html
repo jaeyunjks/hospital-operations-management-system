@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{{ title }}{% endblock %} — Pharmacy Operations — HOMS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <a class="app-header__brand" href="/">
+        HOMS
+        <span class="app-header__context">Pharmacy &amp; Medication Inventory</span>
+      </a>
+      <nav class="app-header__nav" aria-label="Pharmacy pages">
+        <a class="nav-link" href="/">Dashboard</a>
+        <a class="nav-link" href="/medicines">Medicines</a>
+        <a class="nav-link" href="/batches">Batches &amp; Expiry</a>
+        <a class="nav-link" href="/movements">Stock Movements</a>
+        <a class="nav-link" href="/purchase-orders">Purchase Orders</a>
+        <a class="nav-link" href="/suppliers">Suppliers</a>
+      </nav>
+      <div class="app-header__actions">
+        <div class="user-chip">
+          <span class="avatar avatar--inverse" aria-hidden="true">D</span>
+          <span class="user-chip__identity">
+            <span class="user-chip__name">{{ identity.name if identity else 'No demo role selected' }}</span>
+            <span class="user-chip__role">{{ identity.role if identity else 'Demo mode' }}</span>
+          </span>
+        </div>
+        <a class="btn btn-ghost btn-compact" href="/demo">Change demo role</a>
+      </div>
+    </header>
+
+    <div class="app-body">
+      <main class="app-main" id="main">
+        <div class="page">
+        {% block content %}{% endblock %}
+        </div>
+      </main>
+    </div>
+    <footer class="page">
+      <a class="nav-link" href="/shared/index.html">Back to shared home page</a>
+    </footer>
+  </div>
+</body>
+</html>
