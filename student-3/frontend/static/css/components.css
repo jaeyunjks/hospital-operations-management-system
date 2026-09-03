@@ -383,6 +383,66 @@
   background: var(--color-surface-band);
 }
 
+/* Modal form shell for HTMX-loaded add and edit forms. */
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+}
+
+.modal__backdrop {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  background: var(--color-overlay);
+  border: 0;
+  cursor: default;
+}
+
+.modal__dialog {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 42rem);
+  max-height: calc(100vh - (var(--space-5) * 2));
+  overflow-y: auto;
+  box-shadow: var(--shadow-dialog);
+}
+
+.modal__dialog .panel__header { justify-content: space-between; }
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.modal-form { gap: var(--space-4); }
+
+.modal-form__field {
+  display: grid;
+  grid-template-columns: 10rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.modal-form__field--textarea { align-items: start; }
+
+.modal-form__field--textarea .field__label { padding-top: var(--space-3); }
+
+.modal-form__field .input,
+.modal-form__field .select,
+.modal-form__field .textarea { width: 100%; }
+
+@media (max-width: 40rem) {
+  .modal-form__field { grid-template-columns: 1fr; gap: var(--space-2); }
+  .modal-form__field--textarea .field__label { padding-top: 0; }
+}
+
 /* .card is retained as an alias of .panel for continuity with earlier
    feature work; new code should prefer .panel. */
 .card { background: var(--color-surface); border: var(--border-strong); }
