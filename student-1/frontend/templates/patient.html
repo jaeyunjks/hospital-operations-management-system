@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if patient is none %}
+<header class="page-header">
+  <div class="context-line">{{ page_context }}</div>
+  <div class="header-row">
+    <div><h1>Patient not found</h1></div>
+  </div>
+</header>
+{% else %}
+<header class="page-header">
+  <div class="context-line">{{ page_context }}</div>
+  <div class="header-row">
+    <div>
+      <h1>{{ patient.p_first_name }} {{ patient.p_last_name }}</h1>
+    </div>
+    <div class="header-actions">
+      {% if editing %}
+      <a class="btn btn-secondary" href="{{ url_for('patient_record', patient_id=patient.patient_id) }}">Cancel</a>
+      {% else %}
+      <a class="btn btn-secondary" href="{{ url_for('patient_record', patient_id=patient.patient_id, edit=1) }}">Edit</a>
+      {% endif %}
+    </div>
+  </div>
+</header>
+
+<section class="panel">
+  <div class="panel-header">
+    <div>
+      <span class="eyebrow">Record</span>
+      <h2>Demographics</h2>
+    </div>
+  </div>
+
+  {% if editing %}
+  <form class="form-grid" method="post">
+    <div class="field-group"><label for="title">Title</label><input id="title" name="title" value="{{ patient.p_title }}" required /></div>
+    <div class="field-group"><label for="first_name">First name</label><input id="first_name" name="first_name" value="{{ patient.p_first_name }}" required /></div>
+    <div class="field-group"><label for="last_name">Last name</label><input id="last_name" name="last_name" value="{{ patient.p_last_name }}" required /></div>
+    <div class="field-group"><label for="dob">Date of birth</label><input id="dob" name="dob" type="date" value="{{ patient.p_date_of_birth }}" required /></div>
+    <div class="field-group"><label for="sex">Sex</label><input id="sex" name="sex" value="{{ patient.p_assigned_sex }}" required /></div>
+    <div class="field-group"><label for="mobile">Mobile</label><input id="mobile" name="mobile" value="{{ patient.p_mobile }}" required /></div>
+    <div class="field-group"><label for="email">Email</label><input id="email" name="email" type="email" value="{{ patient.p_email_address or '' }}" /></div>
+    <div class="field-group wide"><label for="address">Primary address</label><input id="address" name="address" value="{{ patient.address.address_street if patient.address else '' }}" /></div>
+    <div class="field-group"><label for="suburb">Suburb</label><input id="suburb" name="suburb" value="{{ patient.address.address_suburb if patient.address else '' }}" /></div>
+    <div class="field-group"><label for="state">State</label><input id="state" name="state" value="{{ patient.address.address_state if patient.address else '' }}" /></div>
+    <div class="field-group"><label for="postcode">Postcode</label><input id="postcode" name="postcode" value="{{ patient.address.address_postcode if patient.address else '' }}" /></div>
+    <div class="field-group"><label for="patient_status">Status</label><select id="patient_status" name="patient_status"><option {% if patient.patient_status == 'Active' %}selected{% endif %}>Active</option><option {% if patient.patient_status == 'Inactive' %}selected{% endif %}>Inactive</option><option {% if patient.patient_status == 'Transferred' %}selected{% endif %}>Transferred</option></select></div>
+    <div class="field-group wide submit-row"><button class="btn btn-primary" type="submit">Save changes</button></div>
+  </form>
+  {% else %}
+  <div class="detail-grid">
+    <div class="detail-item"><span>Patient ID</span><strong>MRN-{{ patient.patient_id }}</strong></div>
+    <div class="detail-item"><span>Title</span><strong>{{ patient.p_title }}</strong></div>
+    <div class="detail-item"><span>Date of birth</span><strong>{{ patient.p_date_of_birth }}</strong></div>
+    <div class="detail-item"><span>Sex</span><strong>{{ patient.p_assigned_sex }}</strong></div>
+    <div class="detail-item"><span>Mobile</span><strong>{{ patient.p_mobile }}</strong></div>
+    <div class="detail-item"><span>Email</span><strong>{{ patient.p_email_address or 'Not provided' }}</strong></div>
+    <div class="detail-item"><span>Primary address</span><strong>{{ patient.address.address_street if patient.address else 'Not provided' }}</strong></div>
+    <div class="detail-item"><span>Suburb</span><strong>{{ patient.address.address_suburb if patient.address else 'Not provided' }}</strong></div>
+    <div class="detail-item"><span>Status</span><strong>{{ patient.patient_status }}</strong></div>
+    <div class="detail-item"><span>Insurance</span><strong>{{ patient.medical.private_insurance if patient.medical and patient.medical.private_insurance else 'Medicare' }}</strong></div>
+  </div>
+  {% endif %}
+  {% if message %}<div class="banner banner-risk">{{ message }}</div>{% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <div>
+      <span class="eyebrow">AI assist</span>
+      <h2>Clinical summary</h2>
+    </div>
+  </div>
+
+  <div class="ai-summary-box">
+    <p>{{ ai_summary }}</p>
+    <div class="summary-actions">
+      <button class="btn btn-secondary">Refresh summary</button>
+      <button class="btn btn-primary">Apply summary</button>
+    </div>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

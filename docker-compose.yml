@@ -42,6 +42,23 @@ services:
       - "5100:5100"
     command: python -m backend.app
 
+  student-1-frontend:
+    build:
+      context: ./student-1
+      dockerfile: frontend/Dockerfile
+    container_name: student-1-frontend
+    working_dir: /app
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3100
+      BACKEND_URL: http://student-1-backend:5100
+      FLASK_DEBUG: 0
+    depends_on:
+      - student-1-backend
+    ports:
+      - "3100:3100"
+    command: python app.py
+
 networks:
   default:
     name: hospital-operations-management-system_default
