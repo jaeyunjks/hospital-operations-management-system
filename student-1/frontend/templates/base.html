@@ -12,13 +12,13 @@
   </head>
   <body>
     <div class="app-shell">
-      <aside class="side-nav" aria-label="Feature navigation">
+      <header class="side-nav">
         <div class="nav-brand">
           <span class="brand-mark">HOMS</span>
           <span class="brand-label">Patient &amp; Admissions</span>
         </div>
 
-        <nav>
+        <nav aria-label="Feature navigation">
           <ul class="nav-list">
             {% for item in nav %}
             <li>
@@ -32,7 +32,7 @@
           <span class="user-name">Jesse Keyser</span>
           <span class="user-role">Reception / Admissions</span>
         </div>
-      </aside>
+      </header>
 
       <main class="page-shell">
         {% block content %}{% endblock %}
