@@ -69,12 +69,12 @@ TABLES = {
     "surgery_requests": {
         "pk": "request_id",
         "columns": [
-            "patient_id", "admission_id", "doctor_id",
+            "patient_id", "admission_id", "doctor_id", "bed_id",
             "procedure_type", "scheduled_at",
             "status", "created_at",
         ],
         "required": [
-            "patient_id", "admission_id", "doctor_id",
+            "patient_id", "admission_id", "doctor_id", "bed_id",
             "procedure_type", "scheduled_at",
         ],
     },
