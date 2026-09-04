@@ -3,7 +3,7 @@
 # External URL defaults match the integrated service names/routes on develop;
 # those services must be running on the corresponding networks to use them.
 services:
-  # --- member-2 — Clinical Staff Management ----------------------------
+  # --- student-2 — Clinical Staff Management ----------------------------
   student-2-database:
     build:
       context: ./database
@@ -35,11 +35,11 @@ services:
       PATIENT_ADMISSION_API_URL: "${member2_PATIENT_ADMISSION_API_URL:-http://student-1-backend:5100/api}"
       # external_services.py still uses stubs; configuring URLs does not enable HTTP.
       # NOTE: hostname corrected to match the hyphenated naming convention used
-      # by every other service (member-2-backend, member-1-backend, member-4-backend).
+      # by every other service (student-2-backend, student-1-backend, student-4-backend).
       # The un-hyphenated "member5-backend" would fail Docker's internal DNS lookup
-      # once member-5's service is actually added to the stack.
-      STAFF_SHIFT_API_URL: "${member2_STAFF_SHIFT_API_URL:-http://member-5-backend:5500/api}"
-      ROOM_BED_API_URL: "${member2_ROOM_BED_API_URL:-http://member-4-backend:5400}"
+      # once student-5's service is actually added to the stack.
+      STAFF_SHIFT_API_URL: "${member2_STAFF_SHIFT_API_URL:-http://student-5-backend:5500/api}"
+      ROOM_BED_API_URL: "${member2_ROOM_BED_API_URL:-http://student-4-backend:5400}"
       OLLAMA_BASE_URL: "${member2_OLLAMA_BASE_URL:-http://ollama:11434}"
       OLLAMA_MODEL: "${member2_OLLAMA_MODEL:-llama3.1:8b}"
       OLLAMA_TIMEOUT: "${member2_OLLAMA_TIMEOUT:-8}"
@@ -48,7 +48,7 @@ services:
     depends_on:
       student-2-database:
         condition: service_healthy
-    # develop uses default for members 1/5 and homs-net for member 4/Ollama.
+    # develop uses default for members 1/5 and homs-net for student 4/Ollama.
     networks: [homs-net, default]
     healthcheck:
       test:

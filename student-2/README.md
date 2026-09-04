@@ -1,4 +1,4 @@
-# member-2
+# student-2
 
 Independently owned feature microservice set for the Hospital Operations
 Management System.

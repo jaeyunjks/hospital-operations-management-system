@@ -9,9 +9,9 @@
 #
 # When implementation begins, this file will eventually orchestrate:
 #
-#   * Five frontend services          (member-1..5 frontend)
-#   * Five Flask backend/API services (member-1..5 backend)
-#   * Five database services          (member-1..5 SQLite; volume-backed)
+#   * Five frontend services          (student-1..5 frontend)
+#   * Five Flask backend/API services (student-1..5 backend)
+#   * Five database services          (student-1..5 SQLite; volume-backed)
 #   * AI-Mode service                 (ai-services/ai-mode)
 #   * Ollama runtime                  (approved open-source LLM host)
 #   * Later releases:
@@ -19,7 +19,7 @@
 #       - RAG server                  (ai-services/rag-server)      [Release 1]
 #       - Multi-Agent server          (ai-services/multi-agent-server) [Release 2]
 #
-# Each service will reference its own Dockerfile (e.g. member-1/Dockerfile)
+# Each service will reference its own Dockerfile (e.g. student-1/Dockerfile)
 # and expose the appropriate ports / networks / volumes once implemented.
 # ==========================================================================
 
@@ -27,8 +27,8 @@
 
 services: {}
 # services:
-#   member-1-backend:
-#     build: ./member-1
+#   student-1-backend:
+#     build: ./student-1
 #     # ... to be defined when the service exists
 
 # networks:
@@ -36,4 +36,4 @@ services: {}
 #     driver: bridge
 
 # volumes:
-#   member-1-db:
+#   student-1-db:
