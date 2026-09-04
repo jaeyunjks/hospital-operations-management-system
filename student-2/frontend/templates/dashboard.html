@@ -1,0 +1,471 @@
+{#
+  dashboard.html - Clinical Staff Management landing page.
+
+  Server-rendered shell + HTMX for the live bits. The page shows ONE list,
+  chosen by the acting role (the `role` string app.py passes in):
+
+      doctor      -> assigned patients whose assessment is still open
+      nurse       -> that nurse's own care-task list
+      specialist  -> consultations still pending a recommendation
+
+  app.py hands us the backend JSON untouched as `data`. Depending on which
+  backend list the "/" route fetched, that dict carries one of:
+      data.clinical_records        (list)
+      data.care_tasks              (list)
+      data.consultation_requests   (list)
+  The backend has already scoped each list to the current role, so we just
+  render whatever arrived - no identity filtering happens here.
+
+  HTMX:
+    * the role switch (header) re-requests "/" with ?role=... and swaps <body>
+    * the list region polls "/" every 30s and swaps itself, so a task
+      completed elsewhere shows up without a full reload
+  Every hx-get hits this same "/" route; hx-select pulls just the fragment
+  being swapped out of the full page the route returns.
+
+  "Overdue" depends on the current time, which the server side of this route
+  does not pass in. A small script at the end of <body> reads each row's
+  data-due timestamp, flips its status word to "Overdue", and updates the
+  Overdue / Ratio metrics. It re-runs after every HTMX swap.
+
+  Status vocabulary is the fixed set: Due, Overdue, Given, Refused, Escalated.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOMS — Clinical Staff Management</title>
+  <meta name="description"
+        content="Clinical Staff Management — role dashboard for assigned patients, care tasks and consultations.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+
+  <link rel="stylesheet" href="/static/shared/css/main.css">
+  <link rel="stylesheet" href="/static/css/clinical-staff.css">
+
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  {#
+    Macro: which .status--* modifier a word gets. .status itself + a
+    .status__dot + the text come from the markup at each call site.
+  #}
+  {% macro status_class(word) -%}
+    {%- if word in ['Overdue', 'Refused'] -%}status--danger
+    {%- elif word == 'Escalated' -%}status--warning
+    {%- elif word == 'Given' -%}status--success
+    {%- else -%}status--pending
+    {%- endif -%}
+  {%- endmacro %}
+
+  <div class="app">
+
+    <!-- ===================================================== global header -->
+    <header class="app-header clinical-header">
+      <a class="app-header__brand" href="/">
+        HOMS
+        <span class="app-header__context">Clinical Staff Management</span>
+      </a>
+
+      <nav class="app-header__nav" aria-label="Clinical Staff Management">
+        <a class="nav-link" href="/" aria-current="page">Dashboard</a>
+        <a class="nav-link" href="/assessment/new">New assessment</a>
+        <a class="nav-link" href="/consultations/new">Request consult</a>
+        <a class="nav-link" href="/care-tasks/new">New task</a>
+        <a class="nav-link" href="/surgery/new">Schedule surgery</a>
+      </nav>
+
+      <div class="app-header__actions">
+        <span class="user-chip">
+          <span class="avatar avatar--inverse">{{ role[:1] | upper }}</span>
+          <span class="user-chip__identity">
+            <span class="user-chip__name">Signed in</span>
+            <span class="user-chip__role">{{ role }}</span>
+          </span>
+        </span>
+
+        {# Role stand-in switch. Re-requests "/" with ?role= and swaps the page. #}
+        <label class="filter">
+          <span class="filter__label">View as</span>
+          <select class="role-select"
+                  name="role"
+                  hx-get="/"
+                  hx-target="body"
+                  hx-swap="outerHTML"
+                  hx-push-url="true"
+                  hx-trigger="change">
+            {% for r in roles %}
+              <option value="{{ r }}" {{ 'selected' if r == role }}>{{ r | capitalize }}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </div>
+    </header>
+
+    <div class="app-body app-body--full">
+
+      <!-- ============================================================ main -->
+      <main class="app-main" id="main">
+        <div class="page">
+
+          <div class="page-header">
+            <div>
+              <span class="page-header__eyebrow">Clinical Staff Management</span>
+              <h1 class="page-header__title">
+                {% if role == 'doctor' %}Patients awaiting assessment
+                {% elif role == 'nurse' %}My care tasks
+                {% elif role == 'specialist' %}Pending consultations
+                {% else %}Dashboard{% endif %}
+              </h1>
+              <p class="page-header__description">
+                {% if role == 'doctor' %}
+                  Admissions assigned to you with an open clinical record. Work
+                  each one down until the assessment is closed.
+                {% elif role == 'nurse' %}
+                  Every care task assigned to you across the ward, earliest due
+                  first. Acknowledge, then record the outcome.
+                {% elif role == 'specialist' %}
+                  Consultation requests addressed to you that still need a
+                  recommendation.
+                {% else %}
+                  Your clinical work for this shift.
+                {% endif %}
+              </p>
+            </div>
+          </div>
+
+          {% if error %}
+            <div class="alert alert--danger" role="alert">
+              <div>
+                <span class="alert__title">Backend unavailable</span>
+                <p class="alert__body">{{ error }}</p>
+              </div>
+            </div>
+          {% endif %}
+
+          {#
+            Pull whichever list the backend sent. Each is reused by the table.
+          #}
+          {% set records  = (data.clinical_records if data else none) or [] %}
+          {% set tasks     = (data.care_tasks if data else none) or [] %}
+          {% set consults = (data.consultation_requests if data else none) or [] %}
+
+          {#
+            ============================================ header metrics
+            Fixed set for this screen:
+              Assigned patients · Tasks due · Overdue · Ratio · Notes outstanding
+            Overdue starts at 0 here and is finalised client-side (see script);
+            the Ratio's data-due-count lets the script recompute it too.
+          #}
+          {% if role == 'nurse' %}
+            {% set open_tasks = tasks | selectattr('status', 'in', ['pending', 'acknowledged']) | list %}
+            {% set assigned_count = tasks | map(attribute='clinical_record_id') | unique | list | length %}
+            {% set due_count = open_tasks | length %}
+            {% set outstanding_count = open_tasks | rejectattr('notes') | list | length %}
+          {% elif role == 'specialist' %}
+            {% set open_consults = consults | selectattr('status', 'in', ['requested', 'in_review']) | list %}
+            {% set assigned_count = consults | map(attribute='patient_id') | unique | list | length %}
+            {% set due_count = open_consults | length %}
+            {% set escalated_count = open_consults | selectattr('status', 'equalto', 'in_review') | list | length %}
+            {% set outstanding_count = open_consults | rejectattr('recommendation') | list | length %}
+          {% else %}
+            {% set open_records = records | rejectattr('status', 'in', ['closed', 'archived']) | list %}
+            {% set assigned_count = open_records | map(attribute='admission_id') | unique | list | length %}
+            {% set due_count = open_records | length %}
+            {% set escalated_count = open_records | selectattr('status', 'equalto', 'under_review') | list | length %}
+            {% set outstanding_count = open_records | rejectattr('diagnosis_summary') | list | length %}
+          {% endif %}
+
+          <div class="stat-row" id="metrics" data-due-count="{{ due_count }}">
+            <div class="stat">
+              <span class="stat__label">Assigned patients</span>
+              <span class="stat__value">{{ assigned_count }}</span>
+              <span class="stat__meta">On your list</span>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Tasks due</span>
+              <span class="stat__value">{{ due_count }}</span>
+              <span class="stat__meta">Still open</span>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Overdue</span>
+              <span class="stat__value" id="metric-overdue">0</span>
+              <span class="stat__meta">
+                <span class="status status--pending" id="metric-overdue-status">
+                  <span class="status__dot"></span><span data-status-word>Checking</span>
+                </span>
+              </span>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Ratio</span>
+              <span class="stat__value" id="metric-ratio">{{ due_count }}/{{ due_count }}</span>
+              <span class="stat__meta">On time / due</span>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Notes outstanding</span>
+              <span class="stat__value {{ 'stat__value--warning' if outstanding_count }}">{{ outstanding_count }}</span>
+              <span class="stat__meta">Awaiting write-up</span>
+            </div>
+          </div>
+
+          {#
+            ================================================== the list
+            One region, polled every 30s. hx-select pulls this same node out
+            of the full "/" response so only the table swaps.
+          #}
+          <section class="section"
+                   id="work-list"
+                   hx-get="/"
+                   hx-trigger="every 30s"
+                   hx-select="#work-list"
+                   hx-target="#work-list"
+                   hx-swap="outerHTML">
+
+            <div class="section-header">
+              <h2 class="section-header__title">
+                {% if role == 'doctor' %}Open assessments
+                {% elif role == 'nurse' %}Task list
+                {% elif role == 'specialist' %}Consultation requests
+                {% else %}Records{% endif %}
+              </h2>
+              <span class="section-header__meta">
+                <span class="htmx-indicator">Refreshing…</span>
+                {% if role == 'doctor' %}{{ records | length }} records
+                {% elif role == 'nurse' %}{{ tasks | length }} tasks
+                {% elif role == 'specialist' %}{{ consults | length }} requests
+                {% else %}0{% endif %}
+              </span>
+            </div>
+
+            <div class="table-wrap">
+              <table class="table table--zebra">
+
+                {% if role == 'doctor' %}
+                  <thead>
+                    <tr>
+                      <th scope="col">Record</th>
+                      <th scope="col">Patient</th>
+                      <th scope="col">Admission</th>
+                      <th scope="col">Working diagnosis</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Updated</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for r in records %}
+                      {% set word = 'Given' if r.status in ['closed', 'archived']
+                                    else ('Escalated' if r.status == 'under_review' else 'Due') %}
+                      <tr>
+                        <td class="table__id">#{{ r.record_id }}</td>
+                        <td class="table__name">Patient {{ r.patient_id }}</td>
+                        <td class="table__id">A{{ r.admission_id }}</td>
+                        <td class="table__muted">{{ r.diagnosis_summary or '—' }}</td>
+                        <td data-status-cell
+                            data-word="{{ word }}"
+                            {% if word == 'Due' %}data-due="{{ r.updated_at or '' }}"{% endif %}>
+                          <span class="status {{ status_class(word) }}">
+                            <span class="status__dot"></span><span data-status-word>{{ word }}</span>
+                          </span>
+                          {% if r.updated_after_discharge %}
+                            <span class="badge-warning">Post-discharge</span>
+                          {% endif %}
+                        </td>
+                        <td class="table__id table__muted">{{ (r.updated_at or '')[:10] }}</td>
+                      </tr>
+                    {% else %}
+                      <tr>
+                        <td colspan="6">
+                          <div class="empty">
+                            <span class="empty__title">Nothing assigned</span>
+                            <p class="empty__body">No open clinical records are assigned to you right now.</p>
+                          </div>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+
+                {% elif role == 'nurse' %}
+                  <thead>
+                    <tr>
+                      <th scope="col">Task</th>
+                      <th scope="col">Record</th>
+                      <th scope="col">Description</th>
+                      <th scope="col">Due</th>
+                      <th scope="col">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for t in tasks %}
+                      {% set word = 'Given' if t.status == 'completed'
+                                    else ('Refused' if t.status == 'cancelled' else 'Due') %}
+                      <tr>
+                        <td class="table__id">#{{ t.task_id }}</td>
+                        <td class="table__id">R{{ t.clinical_record_id }}</td>
+                        <td class="table__name">{{ t.task_description }}</td>
+                        <td class="table__id table__muted u-nowrap">{{ (t.due_at or '—')[:16] }}</td>
+                        <td data-status-cell
+                            data-word="{{ word }}"
+                            {% if word == 'Due' %}data-due="{{ t.due_at or '' }}"{% endif %}>
+                          <span class="status {{ status_class(word) }}">
+                            <span class="status__dot"></span><span data-status-word>{{ word }}</span>
+                          </span>
+                        </td>
+                      </tr>
+                    {% else %}
+                      <tr>
+                        <td colspan="5">
+                          <div class="empty">
+                            <span class="empty__title">No tasks</span>
+                            <p class="empty__body">You have no care tasks assigned right now.</p>
+                          </div>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+
+                {% elif role == 'specialist' %}
+                  <thead>
+                    <tr>
+                      <th scope="col">Request</th>
+                      <th scope="col">Patient</th>
+                      <th scope="col">Record</th>
+                      <th scope="col">Reason</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Requested</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for c in consults %}
+                      {% set word = 'Given' if c.status == 'completed'
+                                    else ('Refused' if c.status == 'cancelled'
+                                    else ('Escalated' if c.status == 'in_review' else 'Due')) %}
+                      <tr>
+                        <td class="table__id">#{{ c.request_id }}</td>
+                        <td class="table__name">Patient {{ c.patient_id }}</td>
+                        <td class="table__id">R{{ c.clinical_record_id }}</td>
+                        <td class="table__muted">{{ c.reason_for_request }}</td>
+                        <td data-status-cell
+                            data-word="{{ word }}"
+                            {% if word == 'Due' %}data-due="{{ c.requested_at or '' }}"{% endif %}>
+                          <span class="status {{ status_class(word) }}">
+                            <span class="status__dot"></span><span data-status-word>{{ word }}</span>
+                          </span>
+                        </td>
+                        <td class="table__id table__muted">{{ (c.requested_at or '')[:10] }}</td>
+                      </tr>
+                    {% else %}
+                      <tr>
+                        <td colspan="6">
+                          <div class="empty">
+                            <span class="empty__title">Queue clear</span>
+                            <p class="empty__body">No consultation requests are waiting on you.</p>
+                          </div>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+
+                {% else %}
+                  <thead>
+                    <tr><th scope="col">Item</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>
+                        <div class="empty">
+                          <span class="empty__title">No view for this role</span>
+                          <p class="empty__body">Switch to Doctor, Nurse or Specialist above.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  </tbody>
+                {% endif %}
+
+              </table>
+            </div>
+          </section>
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  {#
+    Overdue resolution. The server side of "/" does not pass the current time,
+    so anything still "Due" with a data-due timestamp in the past is promoted
+    to "Overdue" here, and the Overdue / Ratio metrics are recomputed.
+    Runs on load and again after every HTMX settle so polled swaps stay correct.
+    Only the five allowed status words and existing .status--* classes are used.
+  #}
+  <script>
+    (function () {
+      var STATUS_CLASSES = {
+        Overdue: 'status--danger',
+        Refused: 'status--danger',
+        Escalated: 'status--warning',
+        Given: 'status--success',
+        Due: 'status--pending'
+      };
+
+      function resolveOverdue(root) {
+        var now = Date.now();
+        var cells = (root || document).querySelectorAll('[data-status-cell]');
+        cells.forEach(function (cell) {
+          if (cell.getAttribute('data-word') !== 'Due') return;
+          var due = cell.getAttribute('data-due');
+          if (!due) return;
+          var ts = Date.parse(due.replace(' ', 'T'));
+          if (isNaN(ts) || ts >= now) return;
+
+          cell.setAttribute('data-word', 'Overdue');
+          var pill = cell.querySelector('.status');
+          if (pill) {
+            pill.classList.remove('status--pending');
+            pill.classList.add(STATUS_CLASSES.Overdue);
+          }
+          var label = cell.querySelector('[data-status-word]');
+          if (label) label.textContent = 'Overdue';
+        });
+      }
+
+      function refreshMetrics() {
+        var metrics = document.getElementById('metrics');
+        if (!metrics) return;
+        var dueCount = parseInt(metrics.getAttribute('data-due-count'), 10) || 0;
+        var overdue = document.querySelectorAll('[data-status-cell][data-word="Overdue"]').length;
+
+        var overdueValue = document.getElementById('metric-overdue');
+        if (overdueValue) {
+          overdueValue.textContent = overdue;
+          overdueValue.classList.toggle('stat__value--danger', overdue > 0);
+        }
+
+        var overdueStatus = document.getElementById('metric-overdue-status');
+        if (overdueStatus) {
+          overdueStatus.classList.remove('status--pending', 'status--danger', 'status--success');
+          overdueStatus.classList.add(overdue > 0 ? 'status--danger' : 'status--success');
+          var overdueLabel = overdueStatus.querySelector('[data-status-word]');
+          if (overdueLabel) overdueLabel.textContent = overdue > 0 ? 'Needs attention' : 'On track';
+        }
+
+        var ratio = document.getElementById('metric-ratio');
+        if (ratio) ratio.textContent = (dueCount - overdue) + '/' + dueCount;
+      }
+
+      function run() {
+        resolveOverdue(document);
+        refreshMetrics();
+      }
+
+      document.addEventListener('DOMContentLoaded', run);
+      document.body.addEventListener('htmx:afterSettle', run);
+    })();
+  </script>
+</body>
+</html>

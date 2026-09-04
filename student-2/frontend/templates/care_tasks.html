@@ -1,0 +1,335 @@
+{#
+  care_tasks.html - the logged-in nurse's care-task list with inline actions.
+
+  app.py wiring (route "/care-tasks", GET):
+    data  = {"care_tasks": [ ... ]}
+    error = "<message>" if the backend call failed
+    Optional ?nurse_id= / ?clinical_record_id= are forwarded to the backend,
+    which owns the filtering.
+
+  Backend actions (routes/care_tasks.py), nurse-only, on the assigned task:
+    PUT    /api/care-tasks/<id>/acknowledge   pending -> acknowledged
+    PUT    /api/care-tasks/<id>/complete      pending|acknowledged -> completed
+    DELETE /api/care-tasks/<id>               -> cancelled (soft delete; not from completed)
+  app.py has no proxy for these, so each control calls the backend API
+  directly (JSON response). The script at the end of <body> handles the
+  outcome: reload the list on success, show the backend's message on failure.
+
+  Status words for this screen: Due, Overdue, Given, Refused.
+    pending / acknowledged        -> Due   (Overdue if due_at is in the past)
+    completed                     -> Given
+    cancelled                     -> Refused
+  "Overdue" needs the current time, which this route's server side does not
+  pass in, so it is resolved client-side (see script) and only ever upgrades
+  a "Due" row.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOMS — Care tasks</title>
+  <meta name="description" content="Clinical Staff Management — the nurse's care-task list with acknowledge, complete and cancel actions.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+
+  <link rel="stylesheet" href="/static/shared/css/main.css">
+  <link rel="stylesheet" href="/static/css/clinical-staff.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  {% set tasks = (data.care_tasks if data else none) or [] %}
+
+  {% set open_tasks = tasks | selectattr('status', 'in', ['pending', 'acknowledged']) | list %}
+  {% set given_tasks = tasks | selectattr('status', 'equalto', 'completed') | list %}
+  {% set refused_tasks = tasks | selectattr('status', 'equalto', 'cancelled') | list %}
+
+  <div class="app">
+
+    <header class="app-header clinical-header">
+      <a class="app-header__brand" href="/">
+        HOMS
+        <span class="app-header__context">Clinical Staff Management</span>
+      </a>
+      <nav class="app-header__nav" aria-label="Clinical Staff Management">
+        <a class="nav-link" href="/">Dashboard</a>
+        <a class="nav-link" href="/assessment/new">New assessment</a>
+        <a class="nav-link" href="/consultations/new">Request consult</a>
+        <a class="nav-link" href="/care-tasks/new">New task</a>
+        <a class="nav-link" href="/surgery/new">Schedule surgery</a>
+      </nav>
+      <div class="app-header__actions">
+        <span class="app-header__meta u-label">Signed in · {{ role }}</span>
+      </div>
+    </header>
+
+    <div class="app-body app-body--full">
+
+      <main class="app-main" id="main">
+        <div class="page">
+
+          <div class="page-header">
+            <div>
+              <span class="page-header__eyebrow">Clinical Staff Management</span>
+              <h1 class="page-header__title">My care tasks</h1>
+              <p class="page-header__description">
+                Tasks assigned to you. Acknowledge one to show you have it,
+                complete it when the care is given, or cancel one raised in
+                error. A completed task cannot be changed.
+              </p>
+            </div>
+          </div>
+
+          {% if error %}
+            <div class="alert alert--danger" role="alert">
+              <div>
+                <span class="alert__title">Could not load your tasks</span>
+                <p class="alert__body">{{ error }}</p>
+              </div>
+            </div>
+          {% endif %}
+
+          <div class="stat-row" id="metrics" data-open-count="{{ open_tasks | length }}">
+            <div class="stat">
+              <span class="stat__label">Open</span>
+              <span class="stat__value">{{ open_tasks | length }}</span>
+              <span class="stat__meta">Due or in progress</span>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Overdue</span>
+              <span class="stat__value" id="metric-overdue">0</span>
+              <span class="stat__meta">
+                <span class="status status--pending" id="metric-overdue-status">
+                  <span class="status__dot"></span><span data-status-word>Checking</span>
+                </span>
+              </span>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Given</span>
+              <span class="stat__value stat__value--success">{{ given_tasks | length }}</span>
+              <span class="stat__meta">Completed</span>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Refused</span>
+              <span class="stat__value">{{ refused_tasks | length }}</span>
+              <span class="stat__meta">Cancelled</span>
+            </div>
+          </div>
+
+          {% if tasks %}
+            <div class="table-wrap">
+              <table class="table table--zebra">
+                <thead>
+                  <tr>
+                    <th scope="col">Task</th>
+                    <th scope="col">Record</th>
+                    <th scope="col">Description</th>
+                    <th scope="col">Due</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" class="table__actions">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {# due_at can be null; sort those to the end rather than
+                     letting Jinja compare None with a string (TypeError). #}
+                  {% set dated_tasks = tasks | rejectattr('due_at', 'none') | sort(attribute='due_at') | list %}
+                  {% set undated_tasks = tasks | selectattr('due_at', 'none') | list %}
+                  {% for t in dated_tasks + undated_tasks %}
+                    {#
+                      word / dot: both open states read as "Due"; acknowledged
+                      gets the filled info dot, pending the hollow one. The
+                      script may upgrade a "Due" row to "Overdue".
+                    #}
+                    {% if t.status == 'completed' %}
+                      {% set word, dot = 'Given', 'status--success' %}
+                    {% elif t.status == 'cancelled' %}
+                      {% set word, dot = 'Refused', 'status--danger' %}
+                    {% elif t.status == 'acknowledged' %}
+                      {% set word, dot = 'Due', 'status--info' %}
+                    {% else %}
+                      {% set word, dot = 'Due', 'status--pending' %}
+                    {% endif %}
+
+                    <tr id="task-{{ t.task_id }}">
+                      <td class="table__id">#{{ t.task_id }}</td>
+                      <td class="table__id">R{{ t.clinical_record_id }}</td>
+                      <td class="table__name">
+                        {{ t.task_description }}
+                        {% if t.notes %}
+                          <span class="table__muted u-nowrap"> — {{ t.notes }}</span>
+                        {% endif %}
+                      </td>
+                      <td class="table__id table__muted u-nowrap">{{ (t.due_at or '—')[:16] }}</td>
+                      <td data-status-cell
+                          data-word="{{ word }}"
+                          {% if word == 'Due' %}data-due="{{ t.due_at or '' }}"{% endif %}>
+                        <span class="status {{ dot }}">
+                          <span class="status__dot"></span><span data-status-word>{{ word }}</span>
+                        </span>
+                        {% if t.status == 'acknowledged' %}
+                          <span class="u-label">acknowledged</span>
+                        {% endif %}
+                      </td>
+                      <td class="table__actions">
+                        {% if t.status in ['pending', 'acknowledged'] %}
+                          <span class="row" data-task-actions>
+                            {% if t.status == 'pending' %}
+                              <button class="btn-secondary btn-compact"
+                                      data-task-action
+                                      hx-put="http://localhost:5200/api/care-tasks/{{ t.task_id }}/acknowledge"
+                                      hx-headers='{"X-User-Role": "{{ role }}"}'
+                                      hx-disabled-elt="closest [data-task-actions] button">
+                                Acknowledge
+                              </button>
+                            {% endif %}
+                            <button class="btn-primary btn-compact"
+                                    data-task-action
+                                    hx-put="http://localhost:5200/api/care-tasks/{{ t.task_id }}/complete"
+                                    hx-headers='{"X-User-Role": "{{ role }}"}'
+                                    hx-disabled-elt="closest [data-task-actions] button">
+                              Complete
+                            </button>
+                            <button class="btn-danger btn-compact"
+                                    data-task-action
+                                    hx-delete="http://localhost:5200/api/care-tasks/{{ t.task_id }}"
+                                    hx-headers='{"X-User-Role": "{{ role }}"}'
+                                    hx-confirm="Cancel task #{{ t.task_id }}?"
+                                    hx-disabled-elt="closest [data-task-actions] button">
+                              Cancel
+                            </button>
+                            <span class="htmx-indicator u-label">Saving…</span>
+                          </span>
+                        {% else %}
+                          <span class="table__muted u-nowrap">
+                            {% if t.completed_at %}{{ (t.completed_at or '')[:16] }}{% else %}—{% endif %}
+                          </span>
+                        {% endif %}
+                      </td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {# Row-level action errors land here (see script). #}
+            <div id="task-action-error" aria-live="polite"></div>
+
+          {% elif not error %}
+            <div class="table-wrap">
+              <div class="empty">
+                <span class="empty__title">No tasks</span>
+                <p class="empty__body">You have no care tasks assigned right now.</p>
+              </div>
+            </div>
+          {% endif %}
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  {#
+    Two jobs, both re-run after any HTMX settle:
+      1. resolveOverdue - promote past-due "Due" rows to "Overdue" and update
+         the Overdue metric (the server side of this route has no clock).
+      2. task action outcomes - the acknowledge/complete/cancel calls hit the
+         backend API directly and return JSON, so htmx cannot swap them: on
+         success reload the list, on failure show the backend's message using
+         the shared .alert classes.
+    Only the four allowed status words and existing .status--* classes are used.
+  #}
+  <script>
+    (function () {
+      function resolveOverdue() {
+        var now = Date.now();
+        document.querySelectorAll('[data-status-cell]').forEach(function (cell) {
+          if (cell.getAttribute('data-word') !== 'Due') return;
+          var due = cell.getAttribute('data-due');
+          if (!due) return;
+          var ts = Date.parse(due.replace(' ', 'T'));
+          if (isNaN(ts) || ts >= now) return;
+
+          cell.setAttribute('data-word', 'Overdue');
+          var pill = cell.querySelector('.status');
+          if (pill) {
+            pill.classList.remove('status--pending', 'status--info');
+            pill.classList.add('status--danger');
+          }
+          var label = cell.querySelector('[data-status-word]');
+          if (label) label.textContent = 'Overdue';
+        });
+      }
+
+      function refreshMetrics() {
+        var metrics = document.getElementById('metrics');
+        if (!metrics) return;
+        var overdue = document.querySelectorAll('[data-status-cell][data-word="Overdue"]').length;
+
+        var value = document.getElementById('metric-overdue');
+        if (value) {
+          value.textContent = overdue;
+          value.classList.toggle('stat__value--danger', overdue > 0);
+        }
+
+        var status = document.getElementById('metric-overdue-status');
+        if (status) {
+          status.classList.remove('status--pending', 'status--danger', 'status--success');
+          status.classList.add(overdue > 0 ? 'status--danger' : 'status--success');
+          var word = status.querySelector('[data-status-word]');
+          if (word) word.textContent = overdue > 0 ? 'Needs attention' : 'On track';
+        }
+      }
+
+      function showActionError(message) {
+        var box = document.getElementById('task-action-error');
+        if (!box) return;
+        box.textContent = '';
+
+        var alert = document.createElement('div');
+        alert.className = 'alert alert--danger';
+        alert.setAttribute('role', 'alert');
+        var inner = document.createElement('div');
+        var title = document.createElement('span');
+        title.className = 'alert__title';
+        title.textContent = 'Action failed';
+        var body = document.createElement('p');
+        body.className = 'alert__body';
+        body.textContent = message;
+        inner.appendChild(title);
+        inner.appendChild(body);
+        alert.appendChild(inner);
+        box.appendChild(alert);
+        box.scrollIntoView({ block: 'nearest' });
+      }
+
+      function run() {
+        resolveOverdue();
+        refreshMetrics();
+      }
+
+      document.addEventListener('DOMContentLoaded', run);
+
+      document.body.addEventListener('htmx:afterRequest', function (event) {
+        var trigger = event.target.closest && event.target.closest('[data-task-action]');
+        if (!trigger) return;
+
+        if (event.detail.successful) {
+          window.location.reload();
+          return;
+        }
+
+        var message = 'The task could not be updated.';
+        try {
+          message = JSON.parse(event.detail.xhr.responseText).error || message;
+        } catch (e) { /* keep default */ }
+        showActionError(message);
+      });
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,292 @@
+{#
+  consultation_queue.html - the specialist's consultation queue.
+
+  app.py wiring (route "/consultations/queue", GET):
+    data  = {"consultation_requests": [ ... ]}
+    error = "<message>" if the backend call failed
+    An optional ?status= is forwarded to the backend as-is.
+
+  The backend (routes/consultations.py) already scopes this list to the
+  caller: a specialist only ever sees requests where specialist_id is theirs.
+  Opening a single request elsewhere moves it requested -> in_review; this
+  queue shows whatever state each request is currently in.
+
+  Status values: requested, in_review, completed, cancelled.
+    * requested / in_review  -> still open, needs a recommendation
+    * completed / cancelled  -> closed, read-only
+
+  Recording a recommendation:
+    PUT /api/consultations/<id>/respond   body {"recommendation": "..."}
+  There is no frontend proxy route for this yet, so the form posts straight
+  to the backend API (JSON) and, on success, refreshes the queue. A thin
+  /consultations/<id>/respond route on the frontend would be the tidier home.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOMS — Consultation queue</title>
+  <meta name="description" content="Clinical Staff Management — a specialist's pending consultation requests.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+
+  <link rel="stylesheet" href="/static/shared/css/main.css">
+  <link rel="stylesheet" href="/static/css/clinical-staff.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/json-enc.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  {% set requests = (data.consultation_requests if data else none) or [] %}
+  {% set active_status = request.args.get('status', '') %}
+
+  {% set open_states = ['requested', 'in_review'] %}
+  {% set pending = requests | selectattr('status', 'in', open_states) | list %}
+  {% set awaiting_pickup = requests | selectattr('status', 'equalto', 'requested') | list %}
+  {% set in_review = requests | selectattr('status', 'equalto', 'in_review') | list %}
+  {% set completed = requests | selectattr('status', 'equalto', 'completed') | list %}
+
+  <div class="app">
+
+    <header class="app-header clinical-header">
+      <a class="app-header__brand" href="/">
+        HOMS
+        <span class="app-header__context">Clinical Staff Management</span>
+      </a>
+      <nav class="app-header__nav" aria-label="Clinical Staff Management">
+        <a class="nav-link" href="/">Dashboard</a>
+        <a class="nav-link" href="/assessment/new">New assessment</a>
+        <a class="nav-link" href="/consultations/new">Request consult</a>
+        <a class="nav-link" href="/care-tasks/new">New task</a>
+        <a class="nav-link" href="/surgery/new">Schedule surgery</a>
+      </nav>
+      <div class="app-header__actions">
+        <span class="app-header__meta u-label">Signed in · {{ role }}</span>
+      </div>
+    </header>
+
+    <div class="app-body app-body--full">
+
+      <main class="app-main" id="main">
+        <div class="page">
+
+          <div class="page-header">
+            <div>
+              <span class="page-header__eyebrow">Clinical Staff Management</span>
+              <h1 class="page-header__title">Consultation queue</h1>
+              <p class="page-header__description">
+                Requests addressed to you. Record a recommendation to close one
+                out; a completed or cancelled request is read-only.
+              </p>
+            </div>
+          </div>
+
+          {% if error %}
+            <div class="alert alert--danger" role="alert">
+              <div>
+                <span class="alert__title">Could not load the queue</span>
+                <p class="alert__body">{{ error }}</p>
+              </div>
+            </div>
+          {% endif %}
+
+          {# Header metrics. #}
+          <div class="stat-row">
+            <div class="stat">
+              <span class="stat__label">Pending</span>
+              <span class="stat__value">{{ pending | length }}</span>
+              <span class="stat__meta">Need a recommendation</span>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Awaiting pickup</span>
+              <span class="stat__value">{{ awaiting_pickup | length }}</span>
+              <span class="stat__meta">Not yet opened</span>
+            </div>
+            <div class="stat">
+              <span class="stat__label">In review</span>
+              <span class="stat__value">{{ in_review | length }}</span>
+              <span class="stat__meta">Opened by you</span>
+            </div>
+            <div class="stat">
+              <span class="stat__label">Completed</span>
+              <span class="stat__value stat__value--success">{{ completed | length }}</span>
+              <span class="stat__meta">Closed out</span>
+            </div>
+          </div>
+
+          {#
+            Status filter - each link reloads the page with ?status=, which
+            app.py forwards to the backend. The current choice is the solid
+            (.btn-secondary) button; the rest are .btn-ghost.
+          #}
+          <div class="toolbar">
+            <span class="filter__label">Status</span>
+            <div class="toolbar__group">
+              {% for value, label in [
+                    ('', 'All'),
+                    ('requested', 'Requested'),
+                    ('in_review', 'In review'),
+                    ('completed', 'Completed'),
+                    ('cancelled', 'Cancelled')] %}
+                <a class="{{ 'btn-secondary' if active_status == value else 'btn-ghost' }} btn-compact"
+                   {{ 'aria-current="true"' if active_status == value }}
+                   href="/consultations/queue{{ ('?status=' ~ value) if value }}">{{ label }}</a>
+              {% endfor %}
+            </div>
+          </div>
+
+          {% if requests %}
+            <div class="stack stack--lg">
+              {% for c in requests | sort(attribute='requested_at', reverse=true) %}
+                {% set is_open = c.status in open_states %}
+                <div class="panel" id="consult-{{ c.request_id }}">
+                  <div class="panel__header">
+                    <h2 class="panel__title">Request #{{ c.request_id }}</h2>
+                    <span class="panel__meta">{{ (c.requested_at or '')[:16] }}</span>
+                    <div class="panel__actions">
+                      {% if c.status == 'completed' %}
+                        <span class="badge-success">completed</span>
+                      {% elif c.status == 'cancelled' %}
+                        <span class="badge-danger">cancelled</span>
+                      {% elif c.status == 'in_review' %}
+                        <span class="badge-info">in review</span>
+                      {% else %}
+                        <span class="badge-warning">requested</span>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <div class="panel__body">
+                    <div class="stack stack--sm">
+                      <div class="row row--wrap">
+                        <span class="u-label">Patient {{ c.patient_id }}</span>
+                        <span class="u-label">Admission {{ c.admission_id }}</span>
+                        <span class="u-label">Record {{ c.clinical_record_id }}</span>
+                        <span class="u-label">From doctor {{ c.requesting_doctor_id }}</span>
+                      </div>
+
+                      <div>
+                        <span class="u-label">Reason for request</span>
+                        <p>{{ c.reason_for_request }}</p>
+                      </div>
+
+                      {% if c.recommendation %}
+                        <div>
+                          <span class="u-label">Recommendation</span>
+                          <p>{{ c.recommendation }}</p>
+                        </div>
+                      {% endif %}
+                    </div>
+
+                    {% if is_open %}
+                      {#
+                        Respond form. app.py has no proxy for the respond PUT,
+                        so it posts JSON straight to the backend API. On success
+                        the queue is reloaded so this row moves to 'completed';
+                        on failure the backend's error message is shown inline.
+                      #}
+                      <hr class="divider">
+                      <form class="stack stack--sm"
+                            data-respond-form
+                            hx-put="http://localhost:5200/api/consultations/{{ c.request_id }}/respond"
+                            hx-ext="json-enc"
+                            hx-headers='{"X-User-Role": "{{ role }}"}'
+                            hx-disabled-elt="find button">
+                        <label class="field">
+                          <span class="field__label">Recommendation</span>
+                          <textarea class="textarea" name="recommendation" rows="4" required
+                                    placeholder="Your assessment and advice for the requesting doctor."></textarea>
+                          <span class="field__hint">Recorded against the request and marks it completed.</span>
+                        </label>
+                        <div data-respond-error aria-live="polite"></div>
+                        <div class="row">
+                          <button class="btn-primary" type="submit">Record recommendation &amp; complete</button>
+                          <span class="htmx-indicator u-label">Saving…</span>
+                        </div>
+                      </form>
+                    {% else %}
+                      <p class="u-muted">
+                        {% if c.completed_at %}
+                          Closed {{ (c.completed_at or '')[:16] }}.
+                        {% endif %}
+                        This request is read-only.
+                      </p>
+                    {% endif %}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% elif not error %}
+            <div class="panel">
+              <div class="panel__body">
+                <div class="empty">
+                  <span class="empty__title">
+                    {% if active_status %}Nothing {{ active_status.replace('_', ' ') }}{% else %}Queue clear{% endif %}
+                  </span>
+                  <p class="empty__body">
+                    {% if active_status %}
+                      No requests with that status. <a href="/consultations/queue">Show all</a>.
+                    {% else %}
+                      No consultation requests are addressed to you right now.
+                    {% endif %}
+                  </p>
+                </div>
+              </div>
+            </div>
+          {% endif %}
+
+        </div>
+      </main>
+    </div>
+  </div>
+
+  {#
+    Respond-form outcome handling. The respond PUT goes straight to the backend
+    API and returns JSON, not HTML, so htmx can't swap it: on success reload
+    the queue (the row moves to 'completed'); on failure show the backend's
+    error message inline using the shared .alert classes.
+  #}
+  <script>
+    document.body.addEventListener('htmx:afterRequest', function (event) {
+      var form = event.target.closest && event.target.closest('[data-respond-form]');
+      if (!form) return;
+
+      if (event.detail.successful) {
+        window.location.reload();
+        return;
+      }
+
+      var message = 'Could not record the recommendation.';
+      try {
+        message = JSON.parse(event.detail.xhr.responseText).error || message;
+      } catch (e) { /* keep the default */ }
+
+      var box = form.querySelector('[data-respond-error]');
+      if (!box) return;
+      box.textContent = '';
+
+      var alert = document.createElement('div');
+      alert.className = 'alert alert--danger';
+      alert.setAttribute('role', 'alert');
+
+      var inner = document.createElement('div');
+      var title = document.createElement('span');
+      title.className = 'alert__title';
+      title.textContent = 'Not saved';
+      var body = document.createElement('p');
+      body.className = 'alert__body';
+      body.textContent = message;
+
+      inner.appendChild(title);
+      inner.appendChild(body);
+      alert.appendChild(inner);
+      box.appendChild(alert);
+    });
+  </script>
+</body>
+</html>

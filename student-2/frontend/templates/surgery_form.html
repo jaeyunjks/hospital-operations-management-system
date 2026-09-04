@@ -1,0 +1,263 @@
+{#
+  surgery_form.html - a doctor schedules a surgery for an admitted patient.
+
+  app.py wiring (route "/surgery/new", GET + POST):
+    * GET  -> data = None, error = None: a blank form.
+    * POST -> app.py forwards the form to POST /api/surgery-requests/ and
+              re-renders this template.
+
+  The backend POST (routes/surgery_requests.py) does far more than a create:
+  admission check -> theatre availability -> resolve surgeon name -> local row
+  -> dispatch to Room & Bed, rolling the row back on any dispatch failure.
+  Several distinct outcomes come back, and this screen must NOT collapse them:
+
+    SUCCESS (201)
+      data = {"surgery_request": {...}, "room_and_bed": {...}}   error = None
+
+    FAILURE - _backend() puts the backend's JSON error body in `data` and its
+    "error" string in `error`. `data.reason` is the discriminator:
+
+      reason = "none_available"  (409)  NO THEATRE AVAILABLE
+          The availability lookup worked; there is simply no free theatre.
+          Nothing was saved. Retrying later is the right move.
+          -> shown as .alert.alert--warning (transient capacity problem)
+
+      reason = "refused"         (409)  ROOM & BED REFUSED THE BOOKING
+          A bed was found, but Room & Bed then rejected it - time clash,
+          theatre under maintenance, out of service. Won't clear on a plain
+          retry; the doctor must change the time or procedure.
+          data.room_and_bed_detail carries the specifics.
+          -> shown as .alert.alert--danger (definitive rejection, action needed)
+
+      reason = "unavailable"     (502/503)  a service was unreachable
+      no reason / other                     validation, admission, staff, db
+          -> shown as .alert.alert--info (generic; state clearly nothing saved)
+
+  Every branch renders visibly differently from a success and from each other.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOMS — Schedule surgery</title>
+  <meta name="description" content="Clinical Staff Management — a doctor schedules a surgery and dispatches theatre prep to Room & Bed.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+
+  <link rel="stylesheet" href="/static/shared/css/main.css">
+  <link rel="stylesheet" href="/static/css/clinical-staff.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  {% set surgery = data.surgery_request if data else none %}
+  {% set arrangement = data.room_and_bed if data else none %}
+  {% set saved = surgery is not none and surgery.request_id is defined %}
+
+  {#
+    Failure discriminator. `error` is only set on a non-2xx; `data` then holds
+    the backend's error body, whose `reason` key tells the outcomes apart.
+  #}
+  {% set reason = (data.reason if (data and error) else none) %}
+  {% set rb_detail = (data.room_and_bed_detail if data else none) %}
+
+  <div class="app">
+
+    <header class="app-header clinical-header">
+      <a class="app-header__brand" href="/">
+        HOMS
+        <span class="app-header__context">Clinical Staff Management</span>
+      </a>
+      <nav class="app-header__nav" aria-label="Clinical Staff Management">
+        <a class="nav-link" href="/">Dashboard</a>
+        <a class="nav-link" href="/assessment/new">New assessment</a>
+        <a class="nav-link" href="/consultations/new">Request consult</a>
+        <a class="nav-link" href="/care-tasks/new">New task</a>
+        <a class="nav-link" href="/surgery/new" aria-current="page">Schedule surgery</a>
+      </nav>
+      <div class="app-header__actions">
+        <span class="app-header__meta u-label">Signed in · {{ role }}</span>
+      </div>
+    </header>
+
+    <div class="app-body app-body--full">
+
+      <main class="app-main" id="main">
+        <div class="page page--prose">
+
+          <div class="page-header">
+            <div>
+              <span class="page-header__eyebrow">Clinical Staff Management</span>
+              <h1 class="page-header__title">Schedule a surgery</h1>
+              <p class="page-header__description">
+                Only the admission's assigned doctor may schedule. On submit the
+                system checks theatre availability, resolves your name as the
+                surgeon, and dispatches the theatre-prep request to Room &amp; Bed
+                Management. Nothing is saved unless Room &amp; Bed confirms it.
+              </p>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel__header">
+              <h2 class="panel__title">Surgery details</h2>
+              {% if saved %}<span class="panel__meta">#{{ surgery.request_id }}</span>{% endif %}
+            </div>
+
+            <div class="panel__body">
+              {#
+                Submits to the frontend's own /surgery/new (which calls the
+                backend and re-renders this page). hx-select pulls just
+                #surgery-result from the response - no full reload, form kept.
+              #}
+              <form class="stack"
+                    id="surgery-form"
+                    hx-post="/surgery/new"
+                    hx-target="#surgery-result"
+                    hx-select="#surgery-result"
+                    hx-swap="outerHTML"
+                    hx-disabled-elt="#surgery-submit">
+
+                <div class="grid grid--2">
+                  <label class="field">
+                    <span class="field__label">Patient ID</span>
+                    <input class="input" type="number" name="patient_id" required
+                           value="{{ request.form.get('patient_id', '') }}">
+                  </label>
+                  <label class="field">
+                    <span class="field__label">Admission ID</span>
+                    <input class="input" type="number" name="admission_id" required
+                           value="{{ request.form.get('admission_id', '') }}">
+                    <span class="field__hint">Must be your assigned, active admission.</span>
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span class="field__label">Procedure type</span>
+                  <input class="input" type="text" name="procedure_type" required
+                         placeholder="e.g. Laparoscopic appendectomy"
+                         value="{{ request.form.get('procedure_type', '') }}">
+                </label>
+
+                <label class="field">
+                  <span class="field__label">Scheduled date &amp; time</span>
+                  <input class="input" type="datetime-local" name="scheduled_at" required
+                         value="{{ request.form.get('scheduled_at', '') }}">
+                  <span class="field__hint">When the procedure should take place.</span>
+                </label>
+
+                <div class="row">
+                  <button class="btn-primary" type="submit" id="surgery-submit">Schedule &amp; dispatch</button>
+                  <span class="htmx-indicator u-label">Checking theatre availability…</span>
+                  <span class="spacer"></span>
+                  <a class="btn-ghost" href="/">Cancel</a>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {#
+            Result region - the only node HTMX swaps in after a submit. Empty on
+            the first GET. Each outcome below uses a visibly different .alert.
+          #}
+          <div id="surgery-result">
+
+            {% if saved %}
+              {# ---------- SUCCESS ---------- #}
+              <div class="alert alert--success" role="alert">
+                <div>
+                  <span class="alert__title">Surgery #{{ surgery.request_id }} scheduled</span>
+                  <p class="alert__body">
+                    {{ surgery.procedure_type }} for patient {{ surgery.patient_id }},
+                    {{ surgery.scheduled_at }}. Theatre bed {{ surgery.bed_id }} was
+                    reserved and Room &amp; Bed Management confirmed the arrangement.
+                  </p>
+                  {% if arrangement %}
+                    <p class="alert__body u-mono">
+                      Room &amp; Bed reference:
+                      {{ arrangement.reference or arrangement.id or arrangement }}
+                    </p>
+                  {% endif %}
+                </div>
+              </div>
+
+            {% elif reason == 'none_available' %}
+              {# ---------- NO THEATRE AVAILABLE (transient capacity) ---------- #}
+              <div class="alert alert--warning" role="alert">
+                <div>
+                  <span class="alert__title">No theatre available — nothing scheduled</span>
+                  <p class="alert__body">
+                    Room &amp; Bed Management reported that no surgical theatre is
+                    free right now. The availability check itself worked — there is
+                    simply no capacity at the moment.
+                  </p>
+                  <p class="alert__body">
+                    <strong>No surgery request was created.</strong> Try again later,
+                    or contact Room &amp; Bed Management to arrange a slot. Your form
+                    entries are still here so you can resubmit.
+                  </p>
+                </div>
+              </div>
+
+            {% elif reason == 'refused' %}
+              {# ---------- ROOM & BED REFUSED THE BOOKING (definitive) ---------- #}
+              <div class="alert alert--danger" role="alert">
+                <div>
+                  <span class="alert__title">Booking refused by Room &amp; Bed — nothing scheduled</span>
+                  <p class="alert__body">
+                    A theatre bed was found, but Room &amp; Bed Management then
+                    <strong>rejected the booking</strong> — typically a time clash, a
+                    theatre under maintenance, or one out of service. This will not
+                    clear on a plain retry.
+                  </p>
+                  {% if rb_detail %}
+                    <p class="alert__body u-mono">Room &amp; Bed said: {{ rb_detail }}</p>
+                  {% endif %}
+                  <p class="alert__body">
+                    <strong>No surgery request was saved.</strong> Choose a different
+                    time or procedure and resubmit.
+                  </p>
+                </div>
+              </div>
+
+            {% elif error %}
+              {# ---------- EVERYTHING ELSE (service down, validation, admission, …) ---------- #}
+              <div class="alert alert--info" role="alert">
+                <div>
+                  <span class="alert__title">
+                    {% if reason == 'unavailable' %}
+                      Could not confirm with Room &amp; Bed — outcome unknown
+                    {% else %}
+                      Surgery not scheduled
+                    {% endif %}
+                  </span>
+                  <p class="alert__body">{{ error }}</p>
+                  {% if rb_detail %}
+                    <p class="alert__body u-mono">{{ rb_detail }}</p>
+                  {% endif %}
+                  {% if reason == 'unavailable' %}
+                    <p class="alert__body">
+                      Nothing was saved here. It is safe to resubmit, but if a
+                      duplicate theatre booking later appears, contact Room &amp; Bed
+                      Management.
+                    </p>
+                  {% else %}
+                    <p class="alert__body">Nothing was saved. Correct the details above and resubmit.</p>
+                  {% endif %}
+                </div>
+              </div>
+            {% endif %}
+
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>

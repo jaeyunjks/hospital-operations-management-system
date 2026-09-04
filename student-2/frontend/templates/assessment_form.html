@@ -1,0 +1,218 @@
+{#
+  assessment_form.html - clinical record create / amend form.
+
+  Fields: assessment_notes (required), diagnosis_summary, care_plan, plus the
+  patient_id / admission_id / doctor_id that identify the record.
+
+  app.py wiring (route "/assessment/new", GET + POST):
+    * GET  -> data = None, error = None: a blank form.
+    * POST -> app.py forwards the form to POST /api/clinical-records/ and
+              re-renders THIS template with:
+                data  = {"clinical_record": {...}}   on success
+                error = "<backend message>"          on failure
+      The whole page comes back; the HTMX submit pulls only #assessment-result
+      out of it (hx-select), so a rejected submit never clears the form.
+
+  If a future "/assessment/<id>/edit" route renders this template with a
+  populated `data.clinical_record` on GET, the form pre-fills from it - the
+  backend's PUT ignores identity fields and only takes the three text fields,
+  so the same form body works for an amendment.
+
+  AUDIT RULE: any record with updated_after_discharge = 1 must carry the
+  .alert.alert--warning banner whenever it is edited or viewed. The
+  audit_banner macro below is the single source of that wording; it is copied
+  verbatim into record_history.html.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOMS — Clinical assessment</title>
+  <meta name="description" content="Clinical Staff Management — record a doctor's assessment of a patient.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+
+  <link rel="stylesheet" href="/static/shared/css/main.css">
+  <link rel="stylesheet" href="/static/css/clinical-staff.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  {#
+    Audit banner - rendered wherever a record has updated_after_discharge = 1.
+    Kept identical in record_history.html.
+  #}
+  {% macro audit_banner(record) %}
+    {% if record and record.updated_after_discharge %}
+      <div class="alert alert--warning" role="alert">
+        <div>
+          <span class="alert__title">Edited after discharge</span>
+          <p class="alert__body">
+            This clinical record was changed after admission
+            {{ record.admission_id }} was no longer active. The change is kept
+            for the audit trail; confirm it is clinically appropriate before
+            relying on it.
+          </p>
+        </div>
+      </div>
+    {% endif %}
+  {% endmacro %}
+
+  {#
+    `record`  - a clinical record dict, if the route passed one. On the plain
+                create route it is only set AFTER a successful POST (the saved
+                record); an edit route would set it on GET too.
+    `saved`   - true once the record has a record_id, i.e. it is persisted.
+  #}
+  {% set record = data.get('clinical_record') if data else none %}
+  {% set saved = record is not none and record.record_id is defined %}
+
+  <div class="app">
+
+    <header class="app-header clinical-header">
+      <a class="app-header__brand" href="/">
+        HOMS
+        <span class="app-header__context">Clinical Staff Management</span>
+      </a>
+      <nav class="app-header__nav" aria-label="Clinical Staff Management">
+        <a class="nav-link" href="/">Dashboard</a>
+        <a class="nav-link" href="/assessment/new" aria-current="page">New assessment</a>
+        <a class="nav-link" href="/consultations/new">Request consult</a>
+        <a class="nav-link" href="/care-tasks/new">New task</a>
+        <a class="nav-link" href="/surgery/new">Schedule surgery</a>
+      </nav>
+      <div class="app-header__actions">
+        <span class="app-header__meta u-label">Signed in · {{ role }}</span>
+      </div>
+    </header>
+
+    <div class="app-body app-body--full">
+
+      <main class="app-main" id="main">
+        <div class="page page--prose">
+
+          <div class="page-header">
+            <div>
+              <span class="page-header__eyebrow">Clinical Staff Management</span>
+              <h1 class="page-header__title">Clinical assessment</h1>
+              <p class="page-header__description">
+                Record your assessment of the patient for this admission. The
+                backend refuses the record if the admission is no longer active,
+                and flags any amendment made after discharge.
+              </p>
+            </div>
+          </div>
+
+          {# Audit banner when editing / re-viewing a post-discharge record. #}
+          {{ audit_banner(record) }}
+
+          <div class="panel">
+            <div class="panel__header">
+              <h2 class="panel__title">Assessment details</h2>
+              {% if saved %}<span class="panel__meta">#{{ record.record_id }}</span>{% endif %}
+            </div>
+
+            <div class="panel__body">
+              {#
+                Submits to the frontend's own /assessment/new (which calls the
+                backend and re-renders this page). hx-select grabs just
+                #assessment-result from the response - no full reload, form kept.
+              #}
+              <form class="stack"
+                    id="assessment-form"
+                    hx-post="/assessment/new"
+                    hx-target="#assessment-result"
+                    hx-select="#assessment-result"
+                    hx-swap="outerHTML"
+                    hx-disabled-elt="#assessment-submit">
+
+                <div class="grid grid--3">
+                  <label class="field">
+                    <span class="field__label">Patient ID</span>
+                    <input class="input" type="number" name="patient_id" required
+                           value="{{ record.patient_id if record else request.form.get('patient_id', '') }}">
+                  </label>
+                  <label class="field">
+                    <span class="field__label">Admission ID</span>
+                    <input class="input" type="number" name="admission_id" required
+                           value="{{ record.admission_id if record else request.form.get('admission_id', '') }}">
+                    <span class="field__hint">Must be an active admission.</span>
+                  </label>
+                  <label class="field">
+                    <span class="field__label">Doctor ID</span>
+                    <input class="input" type="number" name="doctor_id" required
+                           value="{{ record.doctor_id if record else request.form.get('doctor_id', '') }}">
+                    <span class="field__hint">Your own staff ID.</span>
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span class="field__label">Assessment notes</span>
+                  <textarea class="textarea" name="assessment_notes" rows="5" required
+                            placeholder="What was observed and recorded.">{{ record.assessment_notes if record else request.form.get('assessment_notes', '') }}</textarea>
+                  <span class="field__hint">Required.</span>
+                </label>
+
+                <label class="field">
+                  <span class="field__label">Diagnosis summary</span>
+                  <textarea class="textarea" name="diagnosis_summary" rows="2"
+                            placeholder="Short summary of the working diagnosis.">{{ record.diagnosis_summary if record else request.form.get('diagnosis_summary', '') }}</textarea>
+                </label>
+
+                <label class="field">
+                  <span class="field__label">Care plan</span>
+                  <textarea class="textarea" name="care_plan" rows="3"
+                            placeholder="What should happen next.">{{ record.care_plan if record else request.form.get('care_plan', '') }}</textarea>
+                </label>
+
+                <div class="row">
+                  <button class="btn-primary" type="submit" id="assessment-submit">Save record</button>
+                  <span class="htmx-indicator u-label">Saving…</span>
+                  <span class="spacer"></span>
+                  <a class="btn-ghost" href="/">Cancel</a>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {#
+            Result region - the only node HTMX swaps in after a submit. Empty
+            on the first GET; an alert afterwards. The audit banner is repeated
+            here so it stays visible next to the "saved" confirmation.
+          #}
+          <div id="assessment-result">
+            {% if error %}
+              <div class="alert alert--danger" role="alert">
+                <div>
+                  <span class="alert__title">Not saved</span>
+                  <p class="alert__body">{{ error }}</p>
+                </div>
+              </div>
+            {% elif saved %}
+              {{ audit_banner(record) }}
+              <div class="alert alert--success" role="alert">
+                <div>
+                  <span class="alert__title">Record #{{ record.record_id }} saved</span>
+                  <p class="alert__body">
+                    Filed for patient {{ record.patient_id }}, admission
+                    {{ record.admission_id }}.
+                    <a href="/records/admission/{{ record.admission_id }}">
+                      View the admission's clinical history
+                    </a>
+                  </p>
+                </div>
+              </div>
+            {% endif %}
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
