@@ -1,95 +1,39 @@
 /* ==========================================================================
-   Hospital Operations Management System — Shared theme (SCAFFOLD)
+   HOMS — Shared stylesheet entry point
    --------------------------------------------------------------------------
-   Minimal placeholder stylesheet. Its only purpose right now is to verify
-   that the shared CSS/theme pipeline (shared/frontend/index.html -> css/)
-   is wired up correctly. The final design system is NOT defined here yet.
+   The single stylesheet every feature microservice links. Import order is
+   significant:
+
+     1. variables  — design tokens the rest of the system reads
+     2. reset      — browser normalisation and base elements
+     3. layout     — application shell, grids, structural layout
+     4. components — reusable UI components
+
+   Usage from a feature template:
+     <link rel="stylesheet" href="/static/shared/css/main.css">
+
+   Feature-specific CSS loads AFTER this file and must build on the tokens.
    ========================================================================== */
 
-:root {
-  --color-bg: #f7f9fb;
-  --color-surface: #ffffff;
-  --color-text: #1f2933;
-  --color-muted: #52606d;
-  --color-accent: #1c6b8c;
-  --color-border: #d9e2ec;
-  --font-base: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --space: 1rem;
-  --radius: 6px;
-  --max-width: 60rem;
+@import url("variables.css");
+@import url("reset.css");
+@import url("layout.css");
+@import url("components.css");
+
+/* --------------------------------------------------------------------------
+   Application-level rules only. Anything reusable belongs in components.css;
+   anything structural belongs in layout.css. Keep this section small.
+   -------------------------------------------------------------------------- */
+
+/* Fonts are expected to be self-hosted or linked by the host template.
+   The stacks in variables.css degrade to Georgia / system sans / system mono
+   when the webfonts are unavailable, so the UI stays usable offline. */
+
+/* Consistent selection colour across modules. */
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-text-primary);
 }
 
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: var(--font-base);
-  line-height: 1.5;
-  color: var(--color-text);
-  background: var(--color-bg);
-}
-
-.site-header,
-.main-nav,
-main,
-.site-footer {
-  max-width: var(--max-width);
-  margin: 0 auto;
-  padding: 0 var(--space);
-}
-
-.site-header {
-  padding-top: calc(var(--space) * 2);
-  padding-bottom: var(--space);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.site-header h1 {
-  margin: 0;
-  color: var(--color-accent);
-}
-
-.tagline {
-  margin: 0.25rem 0 0;
-  color: var(--color-muted);
-}
-
-.main-nav ul {
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space);
-  padding: var(--space) 0;
-  margin: 0;
-}
-
-.main-nav a {
-  text-decoration: none;
-  color: var(--color-accent);
-}
-
-.main-nav a:hover,
-.main-nav a:focus {
-  text-decoration: underline;
-}
-
-main section {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  padding: var(--space);
-  margin-bottom: var(--space);
-}
-
-.notice {
-  border-left: 4px solid var(--color-accent);
-}
-
-.site-footer {
-  padding: var(--space);
-  color: var(--color-muted);
-  font-size: 0.875rem;
-  text-align: center;
-}
+/* Long operational tables scroll within their own container, never the page. */
+html { scrollbar-gutter: stable; }

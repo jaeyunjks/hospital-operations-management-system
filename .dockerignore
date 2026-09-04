@@ -1,0 +1,25 @@
+# Build context exclusions.
+#
+# Only the frontend image builds from the repository root (it needs
+# shared/frontend/), so this file exists to keep that context small. The
+# database and backend images build from their own folders and are not
+# affected by this file.
+
+.git
+.github
+.pytest_cache
+docs
+scripts
+week*
+student-1
+student-2
+student-3
+student-5
+student-4/backend
+student-4/database
+student-4/tests
+student-4/README.md
+**/__pycache__
+**/*.pyc
+**/*.db
+**/*.tar.gz
