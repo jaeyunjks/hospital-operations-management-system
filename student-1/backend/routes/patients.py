@@ -107,6 +107,34 @@ def patient_contacts():
     return jsonify(payload), status
 
 
+@patients_bp.route("/addresses", methods=["GET", "POST"])
+def patient_addresses():
+    if request.method == "GET":
+        payload, status = _db_call("GET", "/api/patient-addresses", params=request.args.to_dict())
+    else:
+        payload, status = _db_call("POST", "/api/patient-addresses", payload=request.get_json(silent=True) or {})
+    return jsonify(payload), status
+
+
+@patients_bp.route("/addresses/<int:address_id>", methods=["PATCH"])
+def update_patient_address(address_id):
+    payload, status = _db_call(
+        "PATCH",
+        f"/api/patient-addresses/{address_id}",
+        payload=request.get_json(silent=True) or {},
+    )
+    return jsonify(payload), status
+
+
+@patients_bp.route("/medical-information", methods=["GET", "POST"])
+def patient_medical_information():
+    if request.method == "GET":
+        payload, status = _db_call("GET", "/api/patient-medical-information", params=request.args.to_dict())
+    else:
+        payload, status = _db_call("POST", "/api/patient-medical-information", payload=request.get_json(silent=True) or {})
+    return jsonify(payload), status
+
+
 @patients_bp.route("/contacts/<int:contact_id>", methods=["PATCH"])
 def update_patient_contact(contact_id):
     payload, status = _db_call(

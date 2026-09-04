@@ -65,6 +65,15 @@ def _api_delete(path):
         return False
 
 
+def generate_summary(patient):
+    source = generate_ai_summary(patient)
+    payload, succeeded = _api_post("/api/ai/summary", {"text": source})
+    result = payload.get("data", payload) if isinstance(payload, dict) else {}
+    if succeeded and result.get("summary"):
+        return result["summary"]
+    return source
+
+
 def _fallback_seed_snapshot():
     import sqlite3
 
@@ -105,8 +114,8 @@ def _fallback_seed_snapshot():
 def get_live_snapshot():
     patients = _api_get("/api/patients") or []
     admissions = _api_get("/api/admissions") or []
-    addresses = _api_get("/api/patient-addresses") or []
-    medical = _api_get("/api/patient-medical-information") or []
+    addresses = _api_get("/api/patients/addresses") or []
+    medical = _api_get("/api/patients/medical-information") or []
     contacts = _api_get("/api/patients/contacts") or []
     notes = _api_get("/api/patients/admin-notes") or []
 
@@ -336,12 +345,15 @@ def patient_record(patient_id):
     editing = request.args.get("edit") == "1"
     summary_message = None
     profile_message = None
+    summary_override = None
     action = request.form.get("profile_action")
     if request.method == "POST" and request.form.get("summary_action") == "apply":
-        _, saved = _api_post(f"/api/patients/{patient_id}/admin-notes", {"note_text": request.form.get("summary", "")})
+        summary_text = request.form.get("summary", "").strip() or generate_summary(patient)
+        _, saved = _api_post(f"/api/patients/{patient_id}/admin-notes", {"note_text": summary_text})
         summary_message = "Summary applied as an administrative note." if saved else "The summary could not be applied. Check that the backend is running and try again."
     elif request.method == "POST" and request.form.get("summary_action") == "refresh":
         patient = find_patient_record(patient_id, get_live_snapshot()) or patient
+        summary_override = generate_summary(patient)
     elif request.method == "POST" and action == "admission":
         _, created = _api_post("/api/admissions", {
             "patient_id": patient_id,
@@ -405,7 +417,7 @@ def patient_record(patient_id):
         })
         address = patient.get("address", {})
         if updated and address:
-            updated = _api_update(f"/api/patient-addresses/{address['address_id']}", {
+            updated = _api_update(f"/api/patients/addresses/{address['address_id']}", {
                 "address_street": request.form.get("address", address.get("address_street", "")).strip(),
                 "address_suburb": request.form.get("suburb", address.get("address_suburb", "")).strip(),
                 "address_state": request.form.get("state", address.get("address_state", "")),
@@ -419,7 +431,7 @@ def patient_record(patient_id):
         snapshot = get_live_snapshot()
         patient = find_patient_record(patient_id, snapshot) or patient
 
-    patient_summary = generate_ai_summary(patient)
+    patient_summary = summary_override or generate_ai_summary(patient)
     return render_template(
         "patient.html",
         active_page="patient",
