@@ -134,7 +134,11 @@
                   </tr>
                 </thead>
                 <tbody>
-                  {% for t in tasks | sort(attribute='due_at') %}
+                  {# due_at can be null; sort those to the end rather than
+                     letting Jinja compare None with a string (TypeError). #}
+                  {% set dated_tasks = tasks | rejectattr('due_at', 'none') | sort(attribute='due_at') | list %}
+                  {% set undated_tasks = tasks | selectattr('due_at', 'none') | list %}
+                  {% for t in dated_tasks + undated_tasks %}
                     {#
                       word / dot: both open states read as "Due"; acknowledged
                       gets the filled info dot, pending the hollow one. The
