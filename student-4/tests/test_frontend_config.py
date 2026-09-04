@@ -92,3 +92,28 @@ def test_htmx_is_vendored_not_loaded_from_a_cdn():
     assert "cdn.jsdelivr" not in base
     assert "js/htmx.min.js" in base
     assert (FRONTEND_DIR / "static" / "js" / "htmx.min.js").exists()
+
+
+def test_booking_form_offers_every_bed_not_only_free_ones(monkeypatch):
+    """The dropdown must not pre-filter to available beds.
+
+    Hiding busy beds hides the conflict rule: a coordinator could never
+    attempt a clashing booking, so the API's 409 would be unreachable from
+    the interface. The form offers every bed and lets the API refuse.
+    """
+    module = load_frontend(monkeypatch)
+    calls = []
+
+    def fake_api(method, path, **kwargs):
+        calls.append((method, path, kwargs.get("params")))
+        return [], None
+
+    monkeypatch.setattr(module, "api", fake_api)
+    client = module.app.test_client()
+    assert client.get("/arrangements").status_code == 200
+
+    availability = [c for c in calls if c[1] == "/api/rooms/availability"]
+    assert availability, "the page never asked for bed availability"
+    for _, _, params in availability:
+        assert not (params or {}).get("bed_status"), \
+            "availability was filtered, so busy beds are missing from the form"

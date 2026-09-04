@@ -17,7 +17,7 @@
         <span class="field__label">Bed</span>
         <select class="select" name="bed_id" required>
           {% for bed in free_beds %}
-            <option value="{{ bed.bed_id }}">{{ bed.bed_number }} — {{ bed.room_number }} ({{ bed.care_category }})</option>
+            <option value="{{ bed.bed_id }}">{{ bed.bed_number }} — {{ bed.room_number }} ({{ bed.care_category }}) · {{ bed.bed_status }}{% if bed.room_status in ['Cleaning', 'Out of Service'] %} · room {{ bed.room_status | lower }}{% endif %}</option>
           {% endfor %}
         </select>
       </label>
