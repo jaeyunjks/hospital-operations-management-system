@@ -24,10 +24,10 @@ from services import ollama_client
 CATEGORY_KEYWORDS = {
     "Surgical": ["surgery", "surgical", "theatre", "operation", "operative",
                  "procedure", "anaesthetic", "post-op", "recovery"],
-    "Short-term": ["emergency", "observation", "icu", "intensive", "critical",
+    "Short-term": ["short", "short term", "emergency", "observation", "icu", "intensive", "critical",
                    "ventilator", "monitoring", "isolation", "infection",
                    "step-down", "high dependency", "acute"],
-    "Long-term": ["rehabilitation", "rehab", "extended", "long stay", "long-term",
+    "Long-term": ["long", "long term", "rehabilitation", "rehab", "extended", "long stay", "long-term",
                   "recovery programme", "stable", "private room", "shared ward"],
 }
 
