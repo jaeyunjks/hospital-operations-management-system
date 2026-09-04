@@ -32,7 +32,7 @@ services:
     environment:
       DATABASE_API_URL: http://student-2-database:6200
       # admission_validation.py appends /admissions/<id> to this base URL.
-      PATIENT_ADMISSION_API_URL: "${member2_PATIENT_ADMISSION_API_URL:-http://member-1-backend:5100/api}"
+      PATIENT_ADMISSION_API_URL: "${member2_PATIENT_ADMISSION_API_URL:-http://student-1-backend:5100/api}"
       # external_services.py still uses stubs; configuring URLs does not enable HTTP.
       # NOTE: hostname corrected to match the hyphenated naming convention used
       # by every other service (member-2-backend, member-1-backend, member-4-backend).

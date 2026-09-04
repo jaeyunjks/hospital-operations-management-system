@@ -35,6 +35,7 @@
         href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
 
   <link rel="stylesheet" href="/static/shared/css/main.css">
+  <link rel="stylesheet" href="/static/css/clinical-staff.css">
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/json-enc.js"></script>
 </head>
@@ -52,23 +53,23 @@
 
   <div class="app">
 
-    <header class="app-header">
+    <header class="app-header clinical-header">
       <a class="app-header__brand" href="/">
         HOMS
-        <span class="app-header__context">Clinical Staff</span>
+        <span class="app-header__context">Clinical Staff Management</span>
       </a>
-      <span class="app-header__meta u-label">Signed in · {{ role }}</span>
+      <nav class="app-header__nav" aria-label="Clinical Staff Management">
+        <a class="nav-link" href="/">Dashboard</a>
+        <a class="nav-link" href="/assessment/new">New assessment</a>
+        <a class="nav-link" href="/consultations/new">Request consult</a>
+        <a class="nav-link" href="/surgery/new">Schedule surgery</a>
+      </nav>
+      <div class="app-header__actions">
+        <span class="app-header__meta u-label">Signed in · {{ role }}</span>
+      </div>
     </header>
 
-    <div class="app-body">
-
-      <nav class="app-sidenav" aria-label="Clinical Staff Management">
-        <div class="app-sidenav__group">
-          <span class="app-sidenav__label">Workspace</span>
-          <a class="sidenav-link" href="/">Dashboard</a>
-          <a class="sidenav-link is-active" href="/consultations/queue" aria-current="page">Consultation queue</a>
-        </div>
-      </nav>
+    <div class="app-body app-body--full">
 
       <main class="app-main" id="main">
         <div class="page">

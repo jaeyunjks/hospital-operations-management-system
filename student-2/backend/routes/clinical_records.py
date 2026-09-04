@@ -218,6 +218,15 @@ def create_record():
 
     data = _pick(body, CREATE_FIELDS)
 
+    # HTML number inputs arrive through the frontend as JSON strings. Normalise
+    # identifiers before authorization and before forwarding them to the
+    # database API so the browser and direct JSON clients follow the same path.
+    try:
+        for field in ("patient_id", "admission_id", "doctor_id"):
+            data[field] = int(data[field])
+    except (TypeError, ValueError):
+        return _error("patient_id, admission_id and doctor_id must be integers.", 400)
+
     # A doctor may only file records under their own doctor_id; a nurse-created
     # record must still name the assigned doctor.
     user = get_current_user() or {}
