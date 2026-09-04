@@ -251,6 +251,24 @@ def care_tasks():
     return _render("care_tasks.html", data, error)
 
 
+@app.route("/care-tasks/new", methods=["GET", "POST"])
+def care_task_form():
+    """
+    Care-task form (a doctor raises a task against one of their clinical
+    records; the assigned nurse works it from the /care-tasks screen).
+
+    GET  - blank form. POST - forward fields to the backend and re-render.
+    The optional due_at is dropped when left blank so the backend does not
+    receive an empty string for it; every other field the backend validates.
+    """
+    if request.method == "GET":
+        return _render("care_task_form.html", data=None, error=None)
+
+    submitted = {k: v for k, v in request.form.to_dict().items() if v != ""}
+    data, error = backend_post("/api/care-tasks/", json_body=submitted)
+    return _render("care_task_form.html", data, error)
+
+
 @app.route("/surgery/new", methods=["GET", "POST"])
 def surgery_form():
     """

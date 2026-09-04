@@ -1,0 +1,183 @@
+{#
+  care_task_form.html - a doctor raises a care task against one of their
+  clinical records; the assigned nurse then picks it up from their own list.
+
+  app.py wiring (route "/care-tasks/new", GET + POST):
+    * GET  -> data = None, error = None: a blank form.
+    * POST -> app.py forwards the form to POST /api/care-tasks/ and
+              re-renders this template with:
+                data  = {"care_task": {...}, "clinical_record_id": N,
+                         "patient_id": N}                on success
+                error = "<backend message>"              on failure
+      The whole page comes back; the HTMX submit pulls only #care-task-result
+      out of it (hx-select), so a rejected submit keeps the form.
+
+  Backend rules that shape this screen (routes/care_tasks.py):
+    * only a doctor may create a care task (require_role("doctor")).
+    * clinical_record_id, assigned_nurse_id and task_description are required.
+    * due_at is optional.
+    * the clinical record must already exist, or the create is refused (404).
+    * status is forced to 'pending' by the backend - it is not on this form.
+
+  The nurse workflow (acknowledge / complete / cancel) lives on the separate
+  /care-tasks screen and is not repeated here.
+#}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HOMS — New care task</title>
+  <meta name="description" content="Clinical Staff Management — a doctor raises a care task for a nurse against a clinical record.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,600&display=swap">
+
+  <link rel="stylesheet" href="/static/shared/css/main.css">
+  <link rel="stylesheet" href="/static/css/clinical-staff.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  {% set task = data.get('care_task') if data else none %}
+  {% set saved = task is not none and task.get('task_id') is not none %}
+
+  <div class="app">
+
+    <header class="app-header clinical-header">
+      <a class="app-header__brand" href="/">
+        HOMS
+        <span class="app-header__context">Clinical Staff Management</span>
+      </a>
+      <nav class="app-header__nav" aria-label="Clinical Staff Management">
+        <a class="nav-link" href="/">Dashboard</a>
+        <a class="nav-link" href="/assessment/new">New assessment</a>
+        <a class="nav-link" href="/consultations/new">Request consult</a>
+        <a class="nav-link" href="/care-tasks/new" aria-current="page">New task</a>
+        <a class="nav-link" href="/surgery/new">Schedule surgery</a>
+      </nav>
+      <div class="app-header__actions">
+        <span class="app-header__meta u-label">Signed in · {{ role }}</span>
+      </div>
+    </header>
+
+    <div class="app-body app-body--full">
+
+      <main class="app-main" id="main">
+        <div class="page page--prose">
+
+          <div class="page-header">
+            <div>
+              <span class="page-header__eyebrow">Clinical Staff Management</span>
+              <h1 class="page-header__title">Raise a care task</h1>
+              <p class="page-header__description">
+                Assign a nursing task against one of your clinical records. It
+                starts as <span class="badge-neutral">pending</span> and appears
+                on the assigned nurse's task list, where they acknowledge and
+                complete it.
+              </p>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="panel__header">
+              <h2 class="panel__title">Task details</h2>
+              {% if saved %}<span class="panel__meta">#{{ task.task_id }}</span>{% endif %}
+            </div>
+
+            <div class="panel__body">
+              {#
+                Submits to the frontend's own /care-tasks/new (which calls the
+                backend and re-renders this page). hx-select pulls just
+                #care-task-result - no full reload, form kept on error.
+              #}
+              <form class="stack"
+                    id="care-task-form"
+                    hx-post="/care-tasks/new"
+                    hx-target="#care-task-result"
+                    hx-select="#care-task-result"
+                    hx-swap="outerHTML"
+                    hx-disabled-elt="#care-task-submit">
+
+                <div class="grid grid--2">
+                  <label class="field">
+                    <span class="field__label">Clinical record ID</span>
+                    <input class="input" type="number" name="clinical_record_id" required
+                           value="{{ request.form.get('clinical_record_id', '') }}">
+                    <span class="field__hint">One of your own records.</span>
+                  </label>
+                  <label class="field">
+                    <span class="field__label">Assigned nurse ID</span>
+                    <input class="input" type="number" name="assigned_nurse_id" required
+                           value="{{ request.form.get('assigned_nurse_id', '') }}">
+                    <span class="field__hint">Staff ID of the nurse to carry it out.</span>
+                  </label>
+                </div>
+
+                <label class="field">
+                  <span class="field__label">Task description</span>
+                  <textarea class="textarea" name="task_description" rows="4" required
+                            placeholder="What the nurse should do, and any relevant detail.">{{ request.form.get('task_description', '') }}</textarea>
+                  <span class="field__hint">Required.</span>
+                </label>
+
+                <label class="field">
+                  <span class="field__label">Due date &amp; time</span>
+                  <input class="input" type="datetime-local" name="due_at"
+                         value="{{ request.form.get('due_at', '') }}">
+                  <span class="field__hint">Optional - leave blank if there is no fixed deadline.</span>
+                </label>
+
+                <div class="row">
+                  <button class="btn-primary" type="submit" id="care-task-submit">Create task</button>
+                  <span class="htmx-indicator u-label">Creating…</span>
+                  <span class="spacer"></span>
+                  <a class="btn-ghost" href="/">Cancel</a>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          {#
+            Result region - the only node HTMX swaps in after a submit. Empty
+            on the first GET.
+          #}
+          <div id="care-task-result">
+            {% if error %}
+              <div class="alert alert--danger" role="alert">
+                <div>
+                  <span class="alert__title">Task not created</span>
+                  <p class="alert__body">{{ error }}</p>
+                </div>
+              </div>
+            {% elif saved %}
+              <div class="alert alert--success" role="alert">
+                <div>
+                  <span class="alert__title">Task #{{ task.task_id }} created</span>
+                  {% set record_id = data.get('clinical_record_id') or task.get('clinical_record_id') %}
+                  <p class="alert__body">
+                    Assigned to nurse {{ task.assigned_nurse_id }}, for record
+                    {{ record_id }}{% if data.get('patient_id') %} (patient {{ data.get('patient_id') }}){% endif %}.
+                    Current status: <span class="badge-info">{{ task.status }}</span>
+                  </p>
+                  {% if record_id %}
+                    <p class="alert__body">
+                      <a class="nav-link" href="/care-tasks?clinical_record_id={{ record_id }}">
+                        View tasks for this record
+                      </a>
+                    </p>
+                  {% endif %}
+                </div>
+              </div>
+            {% endif %}
+          </div>
+
+        </div>
+      </main>
+    </div>
+  </div>
+</body>
+</html>
