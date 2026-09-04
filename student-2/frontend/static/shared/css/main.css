@@ -1,0 +1,39 @@
+/* ==========================================================================
+   HOMS — Shared stylesheet entry point
+   --------------------------------------------------------------------------
+   The single stylesheet every feature microservice links. Import order is
+   significant:
+
+     1. variables  — design tokens the rest of the system reads
+     2. reset      — browser normalisation and base elements
+     3. layout     — application shell, grids, structural layout
+     4. components — reusable UI components
+
+   Usage from a feature template:
+     <link rel="stylesheet" href="/static/shared/css/main.css">
+
+   Feature-specific CSS loads AFTER this file and must build on the tokens.
+   ========================================================================== */
+
+@import url("variables.css");
+@import url("reset.css");
+@import url("layout.css");
+@import url("components.css");
+
+/* --------------------------------------------------------------------------
+   Application-level rules only. Anything reusable belongs in components.css;
+   anything structural belongs in layout.css. Keep this section small.
+   -------------------------------------------------------------------------- */
+
+/* Fonts are expected to be self-hosted or linked by the host template.
+   The stacks in variables.css degrade to Georgia / system sans / system mono
+   when the webfonts are unavailable, so the UI stays usable offline. */
+
+/* Consistent selection colour across modules. */
+::selection {
+  background: var(--color-accent-soft);
+  color: var(--color-text-primary);
+}
+
+/* Long operational tables scroll within their own container, never the page. */
+html { scrollbar-gutter: stable; }

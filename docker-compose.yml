@@ -1,93 +1,39 @@
-# HOMS development stack — Clinical Staff Management.
-# This branch does not yet include the other students' Compose services.
-# External URL defaults match the integrated service names/routes on develop;
-# those services must be running on the corresponding networks to use them.
+# ==========================================================================
+# Hospital Operations Management System — Root Docker Compose (SCAFFOLD)
+# ==========================================================================
+# STATUS: Initial scaffold only. No service definitions are declared yet
+# because the underlying services do not exist. Adding placeholder/fake
+# services here would fail to build, so they are intentionally omitted.
+#
+# This file is kept syntactically valid so `docker compose config` succeeds.
+#
+# When implementation begins, this file will eventually orchestrate:
+#
+#   * Five frontend services          (member-1..5 frontend)
+#   * Five Flask backend/API services (member-1..5 backend)
+#   * Five database services          (member-1..5 SQLite; volume-backed)
+#   * AI-Mode service                 (ai-services/ai-mode)
+#   * Ollama runtime                  (approved open-source LLM host)
+#   * Later releases:
+#       - MCP server                  (ai-services/mcp-server)      [Release 1]
+#       - RAG server                  (ai-services/rag-server)      [Release 1]
+#       - Multi-Agent server          (ai-services/multi-agent-server) [Release 2]
+#
+# Each service will reference its own Dockerfile (e.g. member-1/Dockerfile)
+# and expose the appropriate ports / networks / volumes once implemented.
+# ==========================================================================
 
-services:
-  # --- student-2 — Clinical Staff Management ----------------------------
-  student-2-database:
-    build:
-      context: ./student-2/database
-    environment:
-      PORT: "6200"
-      DATABASE_PATH: /data/clinical_staff.db
-    ports:
-      - "127.0.0.1:6200:6200"
-    volumes:
-      - student2-database-data:/data
-    networks: [homs-net]
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6200/health', timeout=3)"
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
-    restart: unless-stopped
+# Compose Specification: the top-level `version` key is obsolete and omitted.
 
-  student-2-backend:
-    build:
-      context: ./student-2/backend
-    environment:
-      DATABASE_API_URL: http://student-2-database:6200
-      # admission_validation.py appends /admissions/<id> to this base URL.
-      PATIENT_ADMISSION_API_URL: "${STUDENT2_PATIENT_ADMISSION_API_URL:-http://student-1-backend:5100/api}"
-      # external_services.py still uses stubs; configuring URLs does not enable HTTP.
-      STAFF_SHIFT_API_URL: "${STUDENT2_STAFF_SHIFT_API_URL:-http://student5-backend:5500/api}"
-      ROOM_BED_API_URL: "${STUDENT2_ROOM_BED_API_URL:-http://student-4-backend:5400}"
-      OLLAMA_BASE_URL: "${STUDENT2_OLLAMA_BASE_URL:-http://ollama:11434}"
-      OLLAMA_MODEL: "${STUDENT2_OLLAMA_MODEL:-llama3.1:8b}"
-      OLLAMA_TIMEOUT: "${STUDENT2_OLLAMA_TIMEOUT:-8}"
-    ports:
-      - "127.0.0.1:5200:5200"
-    depends_on:
-      student-2-database:
-        condition: service_healthy
-    # develop uses default for Students 1/5 and homs-net for Student 4/Ollama.
-    networks: [homs-net, default]
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5200/health', timeout=3)"
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
-    restart: unless-stopped
+services: {}
+# services:
+#   member-1-backend:
+#     build: ./member-1
+#     # ... to be defined when the service exists
 
-  student-2-frontend:
-    build:
-      context: ./student-2/frontend
-    environment:
-      BACKEND_API_URL: http://student-2-backend:5200
-    ports:
-      - "127.0.0.1:3200:3200"
-    depends_on:
-      student-2-backend:
-        condition: service_healthy
-    networks: [homs-net]
-    healthcheck:
-      test:
-        - CMD
-        - python
-        - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3200/health', timeout=3)"
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 5s
-    restart: unless-stopped
+# networks:
+#   hospital-net:
+#     driver: bridge
 
-networks:
-  homs-net:
-    driver: bridge
-  default:
-    name: hospital-operations-management-system_default
-
-volumes:
-  student2-database-data:
+# volumes:
+#   member-1-db:

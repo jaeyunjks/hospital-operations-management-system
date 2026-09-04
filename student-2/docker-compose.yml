@@ -1,0 +1,92 @@
+# HOMS development stack — Clinical Staff Management.
+# This branch does not yet include the other members' Compose services.
+# External URL defaults match the integrated service names/routes on develop;
+# those services must be running on the corresponding networks to use them.
+services:
+  # --- member-2 — Clinical Staff Management ----------------------------
+  member-2-database:
+    build:
+      context: ./member-2/database
+    environment:
+      PORT: "6200"
+      DATABASE_PATH: /data/clinical_staff.db
+    ports:
+      - "127.0.0.1:6200:6200"
+    volumes:
+      - member2-database-data:/data
+    networks: [homs-net]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6200/health', timeout=3)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+  member-2-backend:
+    build:
+      context: ./member-2/backend
+    environment:
+      DATABASE_API_URL: http://member-2-database:6200
+      # admission_validation.py appends /admissions/<id> to this base URL.
+      PATIENT_ADMISSION_API_URL: "${member2_PATIENT_ADMISSION_API_URL:-http://member-1-backend:5100/api}"
+      # external_services.py still uses stubs; configuring URLs does not enable HTTP.
+      # NOTE: hostname corrected to match the hyphenated naming convention used
+      # by every other service (member-2-backend, member-1-backend, member-4-backend).
+      # The un-hyphenated "member5-backend" would fail Docker's internal DNS lookup
+      # once member-5's service is actually added to the stack.
+      STAFF_SHIFT_API_URL: "${member2_STAFF_SHIFT_API_URL:-http://member-5-backend:5500/api}"
+      ROOM_BED_API_URL: "${member2_ROOM_BED_API_URL:-http://member-4-backend:5400}"
+      OLLAMA_BASE_URL: "${member2_OLLAMA_BASE_URL:-http://ollama:11434}"
+      OLLAMA_MODEL: "${member2_OLLAMA_MODEL:-llama3.1:8b}"
+      OLLAMA_TIMEOUT: "${member2_OLLAMA_TIMEOUT:-8}"
+    ports:
+      - "127.0.0.1:5200:5200"
+    depends_on:
+      member-2-database:
+        condition: service_healthy
+    # develop uses default for members 1/5 and homs-net for member 4/Ollama.
+    networks: [homs-net, default]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5200/health', timeout=3)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+  member-2-frontend:
+    build:
+      context: ./member-2/frontend
+    environment:
+      BACKEND_API_URL: http://member-2-backend:5200
+    ports:
+      - "127.0.0.1:3200:3200"
+    depends_on:
+      member-2-backend:
+        condition: service_healthy
+    networks: [homs-net]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3200/health', timeout=3)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+networks:
+  homs-net:
+    driver: bridge
+  default:
+    name: hospital-operations-management-system_default
+volumes:
+  member2-database-data:

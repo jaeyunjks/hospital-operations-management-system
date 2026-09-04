@@ -82,7 +82,7 @@ TABLES = {
         "pk": "summary_id",
         "columns": [
             "admission_id", "patient_id",
-            "summary_text", "model_used", "source_reference",
+            "summary_text", "model_used", "source_reference", "summary_scope",
             "generated_at", "reviewed_by_staff_id", "review_status",
         ],
         "required": ["admission_id", "patient_id", "summary_text"],

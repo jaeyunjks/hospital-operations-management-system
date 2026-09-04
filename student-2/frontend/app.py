@@ -313,4 +313,8 @@ def health():
 if __name__ == "__main__":
     # Development server. This frontend's assigned port is 3200; the backend
     # it talks to is on 5200.
-    app.run(host="0.0.0.0", port=3200, debug=True)
+    # Debug mode (Werkzeug's interactive debugger) is opt-in via FLASK_DEBUG
+    # so it can never ship "on" by accident to a reachable deployment - set
+    # FLASK_DEBUG=true locally if you want auto-reload and tracebacks.
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    app.run(host="0.0.0.0", port=3200, debug=debug_mode)
