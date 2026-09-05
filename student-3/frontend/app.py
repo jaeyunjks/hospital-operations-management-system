@@ -183,6 +183,33 @@ def purchase_orders_list():
 def purchase_orders_table():
     try:return render_template("partials/purchase_orders_table.html",is_manager=is_manager(),**api_client.list_purchase_orders(**purchase_order_filters()))
     except api_client.BackendError as exc:return f'<tr><td colspan="10">{exc}</td></tr>',exc.status
+
+
+@app.post("/purchase-orders/suggestions")
+def purchase_order_suggestions():
+    try:
+        advisory = api_client.reorder_suggestions()
+        return render_template("partials/reorder_suggestions.html", advisory=advisory,
+                               is_manager=is_manager())
+    except api_client.BackendError as exc:
+        return render_template("partials/reorder_suggestions_error.html", error=str(exc)), exc.status
+
+
+@app.post("/purchase-orders/suggestions/create-drafts")
+def purchase_order_suggestion_drafts():
+    if not is_manager():
+        return "Pharmacy Manager role required", 403
+    medicine_ids = request.form.getlist("medicine_id")
+    suggestions = []
+    try:
+        for medicine_id in medicine_ids:
+            suggestions.append({"medicine_id": int(medicine_id),
+                                "reasoning": request.form.get(f"reasoning_{medicine_id}", "")})
+        result = api_client.create_reorder_drafts(suggestions, current_identity()["role"])
+        return render_template("partials/reorder_drafts_created.html", result=result)
+    except (ValueError, api_client.BackendError) as exc:
+        status = getattr(exc, "status", 400)
+        return render_template("partials/reorder_suggestions_error.html", error=str(exc)), status
 @app.get("/purchase-orders/<int:po_id>/detail")
 def po_detail_panel(po_id):
     try:return render_template("partials/purchase_order_detail.html",order=api_client.get_purchase_order(po_id))

@@ -13,6 +13,7 @@ from flask import Flask, jsonify, request
 
 from services.ai_client import health_check
 from services.expiry_advisory import advisory as expiry_advisory
+from services.reorder_recommendation import advisory as reorder_advisory, candidates_for as reorder_candidates
 
 DATABASE_SERVICE_URL = os.environ.get(
     "DATABASE_URL", os.environ.get("DATABASE_SERVICE_URL", "http://localhost:6300")
@@ -226,6 +227,59 @@ def ai_expiry_advisory():
         # Read-only orchestration: the advisory does not write batches, medicines, or movements.
         result, _input, _model_result = expiry_advisory(database_request, days_ahead)
         return jsonify(result)
+    except DatabaseServiceError as exc:
+        return fail(str(exc), exc.status)
+
+
+@app.post("/api/ai/suggest-reorder")
+def ai_suggest_reorder():
+    """Produce advisory-only reorder recommendations; never creates orders."""
+    try:
+        result, _input, _model_result = reorder_advisory(database_request)
+        return jsonify(result)
+    except DatabaseServiceError as exc:
+        return fail(str(exc), exc.status)
+
+
+@app.post("/api/ai/suggest-reorder/create-drafts")
+def create_reorder_drafts():
+    """Create manager-approved pending orders from freshly calculated candidates."""
+    if denied := require_manager():
+        return denied
+    payload = request.get_json(silent=True) or {}
+    suggestions = payload.get("suggestions")
+    if not isinstance(suggestions, list) or not suggestions:
+        return fail("At least one reorder suggestion is required", 400)
+    try:
+        candidate_by_id = {item["medicine_id"]: item for item in reorder_candidates(database_request)}
+        created = []
+        seen = set()
+        for suggestion in suggestions:
+            medicine_id = suggestion.get("medicine_id") if isinstance(suggestion, dict) else None
+            if not isinstance(medicine_id, int) or medicine_id in seen or medicine_id not in candidate_by_id:
+                return fail("One or more suggestions are no longer eligible", 409)
+            seen.add(medicine_id)
+            candidate = candidate_by_id[medicine_id]
+            reasoning = str(suggestion.get("reasoning", "")).strip()
+            if f"{candidate['daily_usage_rate']:.2f}" not in reasoning or "units/day" not in reasoning:
+                reasoning = (f"Backend-calculated quantity {candidate['suggested_quantity']}; actual usage is "
+                             f"{candidate['daily_usage_rate']:.2f} units/day.")
+            created.append(database_request("/purchase_orders", "POST", {
+                "medicine_id": medicine_id,
+                "supplier_id": candidate["supplier_id"],
+                "quantity_ordered": candidate["suggested_quantity"],
+                "quantity_received": 0,
+                "unit_price": candidate["unit_price"],
+                "status": "pending_approval",
+                "created_by": request.headers.get("X-HOMS-Name", "Pharmacy Manager"),
+                "approved_by": None,
+                "ai_generated": 1,
+                "ai_reasoning": reasoning,
+                "decision_reason": None,
+                "created_at": date.today().isoformat() + "T00:00:00",
+                "expected_at": (date.today() + timedelta(days=candidate["lead_time_days"])).isoformat(),
+            }))
+        return jsonify({"created": created, "count": len(created)}), 201
     except DatabaseServiceError as exc:
         return fail(str(exc), exc.status)
 

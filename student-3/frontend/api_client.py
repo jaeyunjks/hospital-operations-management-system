@@ -126,6 +126,16 @@ def expiry_advisory(days_ahead=30):
     return _request("/api/ai/expiry-advisory", "POST", {"days_ahead": days_ahead},
                     timeout=BACKEND_API_TIMEOUT)
 
+
+def reorder_suggestions():
+    """Request backend-owned reorder calculations and bounded AI judgement."""
+    return _request("/api/ai/suggest-reorder", "POST", {}, timeout=BACKEND_API_TIMEOUT)
+
+
+def create_reorder_drafts(suggestions, role):
+    return _request("/api/ai/suggest-reorder/create-drafts", "POST",
+                    {"suggestions": suggestions}, role, timeout=BACKEND_API_TIMEOUT)
+
 def list_batches(**filters): return _request("/api/batches?" + urllib.parse.urlencode(filters))
 def write_off_batch(batch_id, reason, role): return _request(f"/api/batches/{batch_id}/write-off", "POST", {"reason":reason}, role)
 def issue_stock(payload, role): return _request("/api/stock/issue", "POST", payload, role)
