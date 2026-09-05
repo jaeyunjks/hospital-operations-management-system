@@ -1042,4 +1042,14 @@
 .ai-loading__note, .ai-loading__slow { margin: var(--space-1) 0 0; font-size: var(--size-ui-xs); color: var(--color-text-muted); }
 .ai-loading__slow[hidden] { display: none; }
 
+/* Places an AI request state immediately beneath its action button. */
+.ai-action { position: relative; }
+.ai-action .ai-loading {
+  position: absolute;
+  z-index: 2;
+  top: 100%;
+  right: 0;
+  width: 320px;
+}
+
 @keyframes ai-spin { to { transform: rotate(360deg); } }
