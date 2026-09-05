@@ -192,7 +192,9 @@ def purchase_order_suggestions():
         return render_template("partials/reorder_suggestions.html", advisory=advisory,
                                is_manager=is_manager())
     except api_client.BackendError as exc:
-        return render_template("partials/reorder_suggestions_error.html", error=str(exc)), exc.status
+        # Let HTMX swap the existing error panel so its retry action can
+        # restart the same timed loading state.
+        return render_template("partials/reorder_suggestions_error.html", error=str(exc))
 
 
 @app.post("/purchase-orders/suggestions/create-drafts")

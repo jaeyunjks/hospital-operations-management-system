@@ -4,7 +4,4 @@
     <p class="alert__body">{{ error }}. No inventory data was changed.</p>
   </div>
 </div>
-<form hx-post="/batches/ai-advisory" hx-target="#expiry-advisory-results" hx-swap="innerHTML" hx-indicator="#expiry-advisory-loading">
-  <input type="hidden" name="days_ahead" value="30">
-  <button class="btn btn-secondary" type="submit">Try again</button>
-</form>
+<button class="btn btn-secondary" type="button" data-ai-retry="expiry-advisory-form">Try again</button>
