@@ -157,8 +157,18 @@ def medicines_for(search, category, status, stock_status, expiring_within):
         if days is not None and days < 0: raise ValueError
     except ValueError:
         raise ValueError("expiring_within must be a non-negative number of days") from None
-    medicines, suppliers = database_request("/medicines"), database_request("/suppliers")
-    rows = [enriched_medicine(m, suppliers, medicine_batches(m["medicine_id"])) for m in medicines]
+    # Fetch the complete batch ledger once, then group it locally. Calling the
+    # per-medicine endpoint here would make the 140-row list an N+1 request.
+    medicines, suppliers, all_batches = (
+        database_request("/medicines"),
+        database_request("/suppliers"),
+        database_request("/batches?include_expired=true&include_empty=true"),
+    )
+    batches_by_medicine = {}
+    for batch in all_batches:
+        batches_by_medicine.setdefault(batch["medicine_id"], []).append(batch)
+    rows = [enriched_medicine(m, suppliers, batches_by_medicine.get(m["medicine_id"], []))
+            for m in medicines]
     term = search.strip().casefold()
     deadline = date.today() + timedelta(days=days or 0) if days is not None else None
     return [m for m in rows if (status == "all" or m["status"] == status)
@@ -362,12 +372,14 @@ def medicine_reactivate(medicine_id):
 @app.get("/api/stock/movements")
 def stock_movements():
     """Return the immutable stock ledger enriched from HTTP service data."""
-    from_value, to_value = request.args.get("from", ""), request.args.get("to", "")
+    # ``since`` is a convenient alias for clients requesting a trailing window.
+    from_value = request.args.get("from") or request.args.get("since", "")
+    to_value = request.args.get("to", "")
     try:
         from_date = parse_date(from_value) if from_value else None
         to_date = parse_date(to_value) if to_value else None
     except ValueError:
-        return fail("from and to must use YYYY-MM-DD format", 400)
+        return fail("from, since, and to must use YYYY-MM-DD format", 400)
     try:
         limit = int(request.args.get("limit", 100))
         if limit <= 0: raise ValueError
@@ -377,8 +389,12 @@ def stock_movements():
     if movement_type not in {"all", "receive", "issue", "adjust", "waste"}:
         return fail("movement_type must be receive, issue, adjust, waste, or all", 400)
     try:
-        movements, medicines = database_request("/stock_movements"), database_request("/medicines")
-        batches = {batch["batch_id"]: batch for medicine in medicines for batch in medicine_batches(medicine["medicine_id"])}
+        movements, medicines, batch_rows = (
+            database_request("/stock_movements"),
+            database_request("/medicines"),
+            database_request("/batches?include_expired=true&include_empty=true"),
+        )
+        batches = {batch["batch_id"]: batch for batch in batch_rows}
         medicine_by_id = {medicine["medicine_id"]: medicine for medicine in medicines}
         medicine_id = request.args.get("medicine_id", type=int)
         performed_by = request.args.get("performed_by", "").strip().casefold()
