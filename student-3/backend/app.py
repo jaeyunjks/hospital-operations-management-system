@@ -463,7 +463,8 @@ def write_off_batch(batch_id):
         # Separate HTTP calls cannot be transactional: write the ledger first so a failure never silently loses stock.
         database_request("/stock_movements","POST",{"medicine_id":batch["medicine_id"],"batch_id":batch_id,"movement_type":"waste","quantity":quantity,"reason":reason,"performed_by":request.headers.get("X-HOMS-Name","Pharmacy Manager"),"created_at":date.today().isoformat()+"T00:00:00"})
         database_request(f"/batches/{batch_id}","PUT",{"quantity_remaining":0})
-        all_batches=database_request(f"/batches?medicine_id={batch['medicine_id']}&include_expired=true&include_empty=true")
+        # Medicine stock excludes expired lots, including the expired lot just written off.
+        all_batches=database_request(f"/batches?medicine_id={batch['medicine_id']}&include_expired=false&include_empty=true")
         stock=sum(item["quantity_remaining"] for item in all_batches)
         database_request(f"/medicines/{batch['medicine_id']}","PUT",{**medicine,"stock_quantity":stock})
         return jsonify({"batch_id":batch_id,"medicine_name":medicine["name"],"quantity_written_off":quantity,"reason":reason,"stock_quantity":stock})

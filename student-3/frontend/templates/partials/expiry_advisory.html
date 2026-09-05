@@ -9,7 +9,7 @@
     {% if advisory.source == 'fallback' %}
       <div class="alert alert--warning"><div><p class="alert__title">AI service unavailable — showing rule-based advisory.</p><p class="alert__body">{{ advisory.fallback_reason }}</p></div></div>
     {% endif %}
-    {% if advisory.capped %}<p class="table__muted">Showing the 15 soonest-expiring batches sent for review.</p>{% endif %}
+    {% if advisory.capped %}<p class="table__muted">Showing the 5 soonest-expiring batches sent for AI review.</p>{% endif %}
     <p>{{ advisory.summary }}</p>
     {% for item in advisory["items"] %}
       <article class="panel" style="margin-top: var(--space-3)">

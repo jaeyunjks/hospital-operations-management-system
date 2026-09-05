@@ -88,7 +88,7 @@ SELECT n, medicine_id, 'PHM-' || printf('%05d', 26000 + n),
   END,
   CASE WHEN medicine_id IN (9, 10) THEN 5000 + (n * 50) ELSE 320 + ((n % 8) * 40) END,
   CASE
-    WHEN n <= 8 THEN 0
+    WHEN n <= 8 THEN 25 + (n * 5)
     WHEN medicine_id <= 25 THEN 10
     WHEN medicine_id IN (9, 10) THEN 2600 + ((n % 4) * 500)
     WHEN n % 29 = 0 THEN 0
