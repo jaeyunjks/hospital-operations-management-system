@@ -177,7 +177,7 @@ a:focus-visible {
 
 .app-shell {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) calc(320px + var(--gutter));
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   min-height: 100vh;
   background: var(--surface-page);
@@ -383,9 +383,108 @@ h3 {
 }
 
 .stat-block {
+  display: block;
+  color: inherit;
+  text-decoration: none;
   border: var(--border-hair);
   background: var(--surface-band);
   padding: 10px 12px;
+}
+
+.stat-block:hover {
+  border-color: var(--indigo-base);
+  background: var(--surface-hover);
+}
+
+.required-star {
+  margin-left: 4px;
+  color: var(--status-risk);
+  font-weight: 700;
+}
+
+.contact-tile {
+  position: relative;
+  margin: 16px 20px;
+  padding: 16px;
+  border: var(--border-strong);
+  background: var(--surface-band);
+}
+
+.contact-tile-actions {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.contact-form[hidden],
+#new-contact-form[hidden] {
+  display: none !important;
+}
+
+.contact-form {
+  margin-top: 16px;
+  border: var(--border-hair);
+  background: var(--surface-card);
+}
+
+.btn-small {
+  min-height: 24px;
+  padding: 3px 8px;
+  font-size: var(--size-ui-xs);
+}
+
+.contact-view {
+  padding: 12px 0 0;
+  padding-right: 120px;
+}
+
+.note-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: oklch(0.16 0.018 260 / 0.35);
+}
+
+.note-overlay[hidden] {
+  display: none;
+}
+
+.note-dialog {
+  width: min(560px, 100%);
+  padding: 20px;
+  border: var(--border-strong);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-dialog);
+}
+
+.note-dialog label {
+  display: block;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: var(--size-label-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-label);
+}
+
+.note-dialog textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: var(--border-strong);
+  resize: vertical;
+}
+
+.note-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .stat-label {
@@ -797,11 +896,6 @@ tbody tr:hover {
     grid-template-rows: auto auto 1fr;
   }
 
-  .assist-rail {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    padding: 0 var(--gutter) var(--space-12);
-  }
 }
 
 @media (max-width: 960px) {
@@ -856,11 +950,6 @@ tbody tr:hover {
 }
 
 @media (max-width: 760px) {
-  .assist-rail {
-    grid-template-columns: minmax(0, 1fr);
-    padding-bottom: var(--space-9);
-  }
-
   .form-grid,
   .search-form {
     grid-template-columns: minmax(0, 1fr);

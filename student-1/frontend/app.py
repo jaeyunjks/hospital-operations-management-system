@@ -29,7 +29,7 @@ NAV_ITEMS = [
 
 def _api_get(path, params=None):
     try:
-        response = requests.get(f"{BACKEND_URL}{path}", params=params or {}, timeout=5)
+        response = requests.get(f"{BACKEND_URL}{path}", params=params or {}, headers=_identity_headers(), timeout=5)
         payload = response.json() if response.content else {}
         if response.status_code >= 400:
             return None
@@ -38,6 +38,17 @@ def _api_get(path, params=None):
         return payload
     except requests.RequestException:
         return None
+
+
+def _identity_headers():
+    return {key: value for key, value in {
+        "X-HOMS-Role": request.headers.get("X-HOMS-Role"),
+        "X-HOMS-User-Id": request.headers.get("X-HOMS-User-Id"),
+    }.items() if value}
+
+
+def current_identity():
+    return _api_get("/api/auth/identity") or {"role": "System Admin", "name": "System Administrator"}
 
 
 def _api_update(path, payload):
@@ -55,6 +66,12 @@ def _api_post(path, payload):
         return data, response.ok
     except requests.RequestException:
         return {}, False
+
+
+def _unwrap_data(payload):
+    while isinstance(payload, dict) and isinstance(payload.get("data"), dict):
+        payload = payload["data"]
+    return payload
 
 
 def _api_delete(path):
@@ -171,20 +188,16 @@ def build_census_metrics(snapshot):
     duplicate_review = max(1, len([p for p in patients if p["patient_status"] in {"Inactive", "Transferred"}]))
 
     return [
-        {"label": "Admissions today", "value": str(admissions_today), "delta": "+2 vs prior", "tone": "ok"},
-        {"label": "Pending discharge", "value": str(pending_discharge), "delta": "Needs review", "tone": "warn"},
-        {"label": "Active patients", "value": str(active_patients), "delta": "+14 wk", "tone": "ok"},
-        {"label": "Duplicate review", "value": str(duplicate_review), "delta": "3 flagged", "tone": "risk"},
+        {"label": "Admissions today", "value": str(admissions_today), "delta": "+2 vs prior", "tone": "ok", "href": "/?admission_status=Active"},
+        {"label": "Pending discharge", "value": str(pending_discharge), "delta": "Needs review", "tone": "warn", "href": "/?admission_status=Pending"},
+        {"label": "Active patients", "value": str(active_patients), "delta": "+14 wk", "tone": "ok", "href": "/search?status=Active"},
+        {"label": "Duplicate review", "value": str(duplicate_review), "delta": "3 flagged", "tone": "risk", "href": "/search?status=Inactive"},
     ]
 
 
 def generate_ai_summary(patient):
-    sections = [
-        f"{patient['p_first_name']} {patient['p_last_name']} is currently recorded as {patient['patient_status']}.",
-        f"Primary contact is {patient.get('contact', {}).get('contact_first_name', 'not yet recorded')} {patient.get('contact', {}).get('contact_last_name', '')}.",
-        f"Insurance details show Medicare number {patient.get('medical', {}).get('medicare_number', 'not recorded')} and primary address in {patient.get('address', {}).get('address_suburb', 'unknown')}.",
-    ]
-    return " ".join(sections)
+    notes = " ".join(note.get("note_text", "") for note in patient.get("admin_notes", []))
+    return notes or "No clinical notes have been recorded for this patient."
 
 
 def export_csv(snapshot):
@@ -226,13 +239,16 @@ def build_search_results(search_text, status_filter, snapshot):
 @app.route("/")
 def census_page():
     snapshot = get_seed_snapshot()
+    admission_status = request.args.get("admission_status")
+    admissions = [row for row in snapshot["admissions"] if not admission_status or row.get("admission_status") == admission_status]
     return render_template(
         "census.html",
         active_page="census",
         nav=NAV_ITEMS,
         metrics=build_census_metrics(snapshot),
-        admissions=snapshot["admissions"],
+        admissions=admissions,
         patients=snapshot["patients"],
+        identity=current_identity(),
         page_title="Census",
         page_context="Reception / Census",
     )
@@ -248,20 +264,37 @@ def intake_page():
     snapshot = get_seed_snapshot()
     submitted = False
     message = None
+    errors = {}
+    emergency_override = request.form.get("emergency_override") == "1"
 
     if request.method == "POST":
         submitted = True
+        required_fields = {
+            "title": "Title", "first_name": "First name", "last_name": "Last name",
+            "dob": "Date of birth", "sex": "Sex", "mobile": "Mobile",
+            "address": "Address", "suburb": "Suburb", "state": "State",
+            "postcode": "Postcode", "medicare_number": "Medicare number",
+        }
+        if not emergency_override:
+            errors = {field: label for field, label in required_fields.items() if not request.form.get(field, "").strip()}
+        if errors:
+            return render_template(
+                "intake.html", active_page="intake", nav=NAV_ITEMS,
+                patients=snapshot["patients"], page_title="Intake", page_context="Reception / Intake",
+                submitted=submitted, message="These fields are required. Use the emergency override if necessary.",
+                errors=errors, form=request.form, identity=current_identity(),
+            )
         patient_payload = {
-            "p_title": request.form.get("title", "Mr"),
+            "p_title": request.form.get("title", "").strip() or "Mr",
             "p_first_name": request.form.get("first_name", "").strip() or "Unknown",
             "p_last_name": request.form.get("last_name", "").strip() or "Patient",
             "p_date_of_birth": request.form.get("dob") or "1900-01-01",
-            "p_assigned_sex": request.form.get("sex", "Unassigned"),
+            "p_assigned_sex": request.form.get("sex", "").strip() or "Unassigned",
             "p_mobile": request.form.get("mobile", "").strip() or "0000000000",
             "p_method_of_contact": "Email" if request.form.get("email") else "Text",
             "p_email_address": request.form.get("email", "").strip() or None,
-            "p_marital_status": request.form.get("marital_status", "Single"),
-            "p_first_nations_heritage": request.form.get("first_nations", "Unknown"),
+            "p_marital_status": request.form.get("marital_status", "").strip() or "Single",
+            "p_first_nations_heritage": request.form.get("first_nations", "").strip() or "Unknown",
             "patient_status": "Active",
             "created_at": "datetime('now')",
             "updated_at": "datetime('now')",
@@ -270,7 +303,7 @@ def intake_page():
         try:
             response = requests.post(f"{BACKEND_URL}/api/patients", json=patient_payload, timeout=5)
             created = response.json() if response.content else {}
-            parsed = created.get("data") if isinstance(created, dict) else created
+            parsed = _unwrap_data(created)
             patient_id = (parsed or {}).get("patient_id")
 
             if patient_id:
@@ -278,7 +311,7 @@ def intake_page():
                     "patient_id": patient_id,
                     "address_street": request.form.get("address", "").strip() or "Not provided",
                     "address_suburb": request.form.get("suburb", "").strip() or "Unknown",
-                    "address_state": request.form.get("state", "New South Wales"),
+                    "address_state": request.form.get("state", "").strip() or "New South Wales",
                     "address_postcode": request.form.get("postcode", "0000"),
                     "address_is_primary": 1,
                 }
@@ -297,7 +330,9 @@ def intake_page():
                     },
                     timeout=5,
                 )
-                message = "Intake submitted successfully and synced to the live backend API."
+                if request.form.get("notes", "").strip():
+                    _api_post(f"/api/patients/{patient_id}/admin-notes", {"note_text": request.form["notes"].strip()})
+                return redirect(url_for("patient_record", patient_id=patient_id))
             else:
                 message = "The patient form was processed, but the backend did not return a patient record."
         except requests.RequestException:
@@ -312,6 +347,9 @@ def intake_page():
         page_context="Reception / Intake",
         submitted=submitted,
         message=message,
+        errors=errors,
+        form=request.form,
+        identity=current_identity(),
     )
 
 
@@ -319,7 +357,10 @@ def intake_page():
 def search_page():
     snapshot = get_seed_snapshot()
     query = request.args.get("q", "")
-    status_filter = request.args.get("status", "")
+    identity = current_identity()
+    status_filter = request.args.get("status", "Active")
+    if status_filter != "Active" and identity.get("role") != "System Admin":
+        status_filter = "Active"
     results = build_search_results(query, status_filter, snapshot)
     return render_template(
         "search.html",
@@ -331,6 +372,7 @@ def search_page():
         page_title="Search",
         page_context="Reception / Search",
         patients=snapshot["patients"],
+        identity=identity,
     )
 
 
@@ -339,7 +381,7 @@ def patient_record(patient_id):
     snapshot = get_seed_snapshot()
     patient = find_patient_record(patient_id, snapshot)
     if patient is None:
-        return render_template("patient.html", active_page="patient", nav=NAV_ITEMS, patient=None, page_title="Patient record", page_context="Patient / Not found")
+        return render_template("patient.html", active_page="patient", nav=NAV_ITEMS, patient=None, page_title="Patient record", page_context="Patient / Not found", identity=current_identity())
 
     message = None
     editing = request.args.get("edit") == "1"
@@ -402,6 +444,10 @@ def patient_record(patient_id):
             "contact_email": request.form.get("contact_email", "").strip(),
         })
         profile_message = "Patient contact updated." if updated_contact else "The patient contact could not be updated. Check that the backend is running and try again."
+    elif request.method == "POST" and action == "delete_contact":
+        contact_id = request.form.get("contact_id")
+        deleted_contact = _api_delete(f"/api/patients/contacts/{contact_id}")
+        profile_message = "Patient contact deleted." if deleted_contact else "The patient contact could not be deleted. Check that the backend is running and try again."
     elif request.method == "POST":
         updated = _api_update(f"/api/patients/{patient_id}", {
             "p_title": request.form.get("title", patient["p_title"]),
@@ -450,6 +496,7 @@ def patient_record(patient_id):
             key=lambda row: row.get("admission_date") or "",
             reverse=True,
         ),
+        identity=current_identity(),
     )
 
 

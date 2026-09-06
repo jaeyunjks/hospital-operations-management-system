@@ -430,7 +430,7 @@ def delete_resource(resource_name, record_id):
             "message": "Record deactivated instead of being permanently deleted."
         })
 
-    if resource_name == "admissions":
+    if resource_name in {"admissions", "patient-contacts"}:
         database.write_db(
             f"DELETE FROM {resource['table']} WHERE {resource['pk']} = ?",
             (record_id,),

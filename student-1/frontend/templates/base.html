@@ -29,8 +29,8 @@
         </nav>
 
         <div class="nav-user">
-          <span class="user-name">System Administrator</span>
-          <span class="user-role">Reception / Admissions</span>
+          <span class="user-name">{{ identity.name }}</span>
+          <span class="user-role">{{ identity.role }}</span>
         </div>
       </header>
 
@@ -38,37 +38,14 @@
         {% block content %}{% endblock %}
       </main>
 
-      <aside class="assist-rail" aria-label="Assistant panel">
-        <div class="assist-card ai-panel">
-          <span class="eyebrow">AI review</span>
-          <h3>Operational summary</h3>
-          <p>Identity checks, capacity pressure, and early discharge review remain the primary reception risks.</p>
-        </div>
-
-        <div class="assist-card suggestion">
-          <div class="suggestion-head">
-            <span class="status-dot warn"></span>
-            <span class="eyebrow">Admission pressure</span>
-          </div>
-          <p>Three active admissions are currently waiting for pending discharge assessment.</p>
-        </div>
-
-        <div class="assist-card suggestion">
-          <div class="suggestion-head">
-            <span class="status-dot risk"></span>
-            <span class="eyebrow">Duplicate review</span>
-          </div>
-          <p>At least one active record requires reconciliation before final registration.</p>
-        </div>
-      </aside>
     </div>
 
-    <script>
+    <!-- <script>
       window.setInterval(function () {
         if (document.visibilityState === 'visible' && window.location.pathname !== '/intake') {
           window.location.reload();
         }
       }, 12000);
-    </script>
+    </script> -->
   </body>
 </html>

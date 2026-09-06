@@ -20,6 +20,14 @@ ROLE_DOCTOR = "Doctor"
 ROLE_NURSE = "Nurse"
 ROLE_SPECIALIST = "Specialist"
 
+ROLE_NAMES = {
+    ROLE_MANAGER: "System Administrator",
+    ROLE_RECEPTIONIST: "Receptionist",
+    ROLE_DOCTOR: "Doctor",
+    ROLE_NURSE: "Nurse",
+    ROLE_SPECIALIST: "Specialist",
+}
+
 ROLES = (ROLE_MANAGER, ROLE_RECEPTIONIST, ROLE_DOCTOR, ROLE_NURSE, ROLE_SPECIALIST)
 
 ROLE_HEADER = "X-HOMS-Role"
@@ -49,7 +57,7 @@ def identity_from_request() -> Dict[str, Any]:
     except (TypeError, ValueError):
         user_id = None
 
-    return {"role": role, "user_id": user_id}
+    return {"role": role, "user_id": user_id, "name": ROLE_NAMES[role]}
 
 # Allow only callers whose role is in the supplied list. 
 def require_role(*allowed_roles: str) -> Dict[str, Any]:
@@ -110,6 +118,7 @@ __all__ = [
     "ROLE_DOCTOR",
     "ROLE_NURSE",
     "ROLE_SPECIALIST",
+    "ROLE_NAMES",
     "ROLES",
     "ROLE_HEADER",
     "USER_ID_HEADER",

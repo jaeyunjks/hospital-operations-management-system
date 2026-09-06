@@ -24,7 +24,7 @@
 
   <form class="form-grid" method="post">
     <div class="field-group">
-      <label for="title">Title</label>
+      <label for="title">Title{% if errors.title %}<span class="required-star">*</span>{% endif %}</label>
       <select id="title" name="title">
         <option>Mr</option>
         <option>Mrs</option>
@@ -34,22 +34,22 @@
     </div>
 
     <div class="field-group">
-      <label for="first_name">First name</label>
-      <input id="first_name" name="first_name" type="text" value="" placeholder="Enter first name" />
+      <label for="first_name">First name{% if errors.first_name %}<span class="required-star">*</span>{% endif %}</label>
+      <input id="first_name" name="first_name" type="text" value="{{ form.get('first_name', '') }}" placeholder="Enter first name" />
     </div>
 
     <div class="field-group">
-      <label for="last_name">Last name</label>
-      <input id="last_name" name="last_name" type="text" value="" placeholder="Enter last name" />
+      <label for="last_name">Last name{% if errors.last_name %}<span class="required-star">*</span>{% endif %}</label>
+      <input id="last_name" name="last_name" type="text" value="{{ form.get('last_name', '') }}" placeholder="Enter last name" />
     </div>
 
     <div class="field-group">
-      <label for="dob">Date of birth</label>
-      <input id="dob" name="dob" type="date" />
+      <label for="dob">Date of birth{% if errors.dob %}<span class="required-star">*</span>{% endif %}</label>
+      <input id="dob" name="dob" type="date" value="{{ form.get('dob', '') }}" />
     </div>
 
     <div class="field-group">
-      <label for="sex">Sex</label>
+      <label for="sex">Sex{% if errors.sex %}<span class="required-star">*</span>{% endif %}</label>
       <select id="sex" name="sex">
         <option>Male</option>
         <option>Female</option>
@@ -59,8 +59,8 @@
     </div>
 
     <div class="field-group">
-      <label for="mobile">Mobile</label>
-      <input id="mobile" name="mobile" type="tel" placeholder="0412 345 678" />
+      <label for="mobile">Mobile{% if errors.mobile %}<span class="required-star">*</span>{% endif %}</label>
+      <input id="mobile" name="mobile" type="tel" value="{{ form.get('mobile', '') }}" placeholder="0412 345 678" />
     </div>
 
     <div class="field-group">
@@ -69,17 +69,17 @@
     </div>
 
     <div class="field-group wide">
-      <label for="address">Address</label>
-      <input id="address" name="address" type="text" placeholder="Street address" />
+      <label for="address">Address{% if errors.address %}<span class="required-star">*</span>{% endif %}</label>
+      <input id="address" name="address" type="text" value="{{ form.get('address', '') }}" placeholder="Street address" />
     </div>
 
     <div class="field-group">
-      <label for="suburb">Suburb</label>
-      <input id="suburb" name="suburb" type="text" placeholder="Suburb" />
+      <label for="suburb">Suburb{% if errors.suburb %}<span class="required-star">*</span>{% endif %}</label>
+      <input id="suburb" name="suburb" type="text" value="{{ form.get('suburb', '') }}" placeholder="Suburb" />
     </div>
 
     <div class="field-group">
-      <label for="state">State</label>
+      <label for="state">State{% if errors.state %}<span class="required-star">*</span>{% endif %}</label>
       <select id="state" name="state">
         <option>New South Wales</option>
         <option>Victoria</option>
@@ -93,8 +93,8 @@
     </div>
 
     <div class="field-group">
-      <label for="postcode">Postcode</label>
-      <input id="postcode" name="postcode" type="text" placeholder="0000" />
+      <label for="postcode">Postcode{% if errors.postcode %}<span class="required-star">*</span>{% endif %}</label>
+      <input id="postcode" name="postcode" type="text" value="{{ form.get('postcode', '') }}" placeholder="0000" />
     </div>
 
     <div class="field-group">
@@ -107,8 +107,8 @@
     </div>
 
     <div class="field-group">
-      <label for="medicare_number">Medicare number</label>
-      <input id="medicare_number" name="medicare_number" type="text" placeholder="123456780" />
+      <label for="medicare_number">Medicare number{% if errors.medicare_number %}<span class="required-star">*</span>{% endif %}</label>
+      <input id="medicare_number" name="medicare_number" type="text" value="{{ form.get('medicare_number', '') }}" placeholder="123456780" />
     </div>
 
     <div class="field-group wide">
@@ -118,6 +118,7 @@
 
     <div class="field-group wide submit-row">
       <button class="btn btn-primary" type="submit">Submit intake</button>
+      <button class="btn btn-secondary" type="submit" name="emergency_override" value="1">Emergency override</button>
     </div>
   </form>
 

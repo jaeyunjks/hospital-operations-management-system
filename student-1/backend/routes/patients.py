@@ -145,6 +145,12 @@ def update_patient_contact(contact_id):
     return jsonify(payload), status
 
 
+@patients_bp.route("/contacts/<int:contact_id>", methods=["DELETE"])
+def delete_patient_contact(contact_id):
+    payload, status = _db_call("DELETE", f"/api/patient-contacts/{contact_id}")
+    return jsonify(payload), status
+
+
 @patients_bp.route("/admin-notes", methods=["GET"])
 def list_admin_notes():
     payload, status = _db_call("GET", "/api/patient-admin-notes", params=request.args.to_dict())

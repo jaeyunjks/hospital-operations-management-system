@@ -26,10 +26,10 @@
     <form class="search-form" method="get">
       <input type="text" name="q" value="{{ query }}" placeholder="Search patient name or MRN" />
       <select name="status">
-        <option value="">All statuses</option>
         <option value="Active" {% if status_filter == 'Active' %}selected{% endif %}>Active</option>
+        {% if identity.role == 'System Admin' %}<option value="">All statuses</option>
         <option value="Inactive" {% if status_filter == 'Inactive' %}selected{% endif %}>Inactive</option>
-        <option value="Transferred" {% if status_filter == 'Transferred' %}selected{% endif %}>Transferred</option>
+        <option value="Transferred" {% if status_filter == 'Transferred' %}selected{% endif %}>Transferred</option>{% endif %}
       </select>
       <button class="btn btn-primary" type="submit">Apply filters</button>
     </form>

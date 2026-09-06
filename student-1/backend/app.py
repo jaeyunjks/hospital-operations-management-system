@@ -15,14 +15,14 @@ if __package__ in (None, ""):
 
 try:
     import backend.config as config
-    from backend.auth import AuthError
+    from backend.auth import AuthError, identity_from_request
     from backend.responses import ok, ApiError
     from backend.routes.ai_endpoints import bp as ai_bp
     from backend.routes.patients import patients_bp
     from backend.routes.admissions import admissions_bp
 except ImportError:  # pragma: no cover - supports local execution
     import config
-    from auth import AuthError
+    from auth import AuthError, identity_from_request
     from responses import ok, ApiError
     from routes.ai_endpoints import bp as ai_bp
     from routes.patients import patients_bp
@@ -42,6 +42,10 @@ def create_app():
     @app.route('/api/health', methods=['GET'])
     def health():
         return ok({'status': 'ok', 'service': 'student-1-backend'})
+
+    @app.get('/api/auth/identity')
+    def auth_identity():
+        return ok(identity_from_request())
 
     @app.errorhandler(ApiError)
     def handle_api_error(error):

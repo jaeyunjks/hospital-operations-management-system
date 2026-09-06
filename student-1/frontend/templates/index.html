@@ -40,7 +40,7 @@
         </nav>
 
         <div class="nav-user">
-          <span class="user-name">Jesse Keyser</span>
+          <span class="user-name">System Administrator</span>
           <span class="user-role">Admissions lead</span>
         </div>
       </aside>
@@ -160,23 +160,6 @@
         </section>
       </main>
 
-      <aside class="assist-rail" aria-label="Assistant panel">
-        <div class="assist-card ai-panel">
-          <span class="eyebrow">AI review</span>
-          <h3>Operational summary</h3>
-          <p>Duplicate identity checks and emergency admissions require manual reconciliation before final billing and registration.</p>
-        </div>
-
-        {% for suggestion in ai_suggestions %}
-        <div class="assist-card suggestion">
-          <div class="suggestion-head">
-            <span class="status-dot {{ suggestion.tone }}"></span>
-            <span class="eyebrow">{{ suggestion.title }}</span>
-          </div>
-          <p>{{ suggestion.text }}</p>
-        </div>
-        {% endfor %}
-      </aside>
     </div>
   </body>
 </html>
