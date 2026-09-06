@@ -174,9 +174,12 @@ def arrangements():
         "status": request.args.get("status") or None,
         "purpose": request.args.get("purpose") or None,
     })
-    free_beds, _ = api("GET", "/api/rooms/availability", params={"bed_status": "available"})
+    # Every bed, not only the free ones. The booking rule lives in the API,
+    # so the form must let a clashing choice be attempted and refused —
+    # hiding busy beds would hide the rule itself.
+    all_beds, _ = api("GET", "/api/rooms/availability")
     return render_template("arrangements.html", arrangements=records or [],
-                           free_beds=free_beds or [], error=error, filters=request.args)
+                           free_beds=all_beds or [], error=error, filters=request.args)
 
 
 @app.post("/arrangements")
@@ -196,7 +199,9 @@ def create_arrangement():
         payload["surgeon_name"] = request.form.get("surgeon_name")
 
     _, error = api("POST", "/api/arrangements", json=payload)
-    return redirect(url_for("arrangements", message=error or "Arrangement created"))
+    if error:
+        return redirect(url_for("arrangements", error=error))
+    return redirect(url_for("arrangements", message="Arrangement created"))
 
 
 @app.post("/arrangements/<int:arrangement_id>/release")

@@ -59,9 +59,10 @@
           {% block header_actions %}{% endblock %}
         </div>
 
-        {% if error %}
+        {% set failure = error or request.args.get('error') %}
+        {% if failure %}
           <div class="alert alert--danger" role="alert">
-            <div class="alert__body"><strong class="alert__title">Request failed</strong><br>{{ error }}</div>
+            <div class="alert__body"><strong class="alert__title">Request refused</strong><br>{{ failure }}</div>
           </div>
         {% endif %}
         {% if request.args.get('message') %}

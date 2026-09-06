@@ -20,6 +20,7 @@ services:
 
   # --- student-5 — Staff & Shift Management ----------------------------
   student5-database:
+    networks: [homs-net]
     build:
       context: .
       dockerfile: student-5/database/Dockerfile
@@ -43,6 +44,7 @@ services:
     restart: unless-stopped
 
   student5-backend:
+    networks: [homs-net]
     build:
       context: .
       dockerfile: student-5/backend/Dockerfile
@@ -50,7 +52,7 @@ services:
       BACKEND_PORT: "5500"
       DATABASE_SERVICE_URL: "${STUDENT5_DATABASE_SERVICE_URL:-http://student5-database:6500}"
       AI_ENABLED: "${STUDENT5_AI_ENABLED:-true}"
-      OLLAMA_URL: "${STUDENT5_OLLAMA_URL:-http://host.docker.internal:11434}"
+      OLLAMA_URL: "${STUDENT5_OLLAMA_URL:-http://ollama:11434}"
       OLLAMA_MODEL: "${STUDENT5_OLLAMA_MODEL:-llama3.1:8b}"
       OLLAMA_TIMEOUT: "${STUDENT5_OLLAMA_TIMEOUT:-30}"
     extra_hosts:
@@ -73,6 +75,7 @@ services:
     restart: unless-stopped
 
   student5-frontend:
+    networks: [homs-net]
     build:
       context: .
       dockerfile: student-5/frontend/Dockerfile
@@ -289,7 +292,7 @@ services:
     depends_on:
       student-2-database:
         condition: service_healthy
-    networks: [homs-net, default]
+    networks: [homs-net]
     healthcheck:
       test:
         - CMD
@@ -328,6 +331,7 @@ services:
 
   # --- student-1 — Patient & Admissions Management ---------------------
   student-1-database:
+    networks: [homs-net]
     build:
       context: ./student-1
       dockerfile: database/Dockerfile
@@ -357,10 +361,11 @@ services:
       - student-1-database
     ports:
       - "5100:5100"
-    networks: [default, homs-net]
+    networks: [homs-net]
     command: python -m backend.app
 
   student-1-frontend:
+    networks: [homs-net]
     build:
       context: ./student-1
       dockerfile: frontend/Dockerfile
@@ -380,8 +385,6 @@ services:
 networks:
   homs-net:
     driver: bridge
-  default:
-    name: hospital-operations-management-system_default
 
 volumes:
   student5-database-data:
