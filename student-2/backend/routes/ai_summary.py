@@ -213,7 +213,12 @@ _GATHER = {
 
 # ============================================================
 # POST /api/ai/summarise-admission
-# Body: {"admission_id": <int>, "summary_scope": "<optional>"}
+# Body: {"admission_id": <int>, "summary_scope": "<optional>", "prompt": "<optional>"}
+# `prompt` is the staff member's editable instruction (the frontend pre-fills
+# a standard sample prompt into an editable text box); it steers tone/focus
+# but is layered on top of - never instead of - the admission-scoped text
+# gathered below, so a summary can never be generated from data the caller
+# isn't entitled to see.
 # ============================================================
 @ai_summary_bp.post("/summarise-admission")
 @require_role("doctor", "nurse", "specialist")
@@ -246,9 +251,16 @@ def summarise_admission():
         return _error("could not read admission data: {}".format(exc), 502)
     # AuthError (no connection to the admission) propagates to the error handler.
 
+    # --- Fold in the caller's editable prompt, if they changed it from the
+    #     default (or supplied one at all), ahead of the gathered text -------
+    user_prompt = (body.get("prompt") or "").strip()
+    text_for_model = (
+        "{}\n\n{}".format(user_prompt, records_text) if user_prompt else records_text
+    )
+
     # --- Ask the model. ollama_client never raises; on failure it returns
     #     its fallback string, which we STILL log. --------------------------
-    summary_text = ollama_client.summarise_clinical_history(records_text, requested_scope)
+    summary_text = ollama_client.summarise_clinical_history(text_for_model, requested_scope)
     is_fallback = summary_text == ollama_client.FALLBACK_SUMMARY
 
     # --- Log the attempt to ai_summaries (append-only). -------------------

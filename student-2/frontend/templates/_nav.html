@@ -1,0 +1,28 @@
+{#
+  _nav.html - shared clinical-staff nav, included by every page template.
+
+  Link visibility mirrors the backend's own role restrictions so the nav
+  never advertises a page a role would be rejected from:
+    * New assessment / Request consult / New task / Schedule surgery
+      -> doctor only (auth.require_role on each create route)
+    * Care tasks list      -> doctor, nurse   (care_tasks.py: no specialist access)
+    * Consultation queue   -> doctor, specialist (consultations.py: no nurse access)
+
+  `role` and `active` must be in scope wherever this is included; `active`
+  names the current page's link (e.g. "dashboard") for aria-current.
+#}
+<nav class="app-header__nav" aria-label="Clinical Staff Management">
+  <a class="nav-link" href="/" {{ 'aria-current="page"' | safe if active == 'dashboard' }}>Dashboard</a>
+  {% if role == 'doctor' %}
+    <a class="nav-link" href="/assessment/new" {{ 'aria-current="page"' | safe if active == 'assessment' }}>New assessment</a>
+    <a class="nav-link" href="/consultations/new" {{ 'aria-current="page"' | safe if active == 'consultation_form' }}>Request consult</a>
+    <a class="nav-link" href="/care-tasks/new" {{ 'aria-current="page"' | safe if active == 'care_task_form' }}>New task</a>
+    <a class="nav-link" href="/surgery/new" {{ 'aria-current="page"' | safe if active == 'surgery' }}>Schedule surgery</a>
+  {% endif %}
+  {% if role in ('doctor', 'nurse') %}
+    <a class="nav-link" href="/care-tasks" {{ 'aria-current="page"' | safe if active == 'care_tasks' }}>Care tasks</a>
+  {% endif %}
+  {% if role in ('doctor', 'specialist') %}
+    <a class="nav-link" href="/consultations/queue" {{ 'aria-current="page"' | safe if active == 'consultation_queue' }}>Consultation queue</a>
+  {% endif %}
+</nav>

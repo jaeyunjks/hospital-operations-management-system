@@ -21,7 +21,7 @@ Blueprint -> URL prefix map:
 import importlib
 import os
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 
 # (module filename, attribute holding the Blueprint, URL prefix)
@@ -56,6 +56,39 @@ def _register_blueprints(app):
 def create_app():
     """Build and configure the Flask app."""
     app = Flask(__name__)
+
+    # Several templates (care_tasks.html, consultation_queue.html,
+    # consultation_form.html, patient_summary.html) call this API straight
+    # from the browser via htmx, cross-origin from the frontend on port 3200.
+    # Without these headers the browser blocks the response before htmx ever
+    # sees it, which is what surfaced as generic "action failed" errors on
+    # every direct-call action (nurse acknowledge/complete/cancel included).
+    #
+    # htmx adds its own headers to every request (HX-Request always, plus
+    # HX-Current-URL / HX-Target / HX-Trigger depending on the call) on top of
+    # whatever hx-headers sets. A hardcoded allowlist here
+    # ("Content-Type, X-User-Role") did not cover those, so the browser's
+    # preflight saw an actual request that would carry headers it hadn't been
+    # granted and silently blocked it before it ever reached the server -
+    # invisible to curl/Postman, which don't enforce CORS at all. Reflecting
+    # back whatever the browser's preflight actually asks for (via the
+    # Access-Control-Request-Headers it sends) covers every current and
+    # future header instead of hardcoding a guess.
+    @app.after_request
+    def _allow_frontend_cors(response):
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        requested_headers = request.headers.get("Access-Control-Request-Headers")
+        response.headers["Access-Control-Allow-Headers"] = requested_headers or "Content-Type, X-User-Role"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
+        return response
+
+    @app.route(
+        "/<path:_unused>", methods=["OPTIONS"], provide_automatic_options=False
+    )
+    def _cors_preflight(_unused):
+        # htmx sends a preflight OPTIONS request ahead of PUT/DELETE calls with
+        # custom headers; answer it directly rather than hitting route logic.
+        return "", 204
 
     # Simple health check so you can confirm the container is up without
     # depending on any route module having loaded.

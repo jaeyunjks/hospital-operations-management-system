@@ -56,13 +56,8 @@
         HOMS
         <span class="app-header__context">Clinical Staff Management</span>
       </a>
-      <nav class="app-header__nav" aria-label="Clinical Staff Management">
-        <a class="nav-link" href="/">Dashboard</a>
-        <a class="nav-link" href="/assessment/new">New assessment</a>
-        <a class="nav-link" href="/consultations/new">Request consult</a>
-        <a class="nav-link" href="/care-tasks/new">New task</a>
-        <a class="nav-link" href="/surgery/new">Schedule surgery</a>
-      </nav>
+      {% set active = 'care_tasks' %}
+      {% include "_nav.html" with context %}
       <div class="app-header__actions">
         <span class="app-header__meta u-label">Signed in · {{ role }}</span>
       </div>
@@ -92,6 +87,28 @@
                 <p class="alert__body">{{ error }}</p>
               </div>
             </div>
+          {% endif %}
+
+          {% if role == 'nurse' %}
+            {#
+              View toggle - "My tasks" is every task assigned to the nurse
+              (the plain /care-tasks route); "By admission" narrows that to
+              one admission via ?admission_id=, resolved server-side to that
+              admission's clinical records.
+            #}
+            <form class="toolbar" method="get" action="/care-tasks">
+              <span class="filter__label">View</span>
+              <div class="toolbar__group">
+                <a class="{{ 'btn-secondary' if not request.args.get('admission_id') else 'btn-ghost' }} btn-compact"
+                   href="/care-tasks">My tasks</a>
+              </div>
+              <label class="filter">
+                <span class="filter__label">By admission</span>
+                <input class="input" type="number" name="admission_id"
+                       placeholder="Admission ID" value="{{ request.args.get('admission_id', '') }}">
+              </label>
+              <button class="btn-secondary btn-compact" type="submit">View</button>
+            </form>
           {% endif %}
 
           <div class="stat-row" id="metrics" data-open-count="{{ open_tasks | length }}">
@@ -178,7 +195,7 @@
                       <td class="table__actions">
                         {% if t.status in ['pending', 'acknowledged'] %}
                           <span class="row" data-task-actions>
-                            {% if t.status == 'pending' %}
+                            {% if role == 'nurse' and t.status == 'pending' %}
                               <button class="btn-secondary btn-compact"
                                       data-task-action
                                       hx-put="http://localhost:5200/api/care-tasks/{{ t.task_id }}/acknowledge"
@@ -187,13 +204,15 @@
                                 Acknowledge
                               </button>
                             {% endif %}
-                            <button class="btn-primary btn-compact"
-                                    data-task-action
-                                    hx-put="http://localhost:5200/api/care-tasks/{{ t.task_id }}/complete"
-                                    hx-headers='{"X-User-Role": "{{ role }}"}'
-                                    hx-disabled-elt="closest [data-task-actions] button">
-                              Complete
-                            </button>
+                            {% if role == 'nurse' and t.status == 'acknowledged' %}
+                              <button class="btn-primary btn-compact"
+                                      data-task-action
+                                      hx-put="http://localhost:5200/api/care-tasks/{{ t.task_id }}/complete"
+                                      hx-headers='{"X-User-Role": "{{ role }}"}'
+                                      hx-disabled-elt="closest [data-task-actions] button">
+                                Complete
+                              </button>
+                            {% endif %}
                             <button class="btn-danger btn-compact"
                                     data-task-action
                                     hx-delete="http://localhost:5200/api/care-tasks/{{ t.task_id }}"

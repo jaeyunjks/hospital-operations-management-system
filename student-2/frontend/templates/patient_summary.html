@@ -77,13 +77,8 @@
         HOMS
         <span class="app-header__context">Clinical Staff Management</span>
       </a>
-      <nav class="app-header__nav" aria-label="Clinical Staff Management">
-        <a class="nav-link" href="/">Dashboard</a>
-        <a class="nav-link" href="/assessment/new">New assessment</a>
-        <a class="nav-link" href="/consultations/new">Request consult</a>
-        <a class="nav-link" href="/care-tasks/new">New task</a>
-        <a class="nav-link" href="/surgery/new">Schedule surgery</a>
-      </nav>
+      {% set active = 'patient_summary' %}
+      {% include "_nav.html" with context %}
       <div class="app-header__actions">
         <span class="app-header__meta u-label">Signed in · {{ role }}</span>
       </div>
@@ -133,11 +128,20 @@
                   editable draft. Scope is decided by your role
                   ({{ 'clinical records' if role == 'doctor' else 'consultation reasons' }}).
                 </p>
-                <form hx-post="/patients/{{ admission_id }}/summary"
+                <form class="stack"
+                      hx-post="/patients/{{ admission_id }}/summary"
                       hx-target="#review-region"
                       hx-select="#review-region"
                       hx-swap="outerHTML"
                       hx-disabled-elt="find button">
+                  <label class="field">
+                    <span class="field__label">Prompt</span>
+                    <textarea class="textarea" name="prompt" rows="3">{{ default_prompt }}</textarea>
+                    <span class="field__hint">
+                      Sent to the AI alongside this admission's data. Edit it to steer
+                      what the summary focuses on, or leave the default as-is.
+                    </span>
+                  </label>
                   <div class="row">
                     <button class="btn-primary" type="submit">Generate draft summary</button>
                     <span class="htmx-indicator u-label">Generating…</span>

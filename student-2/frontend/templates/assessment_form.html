@@ -79,13 +79,8 @@
         HOMS
         <span class="app-header__context">Clinical Staff Management</span>
       </a>
-      <nav class="app-header__nav" aria-label="Clinical Staff Management">
-        <a class="nav-link" href="/">Dashboard</a>
-        <a class="nav-link" href="/assessment/new" aria-current="page">New assessment</a>
-        <a class="nav-link" href="/consultations/new">Request consult</a>
-        <a class="nav-link" href="/care-tasks/new">New task</a>
-        <a class="nav-link" href="/surgery/new">Schedule surgery</a>
-      </nav>
+      {% set active = 'assessment' %}
+      {% include "_nav.html" with context %}
       <div class="app-header__actions">
         <span class="app-header__meta u-label">Signed in · {{ role }}</span>
       </div>

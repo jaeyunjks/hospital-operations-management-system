@@ -73,13 +73,8 @@
         <span class="app-header__context">Clinical Staff Management</span>
       </a>
 
-      <nav class="app-header__nav" aria-label="Clinical Staff Management">
-        <a class="nav-link" href="/" aria-current="page">Dashboard</a>
-        <a class="nav-link" href="/assessment/new">New assessment</a>
-        <a class="nav-link" href="/consultations/new">Request consult</a>
-        <a class="nav-link" href="/care-tasks/new">New task</a>
-        <a class="nav-link" href="/surgery/new">Schedule surgery</a>
-      </nav>
+      {% set active = 'dashboard' %}
+      {% include "_nav.html" with context %}
 
       <div class="app-header__actions">
         <span class="user-chip">
@@ -255,6 +250,7 @@
                       <th scope="col">Working diagnosis</th>
                       <th scope="col">Status</th>
                       <th scope="col">Updated</th>
+                      <th scope="col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -277,10 +273,13 @@
                           {% endif %}
                         </td>
                         <td class="table__id table__muted">{{ (r.updated_at or '')[:10] }}</td>
+                        <td class="table__actions u-nowrap">
+                          <a class="nav-link" href="/records/admission/{{ r.admission_id }}">History</a>
+                        </td>
                       </tr>
                     {% else %}
                       <tr>
-                        <td colspan="6">
+                        <td colspan="7">
                           <div class="empty">
                             <span class="empty__title">Nothing assigned</span>
                             <p class="empty__body">No open clinical records are assigned to you right now.</p>
@@ -338,6 +337,7 @@
                       <th scope="col">Reason</th>
                       <th scope="col">Status</th>
                       <th scope="col">Requested</th>
+                      <th scope="col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -358,10 +358,15 @@
                           </span>
                         </td>
                         <td class="table__id table__muted">{{ (c.requested_at or '')[:10] }}</td>
+                        <td class="table__actions u-nowrap">
+                          <a class="nav-link" href="/consultations/{{ c.request_id }}/start-review">
+                            {{ 'Continue Review' if c.status != 'requested' else 'Start Review' }}
+                          </a>
+                        </td>
                       </tr>
                     {% else %}
                       <tr>
-                        <td colspan="6">
+                        <td colspan="7">
                           <div class="empty">
                             <span class="empty__title">Queue clear</span>
                             <p class="empty__body">No consultation requests are waiting on you.</p>

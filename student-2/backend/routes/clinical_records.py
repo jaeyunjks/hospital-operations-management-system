@@ -19,9 +19,11 @@ Rules enforced here (see schema.sql header):
     The AI summary feature consumes this endpoint.
 
 Access control (via auth.py):
-  * Doctor / Nurse: may act on records for patients they are assigned to.
-      - Doctor is assigned when clinical_records.doctor_id == their id.
-      - Nurse is assigned when they own a care_task on that record.
+  * Doctor: may create, read and write records for patients they are
+    assigned to (clinical_records.doctor_id == their id). Only a doctor may
+    create a record or pull an admission's full clinical history.
+  * Nurse: may read and write (but never create) a record they are assigned
+    to via an owned care_task on that record.
   * Specialist: READ-ONLY, and only when a consultation_requests row links them
     (specialist_id) to the record. Specialists never reach a record directly.
 
@@ -109,15 +111,17 @@ def _records_for_admission(admission_id):
     return [row for row in all_rows if row.get("admission_id") == wanted]
 
 
-def _care_tasks_for_record(record_id):
+def _care_tasks_for_record(record_id, all_tasks=None):
     """Nurse ids with a care_task on this record (used for nurse assignment)."""
-    all_tasks = db.list_care_tasks() or []
+    if all_tasks is None:
+        all_tasks = db.list_care_tasks() or []
     return [t for t in all_tasks if t.get("clinical_record_id") == record_id]
 
 
-def _consults_for_record(record_id):
+def _consults_for_record(record_id, all_consults=None):
     """Consultation rows linking a specialist to this record (specialist access)."""
-    all_consults = db.list_consultation_requests() or []
+    if all_consults is None:
+        all_consults = db.list_consultation_requests() or []
     return [c for c in all_consults if c.get("clinical_record_id") == record_id]
 
 
@@ -126,12 +130,16 @@ def _consults_for_record(record_id):
 # require_role() (from auth.py) already rejects non-clinical roles; these
 # helpers add the "are you connected to THIS record?" rule.
 # ============================================================
-def _assert_can_read_record(record):
+def _assert_can_read_record(record, all_tasks=None, all_consults=None):
     """
     Raise AuthError unless the current user may read `record`.
 
     Doctor/Nurse: must be assigned (doctor_id, or an owned care_task).
     Specialist:   must have a consultation_requests link to the record.
+
+    `all_tasks` / `all_consults` let a caller looping over many records (e.g.
+    list_records) pass in one already-fetched table instead of triggering a
+    fresh database-API round trip per record.
     """
     user = get_current_user() or {}
     role = user.get("role")
@@ -143,13 +151,19 @@ def _assert_can_read_record(record):
         raise AuthError("You are not the doctor assigned to this record.", status=403)
 
     if role == "nurse":
-        nurse_ids = {t.get("assigned_nurse_id") for t in _care_tasks_for_record(record["record_id"])}
+        nurse_ids = {
+            t.get("assigned_nurse_id")
+            for t in _care_tasks_for_record(record["record_id"], all_tasks)
+        }
         if user_id in nurse_ids:
             return
         raise AuthError("You have no care task on this record.", status=403)
 
     if role == "specialist":
-        specialist_ids = {c.get("specialist_id") for c in _consults_for_record(record["record_id"])}
+        specialist_ids = {
+            c.get("specialist_id")
+            for c in _consults_for_record(record["record_id"], all_consults)
+        }
         if user_id in specialist_ids:
             return
         raise AuthError(
@@ -178,6 +192,20 @@ def _assert_can_write_record(record):
     _assert_can_read_record(record)
 
 
+def _prefetch_for_role(role):
+    """
+    Fetch the one cross-table list `_assert_can_read_record` will need for
+    this role, once, so a caller looping over many records doesn't trigger a
+    fresh database-API round trip per record (see _care_tasks_for_record /
+    _consults_for_record). Returns (all_tasks, all_consults).
+    """
+    if role == "nurse":
+        return db.list_care_tasks() or [], None
+    if role == "specialist":
+        return None, db.list_consultation_requests() or []
+    return None, None
+
+
 # ============================================================
 # LIST  ->  GET /api/clinical-records/
 # Returns only the (non-archived) records the caller is entitled to see.
@@ -185,8 +213,10 @@ def _assert_can_write_record(record):
 @clinical_records_bp.get("/")
 @require_role("doctor", "nurse", "specialist")
 def list_records():
+    user = get_current_user() or {}
     try:
         rows = db.list_clinical_records() or []
+        all_tasks, all_consults = _prefetch_for_role(user.get("role"))
     except db.DatabaseClientError as exc:
         return _error("Could not reach the records database: {}".format(exc), 502)
 
@@ -194,7 +224,7 @@ def list_records():
     for row in rows:
         # Silently skip anything the caller isn't connected to.
         try:
-            _assert_can_read_record(row)
+            _assert_can_read_record(row, all_tasks, all_consults)
         except AuthError:
             continue
         visible.append(row)
@@ -207,7 +237,7 @@ def list_records():
 # Blocked with 409 only when the admission is no longer active.
 # ============================================================
 @clinical_records_bp.post("/")
-@require_role("doctor", "nurse")
+@require_role("doctor")
 def create_record():
     body = request.get_json(silent=True) or {}
 
@@ -227,10 +257,9 @@ def create_record():
     except (TypeError, ValueError):
         return _error("patient_id, admission_id and doctor_id must be integers.", 400)
 
-    # A doctor may only file records under their own doctor_id; a nurse-created
-    # record must still name the assigned doctor.
+    # A doctor may only file records under their own doctor_id.
     user = get_current_user() or {}
-    if user.get("role") == "doctor" and data.get("doctor_id") != user.get("id"):
+    if data.get("doctor_id") != user.get("id"):
         return _error("A doctor can only create records under their own doctor_id.", 403)
 
     # Admission gate: this is the ONLY create-time block.
@@ -358,16 +387,16 @@ def delete_record(record_id):
 # This is the endpoint the AI summary feature will call.
 # ============================================================
 @clinical_records_bp.get("/admission/<int:admission_id>")
-@require_role("doctor", "nurse", "specialist")
+@require_role("doctor")
 def get_admission_history(admission_id):
     try:
         rows = _records_for_admission(admission_id)
     except db.DatabaseClientError as exc:
         return _error("Could not reach the records database: {}".format(exc), 502)
 
-    # Entitlement is decided per record (doctor assignment / nurse task /
-    # specialist consult). A caller with no connection to any record on this
-    # admission gets an empty history, not someone else's data.
+    # Entitlement is decided per record (doctor assignment). A caller with no
+    # connection to any record on this admission gets an empty history, not
+    # someone else's data.
     visible = []
     for row in rows:
         try:

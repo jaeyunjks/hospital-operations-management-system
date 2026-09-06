@@ -126,7 +126,8 @@ CREATE TABLE care_tasks (
     -- Local link (real foreign key, same database)
     clinical_record_id     INTEGER NOT NULL,
 
-    -- Reference to other service
+    -- References to other services
+    doctor_id               INTEGER NOT NULL,   -- from Staff & Shift service; doctor who created the task
     assigned_nurse_id      INTEGER NOT NULL,   -- from Staff & Shift service
 
     -- Task content
@@ -139,12 +140,15 @@ CREATE TABLE care_tasks (
 
     due_at                  TIMESTAMP,          -- when the task should be done by
     completed_at            TIMESTAMP,          -- when it actually was
+    cancelled_by             TEXT                -- role that cancelled the task, if any
+                              CHECK (cancelled_by IN ('doctor', 'nurse')),
 
     FOREIGN KEY (clinical_record_id) REFERENCES clinical_records(record_id)
 );
 
 CREATE INDEX idx_care_tasks_record ON care_tasks(clinical_record_id);
 CREATE INDEX idx_care_tasks_nurse  ON care_tasks(assigned_nurse_id);
+CREATE INDEX idx_care_tasks_doctor ON care_tasks(doctor_id);
 
 
 -- ------------------------------------------------------------
@@ -204,7 +208,7 @@ CREATE TABLE ai_summaries (
 
     -- What the AI produced
     summary_text              TEXT NOT NULL,      -- the actual generated summary/guidance
-    model_used                 TEXT,               -- e.g. 'qwen2.5:0.5b'
+    model_used                 TEXT,               -- e.g. 'llama3.1:8b'
     source_reference           TEXT,               -- which policy doc it drew from (used from Release 1 onward, NULL in R0)
     summary_scope              TEXT NOT NULL DEFAULT 'clinical' 
                                     CHECK (summary_scope IN ('clinical', 'consultation', 'care_tasks')), 

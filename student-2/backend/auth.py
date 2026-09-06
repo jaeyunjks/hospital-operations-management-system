@@ -50,6 +50,8 @@ way - see _example_error_handler() at the bottom of this file.
 
 from functools import wraps
 
+from flask import request
+
 
 # ------------------------------------------------------------
 # The roles this service is allowed to serve. Anything not in
@@ -101,7 +103,28 @@ class AuthError(Exception):
 # when real auth lands.
 # ------------------------------------------------------------
 def get_current_user():
-    """Return the acting user dict. Later: derived from the shared auth layer."""
+    """
+    Return the acting user dict.
+
+    The frontend's role stand-in sends the chosen role as an X-User-Role
+    header on every call (see student-2/frontend/app.py); if present, resolve
+    it to the matching sample user so role-switching actually changes who the
+    backend thinks is calling. Falls back to CURRENT_USER when there is no
+    request context (e.g. a script) or no recognised header - this keeps the
+    "edit CURRENT_USER by hand" workflow working too.
+
+    Later: derived from the shared auth layer instead of either of these.
+    """
+    try:
+        header_role = request.headers.get("X-User-Role")
+    except RuntimeError:
+        header_role = None
+
+    if header_role:
+        for user in _SAMPLE_USERS.values():
+            if user["role"] == header_role:
+                return user
+
     return CURRENT_USER
 
 

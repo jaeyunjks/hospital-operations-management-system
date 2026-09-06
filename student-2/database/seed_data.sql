@@ -74,23 +74,25 @@ VALUES
 -- ------------------------------------------------------------
 -- 3. care_tasks
 -- Nursing tasks for James Wilson (id 7), some for Aisha Khan (id 8).
+-- All raised by Dr Chen (doctor_id 1), except task_id 11 which Dr Nair
+-- (doctor_id 2) raised on his own record (record_id 2, admission 6).
 -- task_id 2 and 5 and 8 are completed.
 -- ------------------------------------------------------------
 INSERT INTO care_tasks
-    (task_id, clinical_record_id, assigned_nurse_id, task_description, notes, status, due_at, completed_at)
+    (task_id, clinical_record_id, doctor_id, assigned_nurse_id, task_description, notes, status, due_at, completed_at, cancelled_by)
 VALUES
-    (1, 1, 7, 'Administer IV ceftriaxone 1g and record response.', 'First dose given, no reaction.', 'completed', '2026-08-24 10:00:00', '2026-08-24 10:05:00'),
-    (2, 1, 7, 'Record vital signs every 4 hours.', 'Ongoing - obs stable overnight, fever trending down.', 'acknowledged', '2026-08-24 12:00:00', NULL),
-    (3, 10, 7, 'Switch antibiotic administration to oral and confirm patient tolerating.', NULL, 'pending', '2026-08-26 12:00:00', NULL),
-    (4, 3, 8, 'Keep patient nil by mouth and maintain IV fluids pre-theatre.', 'NBM signage in place, 1L Hartmann running.', 'acknowledged', '2026-08-26 16:00:00', NULL),
-    (5, 6, 7, 'Remove abdominal dressing on post-op day 3 and inspect wounds.', 'Wounds clean and dry, no signs of infection. Left exposed.', 'completed', '2026-08-25 09:00:00', '2026-08-25 09:20:00'),
-    (6, 6, 7, 'Encourage mobilisation three times daily and document distance.', 'Task closed administratively after discharge.', 'completed', '2026-08-24 09:00:00', '2026-08-29 10:00:00'),
-    (7, 4, 7, 'Perform wound dressing change with saline and record ulcer measurements.', 'Ulcer 3cm x 2cm, granulating base, minimal exudate.', 'acknowledged', '2026-08-26 08:00:00', NULL),
-    (8, 4, 8, 'Check capillary blood glucose before meals and at bedtime.', 'Readings 6-9 mmol/L range, no hypos.', 'completed', '2026-08-25 07:00:00', '2026-08-28 21:00:00'),
-    (9, 7, 7, 'Continuous cardiac monitoring and report HR above 130 or below 50.', 'On telemetry, HR settled to 90s after bisoprolol.', 'acknowledged', '2026-08-27 20:00:00', NULL),
-    (10, 7, 8, 'Give first dose of apixaban and provide anticoagulation counselling leaflet.', NULL, 'pending', '2026-08-28 10:00:00', NULL),
-    (11, 2, 7, 'Prior admission: administer nebulised salbutamol and ipratropium 6-hourly.', 'Completed for duration of previous stay.', 'completed', '2026-06-11 12:00:00', '2026-06-14 18:00:00'),
-    (12, 3, 7, 'Complete pre-operative checklist and confirm consent form signed.', 'Checklist complete, consent signed and witnessed.', 'completed', '2026-08-27 06:00:00', '2026-08-27 06:30:00');
+    (1, 1, 1, 7, 'Administer IV ceftriaxone 1g and record response.', 'First dose given, no reaction.', 'completed', '2026-08-24 10:00:00', '2026-08-24 10:05:00', NULL),
+    (2, 1, 1, 7, 'Record vital signs every 4 hours.', 'Ongoing - obs stable overnight, fever trending down.', 'acknowledged', '2026-08-24 12:00:00', NULL, NULL),
+    (3, 10, 1, 7, 'Switch antibiotic administration to oral and confirm patient tolerating.', NULL, 'pending', '2026-08-26 12:00:00', NULL, NULL),
+    (4, 3, 1, 8, 'Keep patient nil by mouth and maintain IV fluids pre-theatre.', 'NBM signage in place, 1L Hartmann running.', 'acknowledged', '2026-08-26 16:00:00', NULL, NULL),
+    (5, 6, 1, 7, 'Remove abdominal dressing on post-op day 3 and inspect wounds.', 'Wounds clean and dry, no signs of infection. Left exposed.', 'completed', '2026-08-25 09:00:00', '2026-08-25 09:20:00', NULL),
+    (6, 6, 1, 7, 'Encourage mobilisation three times daily and document distance.', 'Task closed administratively after discharge.', 'completed', '2026-08-24 09:00:00', '2026-08-29 10:00:00', NULL),
+    (7, 4, 1, 7, 'Perform wound dressing change with saline and record ulcer measurements.', 'Ulcer 3cm x 2cm, granulating base, minimal exudate.', 'acknowledged', '2026-08-26 08:00:00', NULL, NULL),
+    (8, 4, 1, 8, 'Check capillary blood glucose before meals and at bedtime.', 'Readings 6-9 mmol/L range, no hypos.', 'completed', '2026-08-25 07:00:00', '2026-08-28 21:00:00', NULL),
+    (9, 7, 1, 7, 'Continuous cardiac monitoring and report HR above 130 or below 50.', 'On telemetry, HR settled to 90s after bisoprolol.', 'acknowledged', '2026-08-27 20:00:00', NULL, NULL),
+    (10, 7, 1, 8, 'Give first dose of apixaban and provide anticoagulation counselling leaflet.', NULL, 'pending', '2026-08-28 10:00:00', NULL, NULL),
+    (11, 2, 2, 7, 'Prior admission: administer nebulised salbutamol and ipratropium 6-hourly.', 'Completed for duration of previous stay.', 'completed', '2026-06-11 12:00:00', '2026-06-14 18:00:00', NULL),
+    (12, 3, 1, 7, 'Complete pre-operative checklist and confirm consent form signed.', 'Checklist complete, consent signed and witnessed.', 'completed', '2026-08-27 06:00:00', '2026-08-27 06:30:00', NULL);
 
 
 -- ------------------------------------------------------------
@@ -134,13 +136,13 @@ VALUES
 INSERT INTO ai_summaries
     (summary_id, admission_id, patient_id, summary_text, model_used, source_reference, summary_scope, generated_at, reviewed_by_staff_id, review_status)
 VALUES
-    (1, 1, 1, 'Patient admitted with left lower lobe community-acquired pneumonia. Started on IV ceftriaxone with chest physiotherapy. Fever and oxygenation improving by day 2; plan to switch to oral antibiotics and discharge if stable.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Respiratory-v2', 'clinical', '2026-08-26 09:00:00', 1, 'accepted'),
-    (2, 2, 2, 'Patient with acute appendicitis awaiting laparoscopic appendectomy. Kept nil by mouth on IV fluids. Anaesthetic assessment complete, ASA II, listed for theatre.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Surgical-v2', 'clinical', '2026-08-27 07:00:00', NULL, 'pending'),
-    (3, 3, 3, 'Diabetic patient admitted with foot ulcer and ascending cellulitis. On IV antibiotics with specialist and vascular input. Surgical debridement scheduled; glycaemic control stable on sliding scale.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Diabetes-v3', 'clinical', '2026-08-28 17:30:00', 1, 'edited'),
-    (4, 3, 3, 'Specialist and vascular consultations for the diabetic foot: debride to healthy tissue, continue IV flucloxacillin plus benzylpenicillin, MRI to exclude osteomyelitis, perfusion confirmed adequate (ABPI 0.9) so safe to proceed to theatre.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Diabetes-v3', 'consultation', '2026-08-27 15:00:00', 1, 'accepted'),
-    (5, 5, 5, 'Cardiology consultation for new atrial fibrillation with RVR: continue rate control, start apixaban now (CHA2DS2-VASc 3), review for elective cardioversion in four weeks if still in AF; echo requested to assess for structural heart disease.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Cardiology-v1', 'consultation', '2026-08-28 10:00:00', NULL, 'pending'),
-    (6, 4, 4, 'Post-op review requested for slow return of bowel function was auto-cancelled after discharge; no specialist recommendation was recorded before closure.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Surgical-v2', 'consultation', '2026-08-29 09:45:00', 1, 'rejected'),
-    (7, 1, 1, 'Nursing tasks for the pneumonia admission: IV ceftriaxone administered without reaction, 4-hourly vital signs ongoing with fever trending down, switch to oral antibiotics pending confirmation of tolerance.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Respiratory-v2', 'care_tasks', '2026-08-26 12:00:00', 1, 'accepted'),
-    (8, 2, 2, 'Pre-operative nursing tasks for acute appendicitis complete: patient kept nil by mouth on IV Hartmann, pre-op checklist done and consent signed and witnessed, ready for theatre.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Surgical-v2', 'care_tasks', '2026-08-27 07:00:00', NULL, 'pending'),
-    (9, 5, 5, 'Nursing tasks for new AF: continuous cardiac monitoring in place with HR settled to 90s after bisoprolol; first apixaban dose and anticoagulation counselling leaflet still outstanding.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Cardiology-v1', 'care_tasks', '2026-08-28 10:30:00', NULL, 'pending'),
-    (10, 4, 4, 'Nursing tasks for the post-cholecystectomy stay: abdominal dressing removed day 3 with clean dry wounds, mobilisation task closed administratively after discharge.', 'qwen2.5:0.5b', 'HOMS-ClinGuide-Surgical-v2', 'care_tasks', '2026-08-29 09:30:00', 1, 'edited');
+    (1, 1, 1, 'Patient admitted with left lower lobe community-acquired pneumonia. Started on IV ceftriaxone with chest physiotherapy. Fever and oxygenation improving by day 2; plan to switch to oral antibiotics and discharge if stable.', 'llama3.1:8b', 'HOMS-ClinGuide-Respiratory-v2', 'clinical', '2026-08-26 09:00:00', 1, 'accepted'),
+    (2, 2, 2, 'Patient with acute appendicitis awaiting laparoscopic appendectomy. Kept nil by mouth on IV fluids. Anaesthetic assessment complete, ASA II, listed for theatre.', 'llama3.1:8b', 'HOMS-ClinGuide-Surgical-v2', 'clinical', '2026-08-27 07:00:00', NULL, 'pending'),
+    (3, 3, 3, 'Diabetic patient admitted with foot ulcer and ascending cellulitis. On IV antibiotics with specialist and vascular input. Surgical debridement scheduled; glycaemic control stable on sliding scale.', 'llama3.1:8b', 'HOMS-ClinGuide-Diabetes-v3', 'clinical', '2026-08-28 17:30:00', 1, 'edited'),
+    (4, 3, 3, 'Specialist and vascular consultations for the diabetic foot: debride to healthy tissue, continue IV flucloxacillin plus benzylpenicillin, MRI to exclude osteomyelitis, perfusion confirmed adequate (ABPI 0.9) so safe to proceed to theatre.', 'llama3.1:8b', 'HOMS-ClinGuide-Diabetes-v3', 'consultation', '2026-08-27 15:00:00', 1, 'accepted'),
+    (5, 5, 5, 'Cardiology consultation for new atrial fibrillation with RVR: continue rate control, start apixaban now (CHA2DS2-VASc 3), review for elective cardioversion in four weeks if still in AF; echo requested to assess for structural heart disease.', 'llama3.1:8b', 'HOMS-ClinGuide-Cardiology-v1', 'consultation', '2026-08-28 10:00:00', NULL, 'pending'),
+    (6, 4, 4, 'Post-op review requested for slow return of bowel function was auto-cancelled after discharge; no specialist recommendation was recorded before closure.', 'llama3.1:8b', 'HOMS-ClinGuide-Surgical-v2', 'consultation', '2026-08-29 09:45:00', 1, 'rejected'),
+    (7, 1, 1, 'Nursing tasks for the pneumonia admission: IV ceftriaxone administered without reaction, 4-hourly vital signs ongoing with fever trending down, switch to oral antibiotics pending confirmation of tolerance.', 'llama3.1:8b', 'HOMS-ClinGuide-Respiratory-v2', 'care_tasks', '2026-08-26 12:00:00', 1, 'accepted'),
+    (8, 2, 2, 'Pre-operative nursing tasks for acute appendicitis complete: patient kept nil by mouth on IV Hartmann, pre-op checklist done and consent signed and witnessed, ready for theatre.', 'llama3.1:8b', 'HOMS-ClinGuide-Surgical-v2', 'care_tasks', '2026-08-27 07:00:00', NULL, 'pending'),
+    (9, 5, 5, 'Nursing tasks for new AF: continuous cardiac monitoring in place with HR settled to 90s after bisoprolol; first apixaban dose and anticoagulation counselling leaflet still outstanding.', 'llama3.1:8b', 'HOMS-ClinGuide-Cardiology-v1', 'care_tasks', '2026-08-28 10:30:00', NULL, 'pending'),
+    (10, 4, 4, 'Nursing tasks for the post-cholecystectomy stay: abdominal dressing removed day 3 with clean dry wounds, mobilisation task closed administratively after discharge.', 'llama3.1:8b', 'HOMS-ClinGuide-Surgical-v2', 'care_tasks', '2026-08-29 09:30:00', 1, 'edited');

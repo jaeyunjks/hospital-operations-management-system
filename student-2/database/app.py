@@ -60,11 +60,11 @@ TABLES = {
     "care_tasks": {
         "pk": "task_id",
         "columns": [
-            "clinical_record_id", "assigned_nurse_id",
+            "clinical_record_id", "doctor_id", "assigned_nurse_id",
             "task_description", "notes",
-            "status", "due_at", "completed_at",
+            "status", "due_at", "completed_at", "cancelled_by",
         ],
-        "required": ["clinical_record_id", "assigned_nurse_id", "task_description"],
+        "required": ["clinical_record_id", "doctor_id", "assigned_nurse_id", "task_description"],
     },
     "surgery_requests": {
         "pk": "request_id",

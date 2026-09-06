@@ -13,11 +13,15 @@ Mounted at /api/care-tasks by app.py.
 
 Workflow (schema.sql, table 3):
   * New tasks are always born 'pending' - the client cannot choose the status.
+    doctor_id is stamped from the authenticated caller, never the request body.
   * 'acknowledge' and 'complete' are the assigned nurse's alone. They are wired
     to auth.require_assignment(), which looks up care_tasks.assigned_nurse_id and
     compares it to the caller - so the decorator, not this code, enforces it.
+    A task must be acknowledged before it can be completed - a nurse cannot
+    jump straight from 'pending' to 'completed'.
   * 'cancel' (via DELETE) is a shared doctor/nurse privilege for a task raised in
-    error or no longer needed. The row is kept.
+    error or no longer needed. The row is kept, and cancelled_by records which
+    role (doctor or nurse) performed the cancellation.
   * There is deliberately NO admission-status check anywhere in this file:
     completing a task after discharge is allowed and just closes it out.
 
@@ -50,13 +54,13 @@ OPEN_STATES = {PENDING, ACKNOWLEDGED}
 
 # Which starting states each nurse action accepts.
 CAN_ACKNOWLEDGE_FROM = {PENDING}
-CAN_COMPLETE_FROM = {PENDING, ACKNOWLEDGED}  # allow completing without a separate ack
+CAN_COMPLETE_FROM = {ACKNOWLEDGED}  # must be acknowledged first - no skipping the ack step
 
 # Every route in this file is for these two roles only. Specialists are never
 # allowed near a care task, so this tuple is used instead of a bare require_role().
 _TASK_ROLES = ("doctor", "nurse")
 
-# Body fields the doctor supplies at creation. status/completed_at are set here.
+# Body fields the doctor supplies at creation. status/completed_at/doctor_id are set here.
 _CREATE_FIELDS = ("clinical_record_id", "assigned_nurse_id", "task_description", "due_at")
 _CREATE_REQUIRED = ("clinical_record_id", "assigned_nurse_id", "task_description")
 
@@ -107,7 +111,11 @@ def _assigned_nurse_id(task_id, **_kwargs):
 @care_tasks_bp.get("/")
 @require_role(*_TASK_ROLES)
 def list_tasks():
-    """List care tasks, optionally narrowed by ?nurse_id= or ?clinical_record_id=."""
+    """
+    List care tasks, optionally narrowed by ?nurse_id=, ?clinical_record_id=,
+    or ?admission_id= (resolved to that admission's clinical record ids, for a
+    nurse viewing their tasks one admission at a time).
+    """
     try:
         tasks = db.list_care_tasks() or []
     except db.DatabaseClientError as exc:
@@ -116,10 +124,18 @@ def list_tasks():
     # Optional query-string filters - handy for a nurse's "my tasks" list.
     nurse_id = request.args.get("nurse_id", type=int)
     record_id = request.args.get("clinical_record_id", type=int)
+    admission_id = request.args.get("admission_id", type=int)
     if nurse_id is not None:
         tasks = [t for t in tasks if t.get("assigned_nurse_id") == nurse_id]
     if record_id is not None:
         tasks = [t for t in tasks if t.get("clinical_record_id") == record_id]
+    if admission_id is not None:
+        try:
+            records = db.list_clinical_records() or []
+        except db.DatabaseClientError as exc:
+            return _json_error("care task lookup failed: {}".format(exc), 502)
+        record_ids = {r.get("record_id") for r in records if r.get("admission_id") == admission_id}
+        tasks = [t for t in tasks if t.get("clinical_record_id") in record_ids]
 
     return jsonify({"care_tasks": tasks}), 200
 
@@ -145,6 +161,7 @@ def get_task(task_id):
 @require_role("doctor")
 def create_task():
     """Create a care task. Only a doctor may raise one; it starts 'pending'."""
+    user_id = (get_current_user() or {}).get("id")
     body = request.get_json(silent=True) or {}
 
     missing = [f for f in _CREATE_REQUIRED if not body.get(f)]
@@ -162,7 +179,9 @@ def create_task():
         return _json_error("could not verify clinical record: {}".format(exc), 502)
 
     # Build the payload ourselves so the client cannot set status/completed_at.
+    # doctor_id comes from the authenticated user, never the request body.
     payload = {key: body[key] for key in _CREATE_FIELDS if body.get(key) is not None}
+    payload["doctor_id"] = user_id
     payload["status"] = PENDING
     payload["completed_at"] = None
 
@@ -230,6 +249,8 @@ def edit_task(task_id):
 @require_role(*_TASK_ROLES)
 def cancel_task(task_id):
     """Cancel a task raised in error / no longer needed. Keeps the row."""
+    role = (get_current_user() or {}).get("role")
+
     try:
         task = _fetch_task(task_id)
     except db.DatabaseClientError as exc:
@@ -245,7 +266,7 @@ def cancel_task(task_id):
         return _json_error("care task {} is already completed".format(task_id), 409)
 
     try:
-        cancelled = db.update_care_task(task_id, {"status": CANCELLED})
+        cancelled = db.update_care_task(task_id, {"status": CANCELLED, "cancelled_by": role})
     except db.DatabaseClientError as exc:
         return _json_error("could not cancel care task: {}".format(exc), 502)
     return jsonify({"care_task": cancelled, "note": "cancelled (soft delete)"}), 200

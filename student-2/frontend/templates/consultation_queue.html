@@ -58,13 +58,8 @@
         HOMS
         <span class="app-header__context">Clinical Staff Management</span>
       </a>
-      <nav class="app-header__nav" aria-label="Clinical Staff Management">
-        <a class="nav-link" href="/">Dashboard</a>
-        <a class="nav-link" href="/assessment/new">New assessment</a>
-        <a class="nav-link" href="/consultations/new">Request consult</a>
-        <a class="nav-link" href="/care-tasks/new">New task</a>
-        <a class="nav-link" href="/surgery/new">Schedule surgery</a>
-      </nav>
+      {% set active = 'consultation_queue' %}
+      {% include "_nav.html" with context %}
       <div class="app-header__actions">
         <span class="app-header__meta u-label">Signed in · {{ role }}</span>
       </div>
@@ -158,6 +153,9 @@
                       {% else %}
                         <span class="badge-warning">requested</span>
                       {% endif %}
+                      {% if role == 'specialist' %}
+                        <a class="nav-link" href="/patients/{{ c.admission_id }}/summary">AI summary</a>
+                      {% endif %}
                     </div>
                   </div>
 
@@ -175,20 +173,24 @@
                         <p>{{ c.reason_for_request }}</p>
                       </div>
 
-                      {% if c.recommendation %}
-                        <div>
-                          <span class="u-label">Recommendation</span>
+                      <div>
+                        <span class="u-label">Recommendation</span>
+                        {% if c.recommendation %}
                           <p>{{ c.recommendation }}</p>
-                        </div>
-                      {% endif %}
+                        {% elif role == 'doctor' %}
+                          <p class="u-muted">No recommendation has been made by the requested specialist yet.</p>
+                        {% endif %}
+                      </div>
                     </div>
 
-                    {% if is_open %}
+                    {% if role == 'specialist' and is_open %}
                       {#
                         Respond form. app.py has no proxy for the respond PUT,
                         so it posts JSON straight to the backend API. On success
                         the queue is reloaded so this row moves to 'completed';
                         on failure the backend's error message is shown inline.
+                        Specialist-only: a doctor may only read how their own
+                        request is being handled, never respond to it.
                       #}
                       <hr class="divider">
                       <form class="stack stack--sm"
@@ -209,13 +211,32 @@
                           <span class="htmx-indicator u-label">Saving…</span>
                         </div>
                       </form>
-                    {% else %}
+                    {% elif role == 'doctor' and c.status == 'requested' %}
+                      {#
+                        Doctor-only withdrawal, while still 'requested'. app.py
+                        has no proxy for the cancel DELETE, so it goes straight
+                        to the backend API; the script at the end of <body>
+                        handles the outcome.
+                      #}
+                      <hr class="divider">
+                      <form data-cancel-form
+                            hx-delete="http://localhost:5200/api/consultations/{{ c.request_id }}"
+                            hx-headers='{"X-User-Role": "{{ role }}"}'
+                            hx-disabled-elt="find button"
+                            hx-confirm="Cancel consultation request #{{ c.request_id }}?">
+                        <button class="btn-danger" type="submit">Cancel</button>
+                        <span class="htmx-indicator u-label">Cancelling…</span>
+                      </form>
+                      <div data-cancel-outcome aria-live="polite"></div>
+                    {% elif not is_open %}
                       <p class="u-muted">
                         {% if c.completed_at %}
                           Closed {{ (c.completed_at or '')[:16] }}.
                         {% endif %}
                         This request is read-only.
                       </p>
+                    {% else %}
+                      <p class="u-muted">This request is read-only.</p>
                     {% endif %}
                   </div>
                 </div>
@@ -286,6 +307,42 @@
       inner.appendChild(body);
       alert.appendChild(inner);
       box.appendChild(alert);
+    });
+
+    // Cancel-form outcome handling (doctor withdrawing a still-'requested'
+    // request). Same shape as consultation_form.html's withdraw control.
+    document.body.addEventListener('htmx:afterRequest', function (event) {
+      var form = event.target.closest && event.target.closest('[data-cancel-form]');
+      if (!form) return;
+
+      var outcome = form.parentNode.querySelector('[data-cancel-outcome]');
+      if (!outcome) return;
+      outcome.textContent = '';
+
+      if (event.detail.successful) {
+        window.location.reload();
+        return;
+      }
+
+      var message = 'Could not cancel the request.';
+      try {
+        message = JSON.parse(event.detail.xhr.responseText).error || message;
+      } catch (e) { /* keep the default */ }
+
+      var alert = document.createElement('div');
+      alert.className = 'alert alert--danger';
+      alert.setAttribute('role', 'alert');
+      var inner = document.createElement('div');
+      var title = document.createElement('span');
+      title.className = 'alert__title';
+      title.textContent = 'Not cancelled';
+      var body = document.createElement('p');
+      body.className = 'alert__body';
+      body.textContent = message;
+      inner.appendChild(title);
+      inner.appendChild(body);
+      alert.appendChild(inner);
+      outcome.appendChild(alert);
     });
   </script>
 </body>

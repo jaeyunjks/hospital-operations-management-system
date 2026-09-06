@@ -32,9 +32,15 @@ OLLAMA_BASE_URL = os.environ.get(
 ).rstrip("/")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
 
-# Explicit per-request timeout (connect + read), in seconds. Kept short: the
-# route must not hang waiting on the LLM. NOT the requests default of None.
-OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "8"))
+# Explicit per-request timeout (connect + read), in seconds. NOT the requests
+# default of None - the route must not hang forever waiting on the LLM.
+# 8s was too tight for a real llama3.1:8b response (observed ~10s even for a
+# one-line prompt) and made every summary fall back even with the model
+# reachable and working; 30s gives it room while still bounding the wait.
+# Keep this comfortably BELOW the frontend's BACKEND_TIMEOUT (frontend/app.py)
+# so the backend always finishes (with a real summary or its own fallback)
+# before the frontend's own request to it gives up.
+OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "30"))
 
 # Returned instead of a summary whenever the model cannot be reached or used.
 FALLBACK_SUMMARY = "No AI summary could be generated (summary service unavailable)."

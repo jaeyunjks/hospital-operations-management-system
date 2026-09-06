@@ -47,6 +47,7 @@ import requests
 from flask import (
     Flask,
     make_response,
+    redirect,
     render_template,
     request,
 )
@@ -61,8 +62,11 @@ BACKEND_API_URL = os.environ.get(
     "BACKEND_API_URL", "http://localhost:5200"
 ).rstrip("/")
 
-# How long each backend call may take (connect + read), in seconds.
-BACKEND_TIMEOUT = 10
+# How long each backend call may take (connect + read), in seconds. Must stay
+# comfortably above the backend's own OLLAMA_TIMEOUT (services/ollama_client.py,
+# default 30s) so the AI summary request always gets the backend's answer -
+# real summary or its own fallback - instead of the frontend giving up first.
+BACKEND_TIMEOUT = 40
 
 # The only roles this feature serves. Anything else falls back to the first.
 CLINICAL_ROLES = ("doctor", "nurse", "specialist")
@@ -167,15 +171,31 @@ def _render(template_name, data, error):
 # ============================================================
 # Routes - one per template. Each: fetch from backend, pass to template.
 # ============================================================
+_DASHBOARD_ENDPOINT_BY_ROLE = {
+    "doctor": "/api/clinical-records/",
+    "nurse": "/api/care-tasks/",
+    "specialist": "/api/consultations/",
+}
+
+# care_tasks/ does not scope its own results by caller the way
+# clinical-records/ and consultations/ do, so the nurse's dashboard passes
+# its own nurse_id explicitly. Mirrors the stand-in ids in auth.py.
+_NURSE_STAFF_ID = 7
+
+
 @app.get("/")
 def dashboard():
     """
-    Landing page. Pulls the caller's clinical records - the backend scopes
-    this list to the current role already (assigned doctor / nurse with a
-    task / specialist with a consult), so the same route gives each role
-    their own view.
+    Landing page. Pulls the list the active role's dashboard view is built
+    from - clinical records for a doctor, care tasks for a nurse,
+    consultation requests for a specialist - so dashboard.html's per-role
+    stats and table actually have data to render instead of always seeing
+    an (empty) clinical-records response.
     """
-    data, error = backend_get("/api/clinical-records/")
+    role = current_role()
+    endpoint = _DASHBOARD_ENDPOINT_BY_ROLE.get(role, "/api/clinical-records/")
+    params = {"nurse_id": _NURSE_STAFF_ID} if role == "nurse" else None
+    data, error = backend_get(endpoint, params=params)
     return _render("dashboard.html", data, error)
 
 
@@ -237,14 +257,34 @@ def consultation_queue():
     return _render("consultation_queue.html", data, error)
 
 
+@app.get("/consultations/<int:request_id>/start-review")
+def start_review(request_id):
+    """
+    Specialist's "Start Review" / "Continue Review" dashboard link.
+
+    Simply reads the single request - the backend itself moves a still-
+    'requested' row to 'in_review' the first time its own specialist views
+    it (routes/consultations.py GET /<id>). This route exists only to trigger
+    that read from a dashboard link before sending the specialist on to the
+    queue where the row now shows as in_review.
+    """
+    backend_get("/api/consultations/{}".format(request_id))
+    return redirect("/consultations/queue")
+
+
 @app.get("/care-tasks")
 def care_tasks():
     """
-    Care tasks list. Optional ?nurse_id= / ?clinical_record_id= filters are
-    passed straight through to the backend, which owns the filtering.
+    Care tasks list. Scoped to the current nurse by default (mirrors the
+    dashboard - care-tasks/ does not filter by caller on its own), same as
+    the dashboard's nurse_id stand-in. ?admission_id= narrows that down to
+    one admission; ?clinical_record_id= is still honoured for the "view
+    tasks for this record" link on the care-task form's success page.
     """
     params = {}
-    for key in ("nurse_id", "clinical_record_id"):
+    if current_role() == "nurse":
+        params["nurse_id"] = _NURSE_STAFF_ID
+    for key in ("clinical_record_id", "admission_id"):
         if request.args.get(key):
             params[key] = request.args[key]
     data, error = backend_get("/api/care-tasks/", params=params)
@@ -305,7 +345,11 @@ def patient_summary(admission_id):
     summary = None
     if request.method == "POST":
         summary, summary_error = backend_post(
-            "/api/ai/summarise-admission", json_body={"admission_id": admission_id}
+            "/api/ai/summarise-admission",
+            json_body={
+                "admission_id": admission_id,
+                "prompt": request.form.get("prompt", ""),
+            },
         )
         # Surface an AI error only if the surgery fetch itself was fine.
         error = error or summary_error
@@ -315,6 +359,10 @@ def patient_summary(admission_id):
         "admission_id": admission_id,
         "surgery_requests": surgeries,
         "ai_summary": summary,
+        "default_prompt": (
+            "Summarise this admission for handover: highlight the current "
+            "status, what has been done so far, and what still needs attention."
+        ),
     }
     return _render("patient_summary.html", data, error)
 
