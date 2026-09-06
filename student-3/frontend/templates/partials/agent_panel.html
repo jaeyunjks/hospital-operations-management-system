@@ -1,0 +1,11 @@
+<div class="panel__header"><h2 class="panel__title">Agent</h2></div>
+<div class="panel__body" role="status" aria-live="polite">
+  {% if error %}<p>Agent status unavailable: {{ error }}</p>{% else %}
+  <p><span class="badge {{ 'badge-info' if agent.enabled else 'badge-neutral' }}">{{ 'Enabled' if agent.enabled else 'Disabled' }}</span>
+    Every {{ agent.interval_seconds }} seconds · Up to {{ agent.max_proposals }} proposals · ${{ agent.budget_cap }} per cycle</p>
+  <p>Last cycle: {{ agent.last_cycle_time or 'Waiting for first cycle' }}{% if agent.running %} · Cycle {{ agent.cycle }} running{% endif %}</p>
+  <p>Created last cycle: <strong>{{ agent.proposals_created }}</strong> · Rejected by Observe: <strong>{{ agent.observe_rejected }}</strong></p>
+  {% if agent.last_error %}<p>Last cycle error: {{ agent.last_error }}. The agent will retry next interval.</p>{% endif %}
+  <p>Proposals require human approval. <a href="/purchase-orders?status=pending_approval&amp;ai_generated=true">View approval queue</a></p>
+  {% endif %}
+</div>

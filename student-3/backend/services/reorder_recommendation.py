@@ -128,17 +128,19 @@ def _ai_item(item: dict[str, Any], candidate: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def advisory(fetch: Callable[[str], list[dict[str, Any]]]) -> tuple[dict[str, Any], list[dict[str, Any]], AIResult | None]:
+def advisory(fetch: Callable[[str], list[dict[str, Any]]], *, candidates=None, feedback=None) -> tuple[dict[str, Any], list[dict[str, Any]], AIResult | None]:
     """Return AI-assisted recommendations with deterministic safety fallbacks."""
-    rows = candidates_for(fetch)
+    rows = candidates_for(fetch) if candidates is None else candidates
     selected = rows[:MAX_MEDICINES]
     capped = len(rows) > len(selected)
     public_input = [{key: item[key] for key in FACT_KEYS} for item in selected]
     if not selected:
         return ({"items": [], "summary": "No medicines currently require a suggested order.",
                  "source": "fallback", "fallback_reason": "No eligible medicines", "capped": False}, public_input, None)
-    result = run_prompt(PROMPT_NAME, OUTPUT_SCHEMA, version=PROMPT_VERSION,
-                        values={"medicines_json": json.dumps(public_input, sort_keys=True)})
+    version = "v2" if feedback is not None else PROMPT_VERSION
+    result = run_prompt(PROMPT_NAME, OUTPUT_SCHEMA, version=version,
+                        values={"medicines_json": json.dumps(public_input, sort_keys=True),
+                                "feedback_json": json.dumps(feedback or [], sort_keys=True)})
     model_items = result.data.get("items") if result.ok and isinstance(result.data, dict) else None
     if not isinstance(model_items, list) or not model_items:
         payload = {"items": [_fallback_item(item) for item in rows],
@@ -162,5 +164,5 @@ def advisory(fetch: Callable[[str], list[dict[str, Any]]]) -> tuple[dict[str, An
                        "summary": f"{valid_count} of {len(selected)} recommendations were AI-reviewed; quantities remain backend-calculated.",
                        "source": "ai"}
     payload.update({"capped": capped, "model": result.model if result else OLLAMA_MODEL,
-                    "prompt_name": PROMPT_NAME, "prompt_version": PROMPT_VERSION})
+                    "prompt_name": PROMPT_NAME, "prompt_version": version})
     return payload, public_input, result

@@ -9,11 +9,12 @@ from datetime import date, timedelta
 import urllib.error
 import urllib.request
 
-from flask import Flask, jsonify, request
+from flask import Flask, g, jsonify, request
 
 from services.ai_client import health_check
 from services.expiry_advisory import advisory as expiry_advisory
 from services.reorder_recommendation import advisory as reorder_advisory, candidates_for as reorder_candidates
+from services.scheduled_agent import ScheduledAgent, ORDER_LOCK, decision_record, timestamp
 
 DATABASE_SERVICE_URL = os.environ.get(
     "DATABASE_URL", os.environ.get("DATABASE_SERVICE_URL", "http://localhost:6300")
@@ -83,6 +84,30 @@ def database_request(path, method="GET", payload=None):
 
 def require_manager():
     return None if request.headers.get("X-HOMS-Role") == MANAGER_ROLE else fail("Pharmacy Manager role required", 403)
+
+
+@app.before_request
+def serialise_order_writes():
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and (
+        request.path.startswith("/api/purchase-orders")
+        or request.path in {"/api/ai/suggest-reorder/create-drafts", "/api/stock/receive"}
+    ):
+        ORDER_LOCK.acquire()
+        g.order_lock_held = True
+
+
+@app.teardown_request
+def release_order_lock(_error):
+    if g.pop("order_lock_held", False):
+        ORDER_LOCK.release()
+
+
+agent = ScheduledAgent(database_request)
+
+
+@app.get("/api/agent/status")
+def agent_status():
+    return jsonify(agent.status())
 
 
 def validate_supplier(payload):
@@ -260,6 +285,9 @@ def create_reorder_drafts():
                 return fail("One or more suggestions are no longer eligible", 409)
             seen.add(medicine_id)
             candidate = candidate_by_id[medicine_id]
+            if any(o["medicine_id"] == medicine_id and o["status"] in {"pending_approval", "approved", "ordered"}
+                   for o in database_request("/purchase_orders")):
+                return fail("This medicine already has an open or pending order", 409)
             reasoning = str(suggestion.get("reasoning", "")).strip()
             if f"{candidate['daily_usage_rate']:.2f}" not in reasoning or "units/day" not in reasoning:
                 reasoning = (f"Backend-calculated quantity {candidate['suggested_quantity']}; actual usage is "
@@ -623,6 +651,8 @@ def transition(po_id,target,reason=""):
         order=database_request(f"/purchase_orders/{po_id}"); allowed={"approved":{"pending_approval"},"rejected":{"pending_approval"},"ordered":{"approved"},"cancelled":{"draft","pending_approval","approved","ordered"}}
         if order["status"] not in allowed[target]: return fail(f"Cannot set {target} from {order['status']}",409)
         if target in {"rejected","cancelled"} and not reason.strip(): return fail("decision_reason is required",400)
+        if target == "rejected" and order.get("ai_generated"):
+            reason = decision_record("REJECTED", reason)
         return jsonify(database_request(f"/purchase_orders/{po_id}","PUT",{"status":target,"approved_by":request.headers.get("X-HOMS-Name","Pharmacy Manager"),"decision_reason":reason or None}))
     except DatabaseServiceError as exc:return fail(str(exc),exc.status)
 @app.post("/api/purchase-orders/<int:po_id>/approve")
@@ -645,7 +675,12 @@ def validate_order(payload):
 @app.post("/api/purchase-orders")
 def po_create():
     if denied:=require_manager():return denied
-    try:return jsonify(database_request("/purchase_orders","POST",validate_order(request.get_json(silent=True) or {}))),201
+    try:
+        payload = validate_order(request.get_json(silent=True) or {})
+        if any(o["medicine_id"] == payload["medicine_id"] and o["status"] == "pending_approval"
+               for o in database_request("/purchase_orders")):
+            return fail("This medicine already has a pending proposal", 409)
+        return jsonify(database_request("/purchase_orders", "POST", payload)), 201
     except ValueError as exc:return fail(str(exc),400)
     except DatabaseServiceError as exc:return fail(str(exc),exc.status)
 @app.put("/api/purchase-orders/<int:po_id>")
@@ -654,10 +689,34 @@ def po_update(po_id):
     try:
         existing=database_request(f"/purchase_orders/{po_id}")
         if existing["status"] not in {"draft","pending_approval"}:return fail("Only draft or pending approval orders can be edited",409)
+        if existing.get("ai_generated"):
+            changes = request.get_json(silent=True) or {}
+            reason = str(changes.get("decision_reason") or "").strip()
+            if not reason:
+                return fail("A decision_reason is required when editing an AI proposal", 400)
+            # The database API cannot update quantity_ordered. Preserve the
+            # original as cancelled feedback and create a pending replacement.
+            payload = validate_order({**existing, "quantity_ordered": changes.get("quantity_ordered", existing["quantity_ordered"])})
+            payload.update(status="pending_approval", ai_generated=1,
+                           ai_reasoning=f"{existing.get('ai_reasoning') or ''} Human edit: {reason}",
+                           created_by=request.headers.get("X-HOMS-Name", "Pharmacy Manager"),
+                           approved_by=None, decision_reason=None, created_at=timestamp())
+            if any(o["po_id"] != po_id and o["medicine_id"] == existing["medicine_id"]
+                   and o["status"] in {"pending_approval", "approved", "ordered"}
+                   for o in database_request("/purchase_orders")):
+                return fail("This medicine already has another open or pending order", 409)
+            database_request(f"/purchase_orders/{po_id}", "PUT", {
+                "status": "cancelled", "decision_reason": decision_record("EDITED", reason, payload["quantity_ordered"]),
+                "approved_by": request.headers.get("X-HOMS-Name", "Pharmacy Manager"),
+            })
+            # Do not blindly retry POST or restore the old pending order if the
+            # response is lost: a replacement may already have been committed.
+            return jsonify(database_request("/purchase_orders", "POST", payload)), 201
         return jsonify(database_request(f"/purchase_orders/{po_id}","PUT",validate_order({**existing,**(request.get_json(silent=True) or {})})))
     except ValueError as exc:return fail(str(exc),400)
     except DatabaseServiceError as exc:return fail(str(exc),exc.status)
 
 
 if __name__ == "__main__":
+    agent.start()
     app.run(host="0.0.0.0", port=PORT, debug=False)

@@ -196,6 +196,10 @@ services:
     environment:
       PORT: 5300
       DATABASE_URL: http://student-3-database:6300
+      AGENT_ENABLED: ${AGENT_ENABLED:-true}
+      AGENT_INTERVAL_SECONDS: ${AGENT_INTERVAL_SECONDS:-300}
+      AGENT_MAX_PROPOSALS: ${AGENT_MAX_PROPOSALS:-3}
+      AGENT_BUDGET_CAP: ${AGENT_BUDGET_CAP:-500.00}
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
       OLLAMA_TIMEOUT: 90

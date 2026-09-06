@@ -185,6 +185,27 @@ def purchase_orders_table():
     except api_client.BackendError as exc:return f'<tr><td colspan="10">{exc}</td></tr>',exc.status
 
 
+@app.get("/purchase-orders/agent")
+def purchase_order_agent_panel():
+    try:
+        return render_template("partials/agent_panel.html", agent=api_client.agent_status(), error=None)
+    except api_client.BackendError as exc:
+        return render_template("partials/agent_panel.html", agent=None, error=str(exc))
+
+
+@app.post("/purchase-orders/<int:po_id>/edit")
+def edit_agent_proposal(po_id):
+    if not is_manager():
+        return "Pharmacy Manager role required", 403
+    try:
+        api_client.save_purchase_order({"quantity_ordered": request.form.get("quantity_ordered"),
+                                        "decision_reason": request.form.get("decision_reason", "")},
+                                       current_identity()["role"], po_id)
+    except api_client.BackendError as exc:
+        return str(exc), exc.status
+    return redirect(url_for("purchase_orders_list", status="pending_approval"))
+
+
 @app.post("/purchase-orders/suggestions")
 def purchase_order_suggestions():
     try:
@@ -214,7 +235,7 @@ def purchase_order_suggestion_drafts():
         return render_template("partials/reorder_suggestions_error.html", error=str(exc)), status
 @app.get("/purchase-orders/<int:po_id>/detail")
 def po_detail_panel(po_id):
-    try:return render_template("partials/purchase_order_detail.html",order=api_client.get_purchase_order(po_id))
+    try:return render_template("partials/purchase_order_detail.html",order=api_client.get_purchase_order(po_id),is_manager=is_manager())
     except api_client.BackendError as exc:return str(exc),exc.status
 @app.get("/purchase-orders/export")
 def po_export():
