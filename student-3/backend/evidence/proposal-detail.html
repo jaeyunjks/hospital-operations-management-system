@@ -1,0 +1,16 @@
+<section class="panel"><div class="panel__body"><p>Received 0 of 40. Supplier lead time: 8 days.</p><div class="ai-panel"><p class="ai-panel__title">AI reasoning</p><p>Actual usage is 1.90 units/day, so maintain supply through the lead time. Revised after rejection #71: maximum 40 units. REJECTED 2026-09-06T06:21:57+00:00 | Quantity is too high for the demand review; maximum 40 units to reduce waste. Source: rule-based fallback.</p></div></div></section>
+
+<section class="panel"><div class="panel__body">
+  <form method="post" action="/purchase-orders/76/reject">
+    <label>Reason for rejection <input class="input" name="decision_reason" required maxlength="500"></label>
+    <button class="btn btn-secondary" type="submit">Reject proposal</button>
+  </form>
+  
+  <form method="post" action="/purchase-orders/76/edit">
+    <label>Revised quantity <input class="input" type="number" name="quantity_ordered" min="1" step="1" value="40" required></label>
+    <label>Reason for edit <input class="input" name="decision_reason" required maxlength="500"></label>
+    <button class="btn btn-secondary" type="submit">Replace with edited proposal</button>
+    <p>The original is retained as cancelled. The replacement still requires approval.</p>
+  </form>
+  
+</div></section>

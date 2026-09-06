@@ -1,0 +1,26 @@
+<section class="panel" aria-live="polite">
+  <div class="panel__header">
+    <div><span class="page-header__eyebrow">AI reorder advisory</span><h2 class="panel__title">Suggested replenishment</h2></div>
+    <span class="badge {% if advisory.source == 'ai' %}badge-info{% else %}badge-warning{% endif %}">Source: {{ advisory.source }}</span>
+  </div>
+  <div class="panel__body">
+    {% if advisory.source == 'fallback' %}<div class="alert alert--warning"><div><p class="alert__title">AI unavailable — showing rule-based suggestions.</p><p class="alert__body">{{ advisory.fallback_reason }}</p></div></div>{% endif %}
+    {% if advisory.capped %}<p class="table__muted">The 5 highest-priority candidates were sent for AI review; remaining cards use backend rules.</p>{% endif %}
+    <p>{{ advisory.summary }}</p>
+    {% if advisory["items"] %}
+      <form hx-post="/purchase-orders/suggestions/create-drafts" hx-target="#reorder-suggestions" hx-swap="innerHTML">
+        {% for item in advisory["items"] %}
+          <article class="panel" style="margin-top: var(--space-3)">
+            <div class="panel__body">
+              <label class="toolbar"><input type="checkbox" name="medicine_id" value="{{ item.medicine_id }}" checked {% if not is_manager %}disabled{% endif %}><strong>{{ item.medicine_name }}</strong><span class="table__muted">{{ item.supplier_name }}</span><span class="toolbar__end"><span class="badge {% if item.priority == 'high' %}badge-danger{% elif item.priority == 'medium' %}badge-warning{% else %}badge-success{% endif %}">{{ item.priority }} priority</span>{% if not item.ai_reviewed %}<span class="badge badge-neutral">Rule-based</span>{% endif %}</span></label>
+              <input type="hidden" name="reasoning_{{ item.medicine_id }}" value="{{ item.reasoning }}">
+              <div class="grid grid--4" style="margin-top: var(--space-3)"><div><span class="stat__label">Available</span><strong>{{ item.available_quantity }}</strong></div><div><span class="stat__label">Usage rate</span><strong>{{ item.daily_usage_rate }} / day</strong></div><div><span class="stat__label">Lead time</span><strong>{{ item.lead_time_days }} days</strong></div><div><span class="stat__label">Suggested quantity</span><strong>{{ item.suggested_quantity }}</strong></div></div>
+              <p>{{ item.reasoning }}</p>{% if item.near_expiry_quantity %}<p class="table__muted">{{ item.near_expiry_quantity }} units expire within supplier lead time.</p>{% endif %}{% if item.adjustment_flag %}<p class="alert alert--warning">AI review note: {{ item.adjustment_reason }} Quantity remains backend-calculated.</p>{% endif %}
+            </div>
+          </article>
+        {% endfor %}
+        {% if is_manager %}<div class="modal__actions" style="margin-top: var(--space-4)"><button class="btn btn-primary" type="submit" hx-confirm="Create pending-approval draft orders for the selected suggestions?">Create draft orders</button></div>{% else %}<p class="table__muted">Only a Pharmacy Manager can create draft orders.</p>{% endif %}
+      </form>
+    {% else %}<p class="table__muted">No medicines currently require a suggested order.</p>{% endif %}
+  </div>
+</section>

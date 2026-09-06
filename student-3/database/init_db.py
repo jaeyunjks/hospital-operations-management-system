@@ -23,7 +23,10 @@ EXPECTED_TABLES = (
     "purchase_orders",
     "stock_movements",
 )
-EXPECTED_MINIMUM_ROWS = {table: 40 for table in EXPECTED_TABLES}
+# The seeded demonstration data intentionally has fewer master rows (staff and
+# suppliers) than transactional rows. Ten records per table is the published
+# Student 3 minimum and is enough to exercise every service relationship.
+EXPECTED_MINIMUM_ROWS = {table: 10 for table in EXPECTED_TABLES}
 
 
 def initialise(database_path: str | None = None) -> Path:
@@ -62,7 +65,7 @@ def check(database_path: str | None = None) -> None:
         }
         if below_minimum:
             raise RuntimeError(
-                "Expected at least 40 seed records in every table; "
+                "Expected at least 10 seed records in every table; "
                 f"found {below_minimum}."
             )
 
