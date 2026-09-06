@@ -6,6 +6,6 @@
   <p>Last cycle: {{ agent.last_cycle_time or 'Waiting for first cycle' }}{% if agent.running %} · Cycle {{ agent.cycle }} running{% endif %}</p>
   <p>Created last cycle: <strong>{{ agent.proposals_created }}</strong> · Rejected by Observe: <strong>{{ agent.observe_rejected }}</strong></p>
   {% if agent.last_error %}<p>Last cycle error: {{ agent.last_error }}. The agent will retry next interval.</p>{% endif %}
-  <p>Proposals require human approval. <a href="/purchase-orders?status=pending_approval&amp;ai_generated=true">View approval queue</a></p>
+  {% if is_manager %}<p>Proposals require human approval. <a href="/purchase-orders?status=pending_approval&amp;ai_generated=true">View approval queue</a></p>{% else %}<p>Agent proposals require Pharmacy Manager approval.</p>{% endif %}
   {% endif %}
 </div>

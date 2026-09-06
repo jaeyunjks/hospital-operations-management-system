@@ -232,6 +232,64 @@ def health():
         return jsonify({"status": "degraded", "database_service": "unavailable"}), 503
 
 
+@app.get("/api/dashboard/summary")
+def dashboard_summary():
+    """Return dashboard data from five bulk database-service reads; no AI call."""
+    try:
+        medicines, suppliers, batches, orders, movements = (
+            database_request("/medicines"),
+            database_request("/suppliers"),
+            database_request("/batches?include_expired=true&include_empty=false"),
+            database_request("/purchase_orders"),
+            database_request("/stock_movements"),
+        )
+        today = date.today()
+        supplier_names = {supplier["supplier_id"]: supplier["name"] for supplier in suppliers}
+        medicine_names = {medicine["medicine_id"]: medicine["name"] for medicine in medicines}
+        active = [medicine for medicine in medicines if medicine.get("status") == "active"]
+        low_stock = sorted(
+            (medicine for medicine in active
+             if medicine.get("stock_quantity", 0) <= medicine.get("reorder_level", 0)),
+            key=lambda medicine: (
+                -(medicine.get("reorder_level", 0) - medicine.get("stock_quantity", 0)),
+                medicine["name"].casefold(),
+            ),
+        )
+        batch_rows = [{**batch, "days_until_expiry": (parse_date(batch["expiry_date"]) - today).days}
+                      for batch in batches]
+        expiring_soon = sorted(
+            (batch for batch in batch_rows if 0 <= batch["days_until_expiry"] <= 30),
+            key=lambda batch: (batch["expiry_date"], batch["batch_id"]),
+        )
+        recent_movements = sorted(movements, key=lambda movement: movement["created_at"], reverse=True)[:10]
+        return jsonify({
+            "counts": {
+                "active_medicines": len(active),
+                "low_stock": len(low_stock),
+                "expiring_within_30_days": sum(0 <= batch["days_until_expiry"] <= 30 for batch in batch_rows),
+                "expiring_within_7_days": sum(0 <= batch["days_until_expiry"] <= 7 for batch in batch_rows),
+                "expired_batches": sum(batch["days_until_expiry"] < 0 for batch in batch_rows),
+                "pending_approvals": sum(order.get("status") == "pending_approval" for order in orders),
+            },
+            "low_stock": [{"name": medicine["name"], "stock_quantity": medicine.get("stock_quantity", 0),
+                           "reorder_level": medicine.get("reorder_level", 0),
+                           "supplier_name": supplier_names.get(medicine.get("supplier_id"))}
+                          for medicine in low_stock[:10]],
+            "expiring_soon": [{"medicine_name": medicine_names.get(batch["medicine_id"], "Unknown medicine"),
+                                "batch_number": batch["batch_number"], "expiry_date": batch["expiry_date"],
+                                "quantity_remaining": batch["quantity_remaining"],
+                                "days_until_expiry": batch["days_until_expiry"]}
+                               for batch in expiring_soon[:10]],
+            "recent_movements": [{"medicine_name": medicine_names.get(movement["medicine_id"], "Unknown medicine"),
+                                  "movement_type": movement["movement_type"], "quantity": movement["quantity"],
+                                  "performed_by": movement.get("performed_by"), "created_at": movement["created_at"]}
+                                 for movement in recent_movements],
+            "agent": agent.status(),
+        })
+    except DatabaseServiceError as exc:
+        return fail(str(exc), exc.status)
+
+
 @app.get("/api/ai/health")
 def ai_health():
     """Expose a non-crashing operational check for the shared Ollama runtime."""

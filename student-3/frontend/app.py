@@ -188,9 +188,11 @@ def purchase_orders_table():
 @app.get("/purchase-orders/agent")
 def purchase_order_agent_panel():
     try:
-        return render_template("partials/agent_panel.html", agent=api_client.agent_status(), error=None)
+        return render_template("partials/agent_panel.html", agent=api_client.agent_status(), error=None,
+                               is_manager=is_manager())
     except api_client.BackendError as exc:
-        return render_template("partials/agent_panel.html", agent=None, error=str(exc))
+        return render_template("partials/agent_panel.html", agent=None, error=str(exc),
+                               is_manager=is_manager())
 
 
 @app.post("/purchase-orders/<int:po_id>/edit")
@@ -266,11 +268,14 @@ def shared_assets(filename: str):
 
 @app.get("/")
 def dashboard():
-    return render_page(
-        "dashboard.html",
-        "Medication Administration",
-        "Medication review and administration status for today.",
-    )
+    try:
+        summary, error = api_client.dashboard_summary(), None
+    except api_client.BackendError as exc:
+        summary, error = {"counts": {}, "low_stock": [], "expiring_soon": [],
+                          "recent_movements": [], "agent": None}, str(exc)
+    return render_template("dashboard.html", title="Pharmacy Inventory Dashboard",
+                           identity=current_identity(), is_manager=is_manager(),
+                           error=error, **summary)
 
 
 @app.get("/medicines")
