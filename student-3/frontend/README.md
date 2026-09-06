@@ -2,6 +2,17 @@
 
 Server-rendered Pharmacy & Medication Inventory Management interface. Flask renders HTML and HTMX refreshes page fragments; this is not a single-page application. **Port: 3300.**
 
+## Prerequisites
+
+Before using the AI advisory panels, install Ollama on the host and run:
+
+```bash
+ollama pull llama3.2:3b
+ollama list        # confirm llama3.2:3b is listed
+```
+
+Without the model, AI advisories use intentional `SOURCE: FALLBACK` rule-based suggestions while the application continues to work. The frontend and all inventory workflows remain available; only AI reasoning is unavailable.
+
 ## Role in the architecture
 
 ```mermaid

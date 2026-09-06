@@ -3,6 +3,8 @@
 Independently owned feature microservice set for the Hospital Operations
 Management System. **Scaffold only — no feature logic implemented yet.**
 
+> Prerequisite: install Ollama and run `ollama pull llama3.2:3b`; without the model, AI advisories use intentional `SOURCE: FALLBACK` rule-based suggestions while the application continues to work.
+
 - Owner: _TBD_ (see `docs/architecture/feature-ownership.md`)
 - Feature area: _TBD_
 

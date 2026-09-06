@@ -2,6 +2,17 @@
 
 Business-logic API for Pharmacy & Medication Inventory Management. It validates inventory operations, produces advisories and draft orders, and never opens SQLite directly. **Port: 5300.**
 
+## Prerequisites
+
+Before running locally or with Docker, install Ollama and pull the configured model:
+
+```bash
+ollama pull llama3.2:3b
+ollama list        # confirm llama3.2:3b is listed
+```
+
+Without the model, AI advisories use intentional `SOURCE: FALLBACK` rule-based suggestions while the application continues to work. Only AI reasoning is unavailable; this is graceful degradation, not a failure.
+
 ## Role in the architecture
 
 ```mermaid
