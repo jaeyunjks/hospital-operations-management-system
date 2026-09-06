@@ -6,7 +6,7 @@
 # Stages: syntax check -> build all three images -> verify database seeding
 # and backend enrichment -> tear down. Ollama and AI endpoints are excluded.
 # ==========================================================================
-name: student-3 — Pharmacy Operations
+name: student-3
 
 on:
   push:

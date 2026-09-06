@@ -1,4 +1,4 @@
-name: student-1 CI
+name: student-1
 
 on:
   push:

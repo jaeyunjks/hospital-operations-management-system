@@ -6,7 +6,7 @@
 # Stages: install -> build the database -> pytest -> build all three
 # container images -> smoke test the running stack.
 # ==========================================================================
-name: student-4 — Room & Bed Management
+name: student-4
 
 on:
   push:
