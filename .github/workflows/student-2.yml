@@ -1,28 +1,96 @@
-# ==========================================================================
-# CI/CD workflow — student-2 (PLACEHOLDER)
-# ==========================================================================
-# Owner: student-2  (see docs/architecture/feature-ownership.md)
-#
-# This is a placeholder. There is no application code for student-2 yet, so
-# this workflow intentionally does NOT build or test anything and does NOT run
-# on push / pull_request — it will not report a passing check against code that
-# has not been validated.
-#
-# When student-2's microservice exists, replace the body below with a real
-# pipeline scoped to `student-2/**` (setup Python -> install -> lint ->
-# pytest student-2/tests -> docker build from student-2/Dockerfile).
-# See .github/workflows/README.md.
-# ==========================================================================
-name: student-2 (placeholder)
+name: student-2 CI
 
 on:
+  push:
+    paths:
+      - "student-2/**"
+      - "student-1/**"
+      - "shared/frontend/**"
+      - "docker-compose.yml"
+      - ".github/workflows/student-2.yml"
+  pull_request:
+    paths:
+      - "student-2/**"
+      - "student-1/**"
+      - "shared/frontend/**"
+      - "docker-compose.yml"
+      - ".github/workflows/student-2.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
-  placeholder:
+  student2-integration:
     runs-on: ubuntu-latest
+    env:
+      PYTHONDONTWRITEBYTECODE: "1"
+
     steps:
-      - name: Not yet implemented
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            student-2/frontend/requirements.txt
+            student-2/backend/requirements.txt
+            student-2/database/requirements.txt
+
+      - name: Install Student 2 test dependencies
         run: |
-          echo "student-2 CI/CD is a placeholder — no pipeline implemented yet."
-          echo "See .github/workflows/README.md for the required future steps."
+          python -m pip install --upgrade pip
+          python -m pip install pytest \
+            -r student-2/frontend/requirements.txt \
+            -r student-2/backend/requirements.txt \
+            -r student-2/database/requirements.txt
+
+      - name: Run Student 2 tests
+        run: python -m pytest -q student-2/tests
+
+      - name: Validate shared Compose configuration
+        run: docker compose config --quiet
+
+      - name: Build Student 2 containers
+        run: docker compose build student-2-database student-2-backend student-2-frontend
+
+      - name: Start Student 2 services
+        run: docker compose up -d --wait --wait-timeout 120 student-2-frontend
+
+      - name: Verify Student 2 HTTP services
+        run: |
+          python - <<'PY'
+          import json
+          import urllib.request
+
+          def request(url, headers=None):
+              call = urllib.request.Request(url, headers=headers or {"Accept": "application/json"})
+              with urllib.request.urlopen(call, timeout=15) as response:
+                  raw = response.read().decode()
+                  return response.status, json.loads(raw) if raw else None
+
+          status, database = request("http://127.0.0.1:6200/health")
+          assert status == 200 and database["status"] == "ok"
+
+          status, backend = request("http://127.0.0.1:5200/health")
+          assert status == 200 and backend["status"] == "ok"
+
+          status, records = request(
+              "http://127.0.0.1:5200/api/clinical-records/",
+              {"Accept": "application/json", "X-User-Role": "doctor"})
+          assert status == 200 and isinstance(records.get("clinical_records"), list)
+
+          status, _ = request("http://127.0.0.1:3200/")
+          assert status == 200
+          PY
+
+      - name: Show Student 2 container logs on failure
+        if: failure()
+        run: docker compose logs --no-color student-2-database student-2-backend student-2-frontend
+
+      - name: Stop Student 2 services
+        if: always()
+        run: docker compose down --volumes --remove-orphans

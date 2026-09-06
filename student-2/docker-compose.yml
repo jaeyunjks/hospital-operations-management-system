@@ -34,11 +34,9 @@ services:
       # admission_validation.py appends /admissions/<id> to this base URL.
       PATIENT_ADMISSION_API_URL: "${member2_PATIENT_ADMISSION_API_URL:-http://student-1-backend:5100/api}"
       # external_services.py still uses stubs; configuring URLs does not enable HTTP.
-      # NOTE: hostname corrected to match the hyphenated naming convention used
-      # by every other service (student-2-backend, student-1-backend, student-4-backend).
-      # The un-hyphenated "member5-backend" would fail Docker's internal DNS lookup
-      # once student-5's service is actually added to the stack.
-      STAFF_SHIFT_API_URL: "${member2_STAFF_SHIFT_API_URL:-http://student-5-backend:5500/api}"
+      # Student 5 intentionally uses the service name student5-backend in the
+      # shared root Compose stack.
+      STAFF_SHIFT_API_URL: "${member2_STAFF_SHIFT_API_URL:-http://student5-backend:5500/api}"
       ROOM_BED_API_URL: "${member2_ROOM_BED_API_URL:-http://student-4-backend:5400}"
       OLLAMA_BASE_URL: "${member2_OLLAMA_BASE_URL:-http://ollama:11434}"
       OLLAMA_MODEL: "${member2_OLLAMA_MODEL:-llama3.1:8b}"

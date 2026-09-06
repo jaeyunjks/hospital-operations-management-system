@@ -24,28 +24,14 @@ Both go through one shared helper, _fetch_admission_status(), so the HTTP
 call is written once. If the Patient & Admission API is unreachable, that
 helper raises AdmissionServiceError - callers are expected to catch it.
 
-STUB STATUS
------------
-The Patient & Admission Management service is not part of this branch's stack
-(see docker-compose.yml), so _fetch_admission_status() is a STUB - the same
-approach services/external_services.py already takes for the other absent
-services. It returns a canned status instead of making the HTTP call, so the
-create-gate and auto-cancel rules can be exercised end-to-end. The real call
-is kept verbatim in the `# REAL CALL:` block below; dropping it back in is a
-one-line change and needs no change to either public function.
-
-  SIMULATE_ADMISSION env var forces the non-happy paths while this is a stub:
-    "Active" (default) | "Pending" | "Cancelled" | "Completed" - canned status
-    "down"                                        - simulate the service down
+The Patient & Admission Management service is part of the shared Compose
+stack. This module therefore validates admissions through its HTTP API rather
+than reading any other feature's database directly.
 """
 
 import os
 
-import requests  # noqa: F401  (kept for the REAL CALL block below)
-
-# Stub simulation switch - flip via env var / monkeypatch to exercise the
-# not-active and service-down branches while the real service is absent.
-SIMULATE_ADMISSION = os.environ.get("SIMULATE_ADMISSION", "Active")
+import requests
 
 # Base URL of the Patient & Admission Management service. Env-overridable for
 # Docker/deployment; localhost default for local dev.
@@ -95,47 +81,35 @@ class AdmissionNotActiveError(Exception):
 def _fetch_admission_status(admission_id):
     """
     Return one admission's admission_status string.
-
-    STUB: the Patient & Admission service is not in this branch's stack, so
-    this returns SIMULATE_ADMISSION instead of calling it. Raises
-    AdmissionServiceError when SIMULATE_ADMISSION == "down", exactly as the
-    real transport failure would.
-
-    # REAL CALL:
-    #   url = f"{BASE_URL}/admissions/{admission_id}"
-    #   try:
-    #       response = requests.get(url, timeout=TIMEOUT)
-    #   except requests.RequestException as exc:
-    #       raise AdmissionServiceError(
-    #           f"could not reach Patient & Admission API at {url}: {exc}"
-    #       ) from exc
-    #   if not response.ok:
-    #       raise AdmissionServiceError(
-    #           f"Patient & Admission API returned {response.status_code} "
-    #           f"for admission {admission_id}",
-    #           status_code=response.status_code,
-    #       )
-    #   try:
-    #       body = response.json()
-    #   except ValueError as exc:
-    #       raise AdmissionServiceError(
-    #           f"Patient & Admission API returned non-JSON for admission "
-    #           f"{admission_id}: {response.text}"
-    #       ) from exc
-    #   status = body.get("admission_status")
-    #   if not status:
-    #       raise AdmissionServiceError(
-    #           f"Patient & Admission API response for admission {admission_id} "
-    #           f"has no admission_status: {body}"
-    #       )
-    #   return status
     """
-    if SIMULATE_ADMISSION == "down":
+
+    url = f"{BASE_URL}/admissions/{admission_id}"
+    try:
+        response = requests.get(url, timeout=TIMEOUT)
+    except requests.RequestException as exc:
         raise AdmissionServiceError(
-            f"Patient & Admission service unavailable (stub) for admission "
-            f"{admission_id}"
+            f"could not reach Patient & Admission API at {url}: {exc}"
+        ) from exc
+    if not response.ok:
+        raise AdmissionServiceError(
+            f"Patient & Admission API returned {response.status_code} "
+            f"for admission {admission_id}",
+            status_code=response.status_code,
         )
-    return SIMULATE_ADMISSION
+    try:
+        body = response.json()
+    except ValueError as exc:
+        raise AdmissionServiceError(
+            f"Patient & Admission API returned non-JSON for admission "
+            f"{admission_id}: {response.text}"
+        ) from exc
+    status = body.get("admission_status")
+    if not status:
+        raise AdmissionServiceError(
+            f"Patient & Admission API response for admission {admission_id} "
+            f"has no admission_status: {body}"
+        )
+    return status
 
 
 # ------------------------------------------------------------

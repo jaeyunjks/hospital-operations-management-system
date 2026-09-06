@@ -182,7 +182,9 @@ def test_cancel_is_soft_delete_keeps_row(client, db_mock, as_user):
     body = resp.get_json()
     assert body["care_task"]["status"] == "cancelled"
     assert body["care_task"]["task_id"] == 20
-    db_mock.update_care_task.assert_called_once_with(20, {"status": "cancelled"})
+    db_mock.update_care_task.assert_called_once_with(
+        20, {"status": "cancelled", "cancelled_by": "doctor"}
+    )
     db_mock.delete_care_task.assert_not_called()
 
 
@@ -313,7 +315,9 @@ def test_doctor_and_nurse_can_both_cancel(client, db_mock, as_user, actor):
 
     assert resp.status_code == 200
     assert resp.get_json()["care_task"]["status"] == "cancelled"
-    db_mock.update_care_task.assert_called_once_with(20, {"status": "cancelled"})
+    db_mock.update_care_task.assert_called_once_with(
+        20, {"status": "cancelled", "cancelled_by": actor["role"]}
+    )
     db_mock.delete_care_task.assert_not_called()
 
 
