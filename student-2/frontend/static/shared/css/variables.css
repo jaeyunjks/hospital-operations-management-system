@@ -1,0 +1,250 @@
+/* ==========================================================================
+   HOMS — Design Tokens
+   --------------------------------------------------------------------------
+   Single source of truth for the shared design system.
+   Extracted from the approved HOMS design (Staff & Shift Management, v3).
+
+   Design intent: precise, restrained, information-dense. Structure is carried
+   by hairline borders and alignment — not by radius, shadow, or colour.
+   The interface is square by design and effectively shadow-free.
+
+   Authoring space is OKLCH for perceptually even ramps. Every text pairing in
+   the semantic layer meets WCAG 2.1 AA; see README for the audit.
+
+   Feature code should consume the SEMANTIC tokens (--color-*, --space-*, …).
+   The primitive ramps below are implementation detail.
+   ========================================================================== */
+
+:root {
+
+  /* =====================================================================
+     1. PRIMITIVES — raw ramps. Do not use directly in feature CSS.
+     ===================================================================== */
+
+  /* Neutral ramp: 0 = lightest surface, 15 = deepest ink. */
+  --grey-0:  oklch(0.995 0.001 250);
+  --grey-1:  oklch(0.985 0.002 250);
+  --grey-2:  oklch(0.975 0.003 250);
+  --grey-3:  oklch(0.965 0.004 250);
+  --grey-4:  oklch(0.955 0.003 260);
+  --grey-5:  oklch(0.945 0.004 250);
+  --grey-6:  oklch(0.885 0.008 250);
+  --grey-7:  oklch(0.800 0.008 250);
+  --grey-8:  oklch(0.650 0.010 250);
+  --grey-9:  oklch(0.500 0.014 258);
+  --grey-10: oklch(0.460 0.014 258);
+  --grey-11: oklch(0.350 0.016 260);
+  --grey-12: oklch(0.310 0.016 260);
+  --grey-13: oklch(0.240 0.016 260);
+  --grey-14: oklch(0.220 0.016 260);
+  --grey-15: oklch(0.160 0.018 260);
+
+  /* Quiet indigo — the single accent. Deliberately desaturated so it reads
+     as institutional rather than consumer-blue. */
+  --indigo-base:  oklch(0.50 0.105 262);
+  --indigo-hover: oklch(0.43 0.115 262);
+  --indigo-press: oklch(0.40 0.115 262);
+  --indigo-ink:   oklch(0.34 0.030 262);
+  --indigo-tint:  oklch(0.965 0.012 262);
+  --indigo-wash:  oklch(0.972 0.006 262);
+
+  /* Operational status. `-ink` variants are the accessible text colour on
+     the matching `-tint`; `-base` is for dots, meters, and rules. */
+  --ok-base:    oklch(0.55 0.100 155);
+  --ok-ink:     oklch(0.46 0.100 155);
+  --ok-tint:    oklch(0.962 0.020 155);
+
+  --warn-base:  oklch(0.66 0.105 78);
+  --warn-ink:   oklch(0.47 0.105 78);
+  --warn-tint:  oklch(0.965 0.030 82);
+
+  --risk-base:  oklch(0.55 0.140 25);
+  --risk-ink:   oklch(0.48 0.145 25);
+  --risk-tint:  oklch(0.962 0.020 25);
+
+  --white: oklch(1 0 0);
+
+
+  /* =====================================================================
+     2. SEMANTIC COLOUR — the API for feature code.
+     ===================================================================== */
+
+  /* Surfaces */
+  --color-background:     var(--grey-4);   /* application canvas          */
+  --color-surface:        var(--grey-0);   /* cards, panels, tables       */
+  --color-surface-muted:  var(--grey-3);   /* sunken wells, inset areas   */
+  --color-surface-band:   var(--grey-2);   /* section/table header bands  */
+  --color-surface-alt:    var(--grey-1);   /* zebra rows                  */
+  --color-surface-hover:  var(--indigo-wash);
+  --color-surface-inverse: var(--grey-13); /* global header, sidenav      */
+  --color-overlay:        oklch(0.240 0.016 260 / 0.34);
+
+  /* Text */
+  --color-text-primary:   var(--grey-14);  /* headings, key figures       */
+  --color-text-secondary: var(--grey-12);  /* body copy                   */
+  --color-text-data:      var(--grey-11);  /* tabular / numeric content   */
+  --color-text-muted:     var(--grey-10);  /* supporting detail           */
+  --color-text-label:     var(--grey-9);   /* uppercase micro-labels      */
+  --color-text-inverse:   var(--grey-1);
+  --color-text-on-accent: var(--white);
+
+  /* Borders — structure lives here, not in shadow. */
+  --color-border:         var(--grey-5);   /* hairline separators         */
+  --color-border-strong:  var(--grey-6);   /* panel and table outlines    */
+  --color-border-control: var(--grey-8);   /* inputs/controls (3:1 min)   */
+
+  /* Accent — one quiet indigo, used sparingly for action and focus. */
+  --color-accent:         var(--indigo-base);
+  --color-accent-hover:   var(--indigo-hover);
+  --color-accent-press:   var(--indigo-press);
+  --color-accent-ink:     var(--indigo-ink);
+  --color-accent-soft:    var(--indigo-tint);
+
+  /* Links */
+  --color-link:           var(--indigo-base);
+  --color-link-hover:     var(--indigo-press);
+
+  /* Operational status. Always paired with a text label in the UI. */
+  --color-success:        var(--ok-ink);
+  --color-success-soft:   var(--ok-tint);
+  --color-success-mark:   var(--ok-base);   /* dots, meters, rules        */
+
+  --color-warning:        var(--warn-ink);
+  --color-warning-soft:   var(--warn-tint);
+  --color-warning-mark:   var(--warn-base);
+
+  --color-danger:         var(--risk-ink);
+  --color-danger-soft:    var(--risk-tint);
+  --color-danger-mark:    var(--risk-base);
+
+  --color-info:           var(--indigo-ink);
+  --color-info-soft:      var(--indigo-tint);
+  --color-info-mark:      var(--indigo-base);
+
+  --color-neutral:        var(--grey-10);
+  --color-neutral-soft:   var(--grey-3);
+  --color-neutral-mark:   var(--grey-7);
+
+  /* AI / advisory — recognisable, never dominant. Shares the indigo family
+     so AI reads as part of the system, distinguished by tint + label. */
+  --color-ai:             var(--indigo-ink);
+  --color-ai-soft:        var(--indigo-tint);
+  --color-ai-mark:        var(--indigo-base);
+  --color-ai-border:      var(--grey-6);
+
+  /* Focus */
+  --color-focus:          var(--indigo-base);
+  --focus-ring: 0 0 0 2px var(--color-surface), 0 0 0 4px var(--color-focus);
+
+
+  /* =====================================================================
+     3. TYPOGRAPHY
+     Serif is for major titles only (h1–h3). All operational content —
+     navigation, tables, forms, KPI labels, buttons — is sans.
+     Mono carries identifiers, numerals, and micro-labels.
+     ===================================================================== */
+
+  --font-display: 'Source Serif 4', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Barlow', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Display scale — serif titles. */
+  --size-display-1: 34px;
+  --size-display-2: 30px;
+  --size-display-3: 26px;
+  --size-display-4: 24px;
+  --leading-display: 1.15;
+  --track-display: -0.014em;
+
+  /* UI scale — sans. Base operational size is 13.5px: dense but readable
+     across a long shift on a desk monitor. */
+  --size-ui-lg: 15.5px;
+  --size-ui-md: 14px;
+  --size-ui: 13.5px;
+  --size-ui-sm: 13px;
+  --size-ui-xs: 12.5px;
+  --leading-ui: 1.6;
+  --leading-ui-tight: 1.45;
+
+  /* Data scale — mono numerals. */
+  --size-data-xl: 18px;
+  --size-data-lg: 15px;
+  --size-data: 12.5px;
+  --size-data-sm: 11.5px;
+
+  /* Label scale — uppercase micro-labels with wide tracking. */
+  --size-label: 10px;
+  --size-label-sm: 9.5px;
+  --track-label: 0.14em;
+
+
+  /* =====================================================================
+     4. SPACING — compact 4px-ish rhythm tuned for dense operational screens.
+     ===================================================================== */
+  --space-1: 3px;
+  --space-2: 5px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 20px;
+  --space-7: 24px;
+  --space-8: 32px;
+  --space-9: 40px;
+  --space-10: 48px;
+
+  --gutter: 24px;
+
+
+  /* =====================================================================
+     5. RADIUS
+     The system is square by design. These tokens exist so the decision
+     lives in one place — do not introduce ad-hoc radii in feature CSS.
+     ===================================================================== */
+  --radius-none: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-pill: 999px;   /* status dots and the rare pill only */
+  --radius-dot: 50%;
+
+
+  /* =====================================================================
+     6. CONTROLS & LAYOUT DIMENSIONS
+     ===================================================================== */
+  --control-height: 30px;
+  --control-height-lg: 34px;
+  --control-pad: 6px 12px;
+  --control-pad-lg: 8px 14px;
+
+  --row-height: 40px;
+  --row-pad-y: 10px;
+  --row-pad-x: 16px;
+  --band-pad-y: 11px;
+
+  --header-height: 52px;      /* global application header */
+  --sidenav-width: 232px;     /* feature navigation rail   */
+  --content-max: 1440px;      /* operational screens       */
+  --prose-max: 780px;         /* reading-width content     */
+
+
+  /* =====================================================================
+     7. BORDERS, ELEVATION, MOTION
+     Elevation is reserved for genuinely floating surfaces (dialogs).
+     Nothing in the flat document plane casts a shadow.
+     ===================================================================== */
+  --border-hair: 1px solid var(--color-border);
+  --border-strong: 1px solid var(--color-border-strong);
+  --border-accent: 1px solid var(--color-accent);
+
+  --shadow-none: none;
+  --shadow-dialog: 0 1px 0 var(--grey-6), 0 24px 48px -24px oklch(0.24 0.016 260 / 0.22);
+
+  --ease: cubic-bezier(0.32, 0.08, 0.24, 1);
+  --dur-fast: 90ms;
+  --dur: 140ms;
+  --dur-slow: 220ms;
+}

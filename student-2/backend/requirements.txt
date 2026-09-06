@@ -1,0 +1,12 @@
+# Third-party packages imported by the Clinical Staff Management backend.
+# Every entry below is imported somewhere under backend/ - nothing speculative.
+#
+#   Flask     - app.py, and every module under routes/ (Blueprint, jsonify, request)
+#   requests  - services/database_client.py, services/admission_validation.py,
+#               services/ollama_client.py
+#
+# Everything else the backend imports (os, importlib, functools, datetime) is
+# part of the Python standard library and needs no dependency here.
+
+Flask==3.0.3
+requests==2.34.2

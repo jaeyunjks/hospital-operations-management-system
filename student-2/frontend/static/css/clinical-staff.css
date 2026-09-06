@@ -1,0 +1,104 @@
+/* Student 2 shell alignment. Shared HOMS tokens and components remain the source
+   of truth; this file only replaces the former left rail with the integrated
+   full-width header pattern used by the other modules. */
+
+.clinical-header {
+  display: grid;
+  grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
+  align-items: stretch;
+  gap: var(--space-6);
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border-bottom-color: var(--color-border-strong);
+}
+
+.clinical-header .app-header__brand { color: var(--color-text-primary); }
+
+.clinical-header .app-header__context,
+.clinical-header .user-chip__role,
+.clinical-header .filter__label { color: var(--color-text-label); }
+
+.clinical-header .nav-link { color: var(--color-text-muted); }
+
+.clinical-header .nav-link:hover,
+.clinical-header .nav-link[aria-current="page"],
+.clinical-header .nav-link.is-active { color: var(--color-text-primary); }
+
+.clinical-header .user-chip { color: var(--color-text-primary); }
+
+.clinical-header .avatar--inverse {
+  color: var(--color-text-secondary);
+  background: var(--color-surface-muted);
+  border-color: var(--color-border-control);
+}
+
+.clinical-header .role-select {
+  color: var(--color-text-secondary);
+  background: var(--color-surface);
+  border-color: var(--color-border-control);
+}
+
+.clinical-header .app-header__brand,
+.clinical-header .app-header__actions {
+  align-self: center;
+}
+
+.clinical-header .app-header__brand {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.clinical-header .app-header__nav {
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.clinical-header .app-header__actions {
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.clinical-header .app-header__meta {
+  color: var(--color-text-label);
+  white-space: nowrap;
+}
+
+.app-body--full .app-main,
+.app-body--full .page:not(.page--prose) {
+  width: 100%;
+}
+
+.app-body--full .page:not(.page--prose) {
+  max-width: none;
+}
+
+@media (max-width: 1100px) {
+  .clinical-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    height: auto;
+    min-height: var(--header-height);
+  }
+
+  .clinical-header .app-header__nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    height: 42px;
+  }
+
+  .clinical-header .app-header__actions {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
+@media (max-width: 620px) {
+  .clinical-header .user-chip__name,
+  .clinical-header .filter__label {
+    display: none;
+  }
+
+  .clinical-header .nav-link {
+    padding: 0 var(--space-3);
+  }
+}
