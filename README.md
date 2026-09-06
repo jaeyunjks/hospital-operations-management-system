@@ -93,8 +93,8 @@ The layout is **aligned with the ASD 2026 prescribed repository structure**.
 └── docker-compose.yml     # Root integrated application orchestration
 ```
 
-Each `student-N/` contains `frontend/`, `backend/`, `database/`, `tests/`, and a
-`Dockerfile`.
+Each student's frontend, backend/API, and database are separately containerised,
+with Dockerfiles in their respective service directories.
 
 ## Team members and feature ownership
 
@@ -110,8 +110,8 @@ Each `student-N/` contains `frontend/`, `backend/`, `database/`, `tests/`, and a
 
 Prerequisites: Docker & Docker Compose, Git, and Ollama with the models named
 by the active service configuration available locally. If a configured model is
-unavailable, AI-ready features use their documented deterministic fallback
-instead of genuine model inference.
+unavailable, some features may use their implemented fallback behaviour until
+the required model is available.
 
 Start the integrated Release 0 application from the repository root:
 
