@@ -126,11 +126,23 @@ def expiry_advisory(days_ahead=30):
     return _request("/api/ai/expiry-advisory", "POST", {"days_ahead": days_ahead},
                     timeout=BACKEND_API_TIMEOUT)
 
+
+def reorder_suggestions():
+    """Request backend-owned reorder calculations and bounded AI judgement."""
+    return _request("/api/ai/suggest-reorder", "POST", {}, timeout=BACKEND_API_TIMEOUT)
+
+
+def create_reorder_drafts(suggestions, role):
+    return _request("/api/ai/suggest-reorder/create-drafts", "POST",
+                    {"suggestions": suggestions}, role, timeout=BACKEND_API_TIMEOUT)
+
 def list_batches(**filters): return _request("/api/batches?" + urllib.parse.urlencode(filters))
 def write_off_batch(batch_id, reason, role): return _request(f"/api/batches/{batch_id}/write-off", "POST", {"reason":reason}, role)
 def issue_stock(payload, role): return _request("/api/stock/issue", "POST", payload, role)
 def receive_stock(payload, role): return _request("/api/stock/receive", "POST", payload, role)
 def list_purchase_orders(**filters): return _request("/api/purchase-orders?"+urllib.parse.urlencode(filters))
+def agent_status(): return _request("/api/agent/status")
+def dashboard_summary(): return _request("/api/dashboard/summary")
 def open_purchase_orders(medicine_id): return _request("/api/purchase-orders/open?"+urllib.parse.urlencode({"medicine_id":medicine_id}))["purchase_orders"]
 def get_purchase_order(po_id): return _request(f"/api/purchase-orders/{po_id}")["purchase_order"]
 def save_purchase_order(payload,role,po_id=None): return _request(f"/api/purchase-orders/{po_id}" if po_id else "/api/purchase-orders","PUT" if po_id else "POST",payload,role)

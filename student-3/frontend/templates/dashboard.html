@@ -2,26 +2,35 @@
 {% block content %}
 <header class="page-header">
   <div>
-    <span class="page-header__eyebrow">Clinical operations</span>
+    <span class="page-header__eyebrow">Pharmacy operations</span>
     <h1 class="page-header__title">{{ title }}</h1>
-    <p class="page-header__description">{{ note }}</p>
+    <p class="page-header__description">Current inventory, expiry risks, purchase approvals and recent stock activity.</p>
   </div>
 </header>
 
-<section class="stat-row" aria-label="Medication administration summary">
-  <article class="stat"><span class="stat__label">AI-flagged orders</span><strong class="stat__value stat__value--warning">12</strong><span class="stat__meta"><span class="status status--warning"><span class="status__dot" aria-hidden="true"></span>Pending review</span></span></article>
-  <article class="stat stat--urgent"><span class="stat__label">Expiring within 7 days</span><strong class="stat__value stat__value--danger">8</strong><ul class="expiry-list" aria-label="Medicines expiring soon"><li>Amoxicillin 500 mg <span>2 days</span></li><li>Insulin 100 units/mL <span>4 days</span></li><li>Heparin 5,000 units <span>6 days</span></li></ul></article>
-  <article class="stat stat--urgent"><span class="stat__label">Overdue doses</span><strong class="stat__value stat__value--danger">5</strong><span class="stat__meta"><span class="status status--danger"><span class="status__dot" aria-hidden="true"></span>Requires attention</span></span></article>
-  <article class="stat"><span class="stat__label">Administered today</span><strong class="stat__value stat__value--success">146</strong><span class="stat__meta"><span class="status status--success"><span class="status__dot" aria-hidden="true"></span>Doses recorded</span></span></article>
+{% if error %}<div class="alert alert--danger"><div><p class="alert__body">{{ error }}</p></div></div>{% endif %}
+
+<section class="stat-row" aria-label="Pharmacy inventory summary">
+  <a class="stat" href="/medicines?stock_status=low"><span class="stat__label">Low Stock</span><strong class="stat__value stat__value--warning">{{ counts.low_stock|default(0) }}</strong><span class="stat__meta">At or below reorder level</span></a>
+  <a class="stat stat--urgent" href="/batches?expiry_status=expiring_7"><span class="stat__label">Expiring Within 7 Days</span><strong class="stat__value stat__value--danger">{{ counts.expiring_within_7_days|default(0) }}</strong><ul class="expiry-list" aria-label="Nearest expiring batches">{% for batch in expiring_soon[:3] %}<li>{{ batch.medicine_name }} <span>{{ batch.days_until_expiry }} day{{ '' if batch.days_until_expiry == 1 else 's' }}</span></li>{% else %}<li>No batches expiring soon</li>{% endfor %}</ul></a>
+  <a class="stat stat--urgent" href="/batches?expiry_status=expired"><span class="stat__label">Expired Batches</span><strong class="stat__value stat__value--danger">{{ counts.expired_batches|default(0) }}</strong><span class="stat__meta">Require review or write-off</span></a>
+  {% if is_manager %}<a class="stat" href="/purchase-orders?status=pending_approval"><span class="stat__label">Pending Approvals</span><strong class="stat__value stat__value--warning">{{ counts.pending_approvals|default(0) }}</strong><span class="stat__meta">Awaiting pharmacy manager review</span></a>{% endif %}
+</section>
+
+<section class="panel" aria-label="Agent status">{% include 'partials/agent_panel.html' %}</section>
+
+<section class="panel">
+  <header class="panel__header"><div><span class="page-header__eyebrow">Inventory review</span><h2 class="panel__title">Low Stock</h2></div><a class="panel__meta" href="/medicines?stock_status=low">View all low stock</a></header>
+  <div class="panel__body panel__body--flush"><div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Medicine</th><th>Stock quantity</th><th>Reorder level</th><th>Supplier</th></tr></thead><tbody>{% for medicine in low_stock %}<tr><td class="table__name">{{ medicine.name }}</td><td class="table__num">{{ medicine.stock_quantity }}</td><td class="table__num">{{ medicine.reorder_level }}</td><td>{{ medicine.supplier_name or '—' }}</td></tr>{% else %}<tr><td colspan="4">No active medicines are at or below their reorder level.</td></tr>{% endfor %}</tbody></table></div></div>
 </section>
 
 <section class="panel">
-  <header class="panel__header"><div><span class="page-header__eyebrow">Review queue</span><h2 class="panel__title">AI-generated flagged orders</h2></div><span class="panel__meta">Demo review data</span></header>
-  <div class="panel__body panel__body--flush"><div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Patient</th><th>Medicine</th><th>Scheduled time</th><th>Flag reason</th><th>Reviewer action</th></tr></thead><tbody>
-    <tr class="table-row--urgent"><td class="table__name">John Smith</td><td>Insulin 10 units</td><td class="table__num">Today, 08:00</td><td><span class="badge-danger">Overdue</span></td><td class="table__actions"><button class="btn btn-primary btn-compact" type="button" disabled>Approve</button> <button class="btn btn-danger btn-compact" type="button" disabled>Reject</button></td></tr>
-    <tr><td class="table__name">Mary Jones</td><td>Warfarin 5 mg</td><td class="table__num">Today, 09:00</td><td><span class="badge-warning">Dosage mismatch</span></td><td class="table__actions"><button class="btn btn-primary btn-compact" type="button" disabled>Approve</button> <button class="btn btn-danger btn-compact" type="button" disabled>Reject</button></td></tr>
-    <tr><td class="table__name">Ali Khan</td><td>Amoxicillin 500 mg</td><td class="table__num">Today, 10:30</td><td><span class="badge-danger">Allergy interaction</span></td><td class="table__actions"><button class="btn btn-primary btn-compact" type="button" disabled>Approve</button> <button class="btn btn-danger btn-compact" type="button" disabled>Reject</button></td></tr>
-    <tr><td class="table__name">Olivia Brown</td><td>Metoprolol 25 mg</td><td class="table__num">Today, 11:00</td><td><span class="badge-warning">Dose interval</span></td><td class="table__actions"><button class="btn btn-primary btn-compact" type="button" disabled>Approve</button> <button class="btn btn-danger btn-compact" type="button" disabled>Reject</button></td></tr>
-  </tbody></table></div></div>
+  <header class="panel__header"><div><span class="page-header__eyebrow">Expiry review</span><h2 class="panel__title">Expiring Soon</h2></div><a class="panel__meta" href="/batches?expiry_status=expiring_30">View batches within 30 days</a></header>
+  <div class="panel__body panel__body--flush"><div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Medicine</th><th>Batch</th><th>Expiry date</th><th>Quantity remaining</th><th>Days remaining</th></tr></thead><tbody>{% for batch in expiring_soon %}<tr{% if batch.days_until_expiry <= 7 %} class="table-row--urgent"{% endif %}><td class="table__name">{{ batch.medicine_name }}</td><td>{{ batch.batch_number }}</td><td>{{ batch.expiry_date }}</td><td class="table__num">{{ batch.quantity_remaining }}</td><td class="table__num">{{ batch.days_until_expiry }}</td></tr>{% else %}<tr><td colspan="5">No non-empty batches expire within 30 days.</td></tr>{% endfor %}</tbody></table></div></div>
+</section>
+
+<section class="panel">
+  <header class="panel__header"><div><span class="page-header__eyebrow">Inventory activity</span><h2 class="panel__title">Recent Movements</h2></div><a class="panel__meta" href="/movements">View all movements</a></header>
+  <div class="panel__body panel__body--flush"><div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Medicine</th><th>Type</th><th>Quantity</th><th>Performed by</th><th>Created at</th></tr></thead><tbody>{% for movement in recent_movements %}<tr><td class="table__name">{{ movement.medicine_name }}</td><td><span class="badge badge-neutral">{{ movement.movement_type }}</span></td><td class="table__num">{{ movement.quantity }}</td><td>{{ movement.performed_by or '—' }}</td><td>{{ movement.created_at }}</td></tr>{% else %}<tr><td colspan="5">No stock movements have been recorded.</td></tr>{% endfor %}</tbody></table></div></div>
 </section>
 {% endblock %}

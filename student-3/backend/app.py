@@ -9,10 +9,12 @@ from datetime import date, timedelta
 import urllib.error
 import urllib.request
 
-from flask import Flask, jsonify, request
+from flask import Flask, g, jsonify, request
 
 from services.ai_client import health_check
 from services.expiry_advisory import advisory as expiry_advisory
+from services.reorder_recommendation import advisory as reorder_advisory, candidates_for as reorder_candidates
+from services.scheduled_agent import ScheduledAgent, ORDER_LOCK, decision_record, timestamp
 
 DATABASE_SERVICE_URL = os.environ.get(
     "DATABASE_URL", os.environ.get("DATABASE_SERVICE_URL", "http://localhost:6300")
@@ -82,6 +84,30 @@ def database_request(path, method="GET", payload=None):
 
 def require_manager():
     return None if request.headers.get("X-HOMS-Role") == MANAGER_ROLE else fail("Pharmacy Manager role required", 403)
+
+
+@app.before_request
+def serialise_order_writes():
+    if request.method in {"POST", "PUT", "PATCH", "DELETE"} and (
+        request.path.startswith("/api/purchase-orders")
+        or request.path in {"/api/ai/suggest-reorder/create-drafts", "/api/stock/receive"}
+    ):
+        ORDER_LOCK.acquire()
+        g.order_lock_held = True
+
+
+@app.teardown_request
+def release_order_lock(_error):
+    if g.pop("order_lock_held", False):
+        ORDER_LOCK.release()
+
+
+agent = ScheduledAgent(database_request)
+
+
+@app.get("/api/agent/status")
+def agent_status():
+    return jsonify(agent.status())
 
 
 def validate_supplier(payload):
@@ -157,8 +183,18 @@ def medicines_for(search, category, status, stock_status, expiring_within):
         if days is not None and days < 0: raise ValueError
     except ValueError:
         raise ValueError("expiring_within must be a non-negative number of days") from None
-    medicines, suppliers = database_request("/medicines"), database_request("/suppliers")
-    rows = [enriched_medicine(m, suppliers, medicine_batches(m["medicine_id"])) for m in medicines]
+    # Fetch the complete batch ledger once, then group it locally. Calling the
+    # per-medicine endpoint here would make the 140-row list an N+1 request.
+    medicines, suppliers, all_batches = (
+        database_request("/medicines"),
+        database_request("/suppliers"),
+        database_request("/batches?include_expired=true&include_empty=true"),
+    )
+    batches_by_medicine = {}
+    for batch in all_batches:
+        batches_by_medicine.setdefault(batch["medicine_id"], []).append(batch)
+    rows = [enriched_medicine(m, suppliers, batches_by_medicine.get(m["medicine_id"], []))
+            for m in medicines]
     term = search.strip().casefold()
     deadline = date.today() + timedelta(days=days or 0) if days is not None else None
     return [m for m in rows if (status == "all" or m["status"] == status)
@@ -196,6 +232,64 @@ def health():
         return jsonify({"status": "degraded", "database_service": "unavailable"}), 503
 
 
+@app.get("/api/dashboard/summary")
+def dashboard_summary():
+    """Return dashboard data from five bulk database-service reads; no AI call."""
+    try:
+        medicines, suppliers, batches, orders, movements = (
+            database_request("/medicines"),
+            database_request("/suppliers"),
+            database_request("/batches?include_expired=true&include_empty=false"),
+            database_request("/purchase_orders"),
+            database_request("/stock_movements"),
+        )
+        today = date.today()
+        supplier_names = {supplier["supplier_id"]: supplier["name"] for supplier in suppliers}
+        medicine_names = {medicine["medicine_id"]: medicine["name"] for medicine in medicines}
+        active = [medicine for medicine in medicines if medicine.get("status") == "active"]
+        low_stock = sorted(
+            (medicine for medicine in active
+             if medicine.get("stock_quantity", 0) <= medicine.get("reorder_level", 0)),
+            key=lambda medicine: (
+                -(medicine.get("reorder_level", 0) - medicine.get("stock_quantity", 0)),
+                medicine["name"].casefold(),
+            ),
+        )
+        batch_rows = [{**batch, "days_until_expiry": (parse_date(batch["expiry_date"]) - today).days}
+                      for batch in batches]
+        expiring_soon = sorted(
+            (batch for batch in batch_rows if 0 <= batch["days_until_expiry"] <= 30),
+            key=lambda batch: (batch["expiry_date"], batch["batch_id"]),
+        )
+        recent_movements = sorted(movements, key=lambda movement: movement["created_at"], reverse=True)[:10]
+        return jsonify({
+            "counts": {
+                "active_medicines": len(active),
+                "low_stock": len(low_stock),
+                "expiring_within_30_days": sum(0 <= batch["days_until_expiry"] <= 30 for batch in batch_rows),
+                "expiring_within_7_days": sum(0 <= batch["days_until_expiry"] <= 7 for batch in batch_rows),
+                "expired_batches": sum(batch["days_until_expiry"] < 0 for batch in batch_rows),
+                "pending_approvals": sum(order.get("status") == "pending_approval" for order in orders),
+            },
+            "low_stock": [{"name": medicine["name"], "stock_quantity": medicine.get("stock_quantity", 0),
+                           "reorder_level": medicine.get("reorder_level", 0),
+                           "supplier_name": supplier_names.get(medicine.get("supplier_id"))}
+                          for medicine in low_stock[:10]],
+            "expiring_soon": [{"medicine_name": medicine_names.get(batch["medicine_id"], "Unknown medicine"),
+                                "batch_number": batch["batch_number"], "expiry_date": batch["expiry_date"],
+                                "quantity_remaining": batch["quantity_remaining"],
+                                "days_until_expiry": batch["days_until_expiry"]}
+                               for batch in expiring_soon[:10]],
+            "recent_movements": [{"medicine_name": medicine_names.get(movement["medicine_id"], "Unknown medicine"),
+                                  "movement_type": movement["movement_type"], "quantity": movement["quantity"],
+                                  "performed_by": movement.get("performed_by"), "created_at": movement["created_at"]}
+                                 for movement in recent_movements],
+            "agent": agent.status(),
+        })
+    except DatabaseServiceError as exc:
+        return fail(str(exc), exc.status)
+
+
 @app.get("/api/ai/health")
 def ai_health():
     """Expose a non-crashing operational check for the shared Ollama runtime."""
@@ -216,6 +310,62 @@ def ai_expiry_advisory():
         # Read-only orchestration: the advisory does not write batches, medicines, or movements.
         result, _input, _model_result = expiry_advisory(database_request, days_ahead)
         return jsonify(result)
+    except DatabaseServiceError as exc:
+        return fail(str(exc), exc.status)
+
+
+@app.post("/api/ai/suggest-reorder")
+def ai_suggest_reorder():
+    """Produce advisory-only reorder recommendations; never creates orders."""
+    try:
+        result, _input, _model_result = reorder_advisory(database_request)
+        return jsonify(result)
+    except DatabaseServiceError as exc:
+        return fail(str(exc), exc.status)
+
+
+@app.post("/api/ai/suggest-reorder/create-drafts")
+def create_reorder_drafts():
+    """Create manager-approved pending orders from freshly calculated candidates."""
+    if denied := require_manager():
+        return denied
+    payload = request.get_json(silent=True) or {}
+    suggestions = payload.get("suggestions")
+    if not isinstance(suggestions, list) or not suggestions:
+        return fail("At least one reorder suggestion is required", 400)
+    try:
+        candidate_by_id = {item["medicine_id"]: item for item in reorder_candidates(database_request)}
+        created = []
+        seen = set()
+        for suggestion in suggestions:
+            medicine_id = suggestion.get("medicine_id") if isinstance(suggestion, dict) else None
+            if not isinstance(medicine_id, int) or medicine_id in seen or medicine_id not in candidate_by_id:
+                return fail("One or more suggestions are no longer eligible", 409)
+            seen.add(medicine_id)
+            candidate = candidate_by_id[medicine_id]
+            if any(o["medicine_id"] == medicine_id and o["status"] in {"pending_approval", "approved", "ordered"}
+                   for o in database_request("/purchase_orders")):
+                return fail("This medicine already has an open or pending order", 409)
+            reasoning = str(suggestion.get("reasoning", "")).strip()
+            if f"{candidate['daily_usage_rate']:.2f}" not in reasoning or "units/day" not in reasoning:
+                reasoning = (f"Backend-calculated quantity {candidate['suggested_quantity']}; actual usage is "
+                             f"{candidate['daily_usage_rate']:.2f} units/day.")
+            created.append(database_request("/purchase_orders", "POST", {
+                "medicine_id": medicine_id,
+                "supplier_id": candidate["supplier_id"],
+                "quantity_ordered": candidate["suggested_quantity"],
+                "quantity_received": 0,
+                "unit_price": candidate["unit_price"],
+                "status": "pending_approval",
+                "created_by": request.headers.get("X-HOMS-Name", "Pharmacy Manager"),
+                "approved_by": None,
+                "ai_generated": 1,
+                "ai_reasoning": reasoning,
+                "decision_reason": None,
+                "created_at": date.today().isoformat() + "T00:00:00",
+                "expected_at": (date.today() + timedelta(days=candidate["lead_time_days"])).isoformat(),
+            }))
+        return jsonify({"created": created, "count": len(created)}), 201
     except DatabaseServiceError as exc:
         return fail(str(exc), exc.status)
 
@@ -362,12 +512,14 @@ def medicine_reactivate(medicine_id):
 @app.get("/api/stock/movements")
 def stock_movements():
     """Return the immutable stock ledger enriched from HTTP service data."""
-    from_value, to_value = request.args.get("from", ""), request.args.get("to", "")
+    # ``since`` is a convenient alias for clients requesting a trailing window.
+    from_value = request.args.get("from") or request.args.get("since", "")
+    to_value = request.args.get("to", "")
     try:
         from_date = parse_date(from_value) if from_value else None
         to_date = parse_date(to_value) if to_value else None
     except ValueError:
-        return fail("from and to must use YYYY-MM-DD format", 400)
+        return fail("from, since, and to must use YYYY-MM-DD format", 400)
     try:
         limit = int(request.args.get("limit", 100))
         if limit <= 0: raise ValueError
@@ -377,8 +529,12 @@ def stock_movements():
     if movement_type not in {"all", "receive", "issue", "adjust", "waste"}:
         return fail("movement_type must be receive, issue, adjust, waste, or all", 400)
     try:
-        movements, medicines = database_request("/stock_movements"), database_request("/medicines")
-        batches = {batch["batch_id"]: batch for medicine in medicines for batch in medicine_batches(medicine["medicine_id"])}
+        movements, medicines, batch_rows = (
+            database_request("/stock_movements"),
+            database_request("/medicines"),
+            database_request("/batches?include_expired=true&include_empty=true"),
+        )
+        batches = {batch["batch_id"]: batch for batch in batch_rows}
         medicine_by_id = {medicine["medicine_id"]: medicine for medicine in medicines}
         medicine_id = request.args.get("medicine_id", type=int)
         performed_by = request.args.get("performed_by", "").strip().casefold()
@@ -447,7 +603,8 @@ def write_off_batch(batch_id):
         # Separate HTTP calls cannot be transactional: write the ledger first so a failure never silently loses stock.
         database_request("/stock_movements","POST",{"medicine_id":batch["medicine_id"],"batch_id":batch_id,"movement_type":"waste","quantity":quantity,"reason":reason,"performed_by":request.headers.get("X-HOMS-Name","Pharmacy Manager"),"created_at":date.today().isoformat()+"T00:00:00"})
         database_request(f"/batches/{batch_id}","PUT",{"quantity_remaining":0})
-        all_batches=database_request(f"/batches?medicine_id={batch['medicine_id']}&include_expired=true&include_empty=true")
+        # Medicine stock excludes expired lots, including the expired lot just written off.
+        all_batches=database_request(f"/batches?medicine_id={batch['medicine_id']}&include_expired=false&include_empty=true")
         stock=sum(item["quantity_remaining"] for item in all_batches)
         database_request(f"/medicines/{batch['medicine_id']}","PUT",{**medicine,"stock_quantity":stock})
         return jsonify({"batch_id":batch_id,"medicine_name":medicine["name"],"quantity_written_off":quantity,"reason":reason,"stock_quantity":stock})
@@ -552,6 +709,8 @@ def transition(po_id,target,reason=""):
         order=database_request(f"/purchase_orders/{po_id}"); allowed={"approved":{"pending_approval"},"rejected":{"pending_approval"},"ordered":{"approved"},"cancelled":{"draft","pending_approval","approved","ordered"}}
         if order["status"] not in allowed[target]: return fail(f"Cannot set {target} from {order['status']}",409)
         if target in {"rejected","cancelled"} and not reason.strip(): return fail("decision_reason is required",400)
+        if target == "rejected" and order.get("ai_generated"):
+            reason = decision_record("REJECTED", reason)
         return jsonify(database_request(f"/purchase_orders/{po_id}","PUT",{"status":target,"approved_by":request.headers.get("X-HOMS-Name","Pharmacy Manager"),"decision_reason":reason or None}))
     except DatabaseServiceError as exc:return fail(str(exc),exc.status)
 @app.post("/api/purchase-orders/<int:po_id>/approve")
@@ -574,7 +733,12 @@ def validate_order(payload):
 @app.post("/api/purchase-orders")
 def po_create():
     if denied:=require_manager():return denied
-    try:return jsonify(database_request("/purchase_orders","POST",validate_order(request.get_json(silent=True) or {}))),201
+    try:
+        payload = validate_order(request.get_json(silent=True) or {})
+        if any(o["medicine_id"] == payload["medicine_id"] and o["status"] == "pending_approval"
+               for o in database_request("/purchase_orders")):
+            return fail("This medicine already has a pending proposal", 409)
+        return jsonify(database_request("/purchase_orders", "POST", payload)), 201
     except ValueError as exc:return fail(str(exc),400)
     except DatabaseServiceError as exc:return fail(str(exc),exc.status)
 @app.put("/api/purchase-orders/<int:po_id>")
@@ -583,10 +747,34 @@ def po_update(po_id):
     try:
         existing=database_request(f"/purchase_orders/{po_id}")
         if existing["status"] not in {"draft","pending_approval"}:return fail("Only draft or pending approval orders can be edited",409)
+        if existing.get("ai_generated"):
+            changes = request.get_json(silent=True) or {}
+            reason = str(changes.get("decision_reason") or "").strip()
+            if not reason:
+                return fail("A decision_reason is required when editing an AI proposal", 400)
+            # The database API cannot update quantity_ordered. Preserve the
+            # original as cancelled feedback and create a pending replacement.
+            payload = validate_order({**existing, "quantity_ordered": changes.get("quantity_ordered", existing["quantity_ordered"])})
+            payload.update(status="pending_approval", ai_generated=1,
+                           ai_reasoning=f"{existing.get('ai_reasoning') or ''} Human edit: {reason}",
+                           created_by=request.headers.get("X-HOMS-Name", "Pharmacy Manager"),
+                           approved_by=None, decision_reason=None, created_at=timestamp())
+            if any(o["po_id"] != po_id and o["medicine_id"] == existing["medicine_id"]
+                   and o["status"] in {"pending_approval", "approved", "ordered"}
+                   for o in database_request("/purchase_orders")):
+                return fail("This medicine already has another open or pending order", 409)
+            database_request(f"/purchase_orders/{po_id}", "PUT", {
+                "status": "cancelled", "decision_reason": decision_record("EDITED", reason, payload["quantity_ordered"]),
+                "approved_by": request.headers.get("X-HOMS-Name", "Pharmacy Manager"),
+            })
+            # Do not blindly retry POST or restore the old pending order if the
+            # response is lost: a replacement may already have been committed.
+            return jsonify(database_request("/purchase_orders", "POST", payload)), 201
         return jsonify(database_request(f"/purchase_orders/{po_id}","PUT",validate_order({**existing,**(request.get_json(silent=True) or {})})))
     except ValueError as exc:return fail(str(exc),400)
     except DatabaseServiceError as exc:return fail(str(exc),exc.status)
 
 
 if __name__ == "__main__":
+    agent.start()
     app.run(host="0.0.0.0", port=PORT, debug=False)

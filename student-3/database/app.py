@@ -733,6 +733,13 @@ def create_stock_movement():
         conn.close()
 
 
+@app.route("/stock_movements/<int:movement_id>", methods=["PUT", "DELETE"])
+def reject_stock_movement_mutation(movement_id):
+    """Stock movements are an immutable audit ledger."""
+    del movement_id
+    return json_error("Stock movements are append-only", 405)
+
+
 def validate_required_string(value, field_name):
     if value is None or str(value).strip() == "":
         raise ValueError(f"{field_name} is required")

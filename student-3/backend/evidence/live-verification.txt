@@ -1,0 +1,34 @@
+Scheduled agent live verification (UTC)
+AGENT_INTERVAL_SECONDS=60, AGENT_MAX_PROPOSALS=3, AGENT_BUDGET_CAP=500.00
+
+2026-09-06T06:20:40+00:00 | Cycle 001 | PLAN    | Gathering stock, 30-day usage, supplier lead times, open orders and near-expiry batches
+2026-09-06T06:20:40+00:00 | Cycle 001 | PLAN    | 18 candidates found; 3 past decisions loaded
+2026-09-06T06:20:40+00:00 | Cycle 001 | ACT     | Drafting 15 candidates using existing reorder service; 3 past decisions in prompt context
+2026-09-06T06:20:58+00:00 | Cycle 001 | ACT     | AI-reviewed reasoning with backend-calculated quantities and per-item fallback
+2026-09-06T06:20:58+00:00 | Cycle 001 | OBSERVE | Ondansetron 4mg — quantity 80; rule-based reasoning: Actual usage is 1.90 units/day, so maintain supply through the lead time.
+2026-09-06T06:20:58+00:00 | Cycle 001 | OBSERVE |   Open/pending order: PASS — none
+2026-09-06T06:20:58+00:00 | Cycle 001 | OBSERVE |   Cycle budget: PASS — $76.00 / $500.00
+2026-09-06T06:20:58+00:00 | Cycle 001 | OBSERVE |   Expiry risk: PASS — 84.8 units / 171.0 usable at 1.90 units/day; 90-day assumption, incoming expiry unknown
+2026-09-06T06:20:58+00:00 | Cycle 001 | OBSERVE |   Normal usage: PASS — 80 units / 114 maximum (60-day usage)
+2026-09-06T06:20:58+00:00 | Cycle 001 | OBSERVE |   Human feedback current: PASS — unchanged
+2026-09-06T06:20:58+00:00 | Cycle 001 | OBSERVE | SAVE #71 Ondansetron 4mg — pending_approval; cycle total $76.00
+2026-09-06T06:20:58+00:00 | Cycle 001 | ADAPT   | Cycle complete: 3 proposals created, 11 Observe rejections; next interval 60s
+
+2026-09-06T06:21:57+00:00 | VERIFY | Cycle 2 complete: created=2, Observe rejected=10, source=ai, thread_alive=True
+2026-09-06T06:21:57+00:00 | VERIFY | PASS: second cycle retained every first-cycle proposal and created no duplicate medicine
+2026-09-06T06:21:57+00:00 | VERIFY | Human rejected #71 Ondansetron 4mg x80: Quantity is too high for the demand review; maximum 40 units to reduce waste.
+
+2026-09-06T06:23:01+00:00 | Cycle 003 | PLAN    | Ondansetron 4mg: rejection applied, quantity 80 -> 40; REJECTED 2026-09-06T06:21:57+00:00 | Quantity is too high for the demand review; maximum 40 units to reduce waste.
+2026-09-06T06:23:01+00:00 | Cycle 003 | ACT     | Drafting candidates using existing reorder service; past decisions in prompt context
+2026-09-06T06:23:01+00:00 | Cycle 003 | OBSERVE | SAVE #76 Ondansetron 4mg — pending_approval; cycle total $38.00
+2026-09-06T06:23:01+00:00 | Cycle 003 | ADAPT   | Learned from #71: REJECTED 2026-09-06T06:21:57+00:00 | Quantity is too high for the demand review; maximum 40 units to reduce waste.
+2026-09-06T06:23:01+00:00 | VERIFY | PASS: Adapt produced #76 Ondansetron 4mg x40, changed from x80; reason retained
+2026-09-06T06:23:01+00:00 | VERIFY | Human edit retained #72 as cancelled and created pending replacement #78 x10
+
+2026-09-06T06:23:01+00:00 | VERIFY | Stopped isolated Ollama mid-run; shared homs-ollama was untouched
+2026-09-06T06:23:40+00:00 | Cycle 004 | ACT     | Rule-based path: Ollama is unreachable
+2026-09-06T06:23:40+00:00 | Cycle 004 | OBSERVE | Open/pending order, budget, expiry risk and normal usage checks logged for every draft
+2026-09-06T06:23:40+00:00 | Cycle 004 | ADAPT   | 4 past rejections and 1 edits considered for next Act prompt
+2026-09-06T06:23:40+00:00 | VERIFY | Cycle 4 complete: created=0, Observe rejected=11, source=fallback, thread_alive=True
+2026-09-06T06:23:40+00:00 | VERIFY | PASS: next cycle completed on rule-based fallback with the agent thread still alive
+2026-09-06T06:23:40+00:00 | VERIFY | PASS: real frontend approval queue contains revised proposal with AI badge; Agent panel reports Enabled, 60-second interval and cycle counts; reject/edit controls render
