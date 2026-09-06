@@ -368,15 +368,15 @@ def get_staff_details(staff_id):
 
 # ============================================================
 # Room & Bed service  (student-4-backend, real routes under /api)
-#   GET  {ROOM_BED_API_URL}/rooms/availability?care_category=Surgical&bed_status=available
-#        -> {"success": true, "data": [ <bed row>, ... ], "error": null}
-#           each bed row: {"bed_id", "bed_status", "care_category", ...}
+#   GET  {ROOM_BED_API_URL}/theatres/board
+#        -> {"success": true, "data": {"theatres": [ ... ]}, "error": null}
+#           each theatre: {"bed_id", "room_status", "bed_status", ...}
 #   POST {ROOM_BED_API_URL}/arrangements
 #        accepted -> HTTP 201 {"success": true, "data": <arrangement>, "error": null}
 #        refused  -> HTTP 409 {"success": false, "data": null, "error": "<reason>"}
 # ============================================================
-_SURGICAL_CARE_CATEGORY = "Surgical"
 _AVAILABLE_BED_STATUS = "available"
+_AVAILABLE_ROOM_STATUS = "Available"
 
 
 def get_available_theatre():
@@ -396,16 +396,9 @@ def get_available_theatre():
     if _use_stubs():
         return _stub_get_available_theatre("ok")
 
-    url = f"{ROOM_BED_API_URL}/rooms/availability"
+    url = f"{ROOM_BED_API_URL}/theatres/board"
     try:
-        r = requests.get(
-            url,
-            params={
-                "care_category": _SURGICAL_CARE_CATEGORY,
-                "bed_status": _AVAILABLE_BED_STATUS,
-            },
-            timeout=TIMEOUT,
-        )
+        r = requests.get(url, timeout=TIMEOUT)
     except requests.RequestException:
         return _unavailable("Room & Bed")
     if not r.ok:
@@ -417,49 +410,38 @@ def get_available_theatre():
             f"GET {url} returned a non-object body ({type(body).__name__}); "
             f"expected the {{'success', 'data', 'error'}} envelope"
         )
-    if "data" not in body:
-        # e.g. an older assumed shape of {"beds": [...]}
-        if "beds" in body:
-            return _mismatch(
-                f"GET {url} returned {{'beds': [...]}}; expected the team "
-                f"envelope with the bed list under 'data'"
-            )
+    if body.get("success") is not True:
         return _mismatch(
-            f"GET {url} response has no 'data' key; got keys {sorted(body)}"
+            f"GET {url} returned no success:true envelope; got keys {sorted(body)}"
         )
-
-    beds = body["data"]
-    if not isinstance(beds, list):
+    if not isinstance(body.get("data"), dict):
         return _mismatch(
-            f"GET {url} 'data' is {type(beds).__name__}, not a list of bed rows"
+            f"GET {url} response has no object 'data' payload; got keys {sorted(body)}"
         )
-    if not beds:
-        # Call worked, nothing surgical + available.
+    theatres = body["data"].get("theatres")
+    if not isinstance(theatres, list):
+        return _mismatch(
+            f"GET {url} data.theatres is {type(theatres).__name__}, not a list"
+        )
+    if not theatres:
         return _ok(bed_id=None, reason="none_available")
 
-    # Pick the first row that is actually an available surgical bed. The query
-    # already filters, but re-check so a filtering change on their side surfaces
-    # instead of dispatching a non-available bed.
-    for row in beds:
+    # The board is the authoritative theatre view. Only an available room with
+    # an available theatre bed is eligible; generic Surgical beds are excluded.
+    for row in theatres:
         if not isinstance(row, dict) or "bed_id" not in row:
             row_desc = sorted(row) if isinstance(row, dict) else repr(row)
             return _mismatch(
-                f"GET {url} returned a bed row without a 'bed_id' field; row "
+                f"GET {url} returned a theatre row without a 'bed_id' field; row "
                 f"was {row_desc}"
             )
-        status_ok = row.get("bed_status", _AVAILABLE_BED_STATUS) == _AVAILABLE_BED_STATUS
-        category_ok = row.get("care_category", _SURGICAL_CARE_CATEGORY) == _SURGICAL_CARE_CATEGORY
-        if status_ok and category_ok:
+        if (
+            row.get("room_status") == _AVAILABLE_ROOM_STATUS
+            and row.get("bed_status") == _AVAILABLE_BED_STATUS
+        ):
             return _ok(bed_id=row["bed_id"])
 
-    # Rows came back but none is an available surgical bed - the filter did not
-    # do what its parameters say.
-    return _mismatch(
-        f"GET {url}?care_category={_SURGICAL_CARE_CATEGORY}"
-        f"&bed_status={_AVAILABLE_BED_STATUS} returned {len(beds)} row(s) but "
-        f"none had bed_status={_AVAILABLE_BED_STATUS!r} and "
-        f"care_category={_SURGICAL_CARE_CATEGORY!r}"
-    )
+    return _ok(bed_id=None, reason="none_available")
 
 
 def notify_room_and_bed(surgery_request, surgeon_name, bed_id):

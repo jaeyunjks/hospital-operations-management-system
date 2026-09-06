@@ -6,9 +6,8 @@ Every outbound dependency is mocked, so NO socket is ever opened:
 
   * services.database_client                       -> a MagicMock (row CRUD; port 6200)
   * services.external_services.get_available_theatre
-    services.external_services.get_staff_details
     services.external_services.notify_room_and_bed  -> patched per test on the
-    route module. surgery_requests.py imports these three names directly into
+    route module. surgery_requests.py imports these names directly into
     its own namespace (`from services.external_services import ...`), so the
     patch target is `su_module.<name>`, not the services module.
   * services.admission_validation.require_active_for_create -> likewise imported
@@ -21,7 +20,7 @@ route is @require_role("doctor")); doctor_id on the stored row is always taken
 from that user, never from the request body.
 
 Scenarios covered (one test each, per the task):
-  1. Successful creation - theatre found, surgeon name resolved, Room & Bed
+  1. Successful creation - theatre found, authenticated doctor name used, Room & Bed
      accepts; the local row is created ONCE with the resolved bed_id and kept.
   2. Blocked creation (409) when the admission is inactive - nothing is written,
      and theatre selection / dispatch are never reached.
@@ -156,23 +155,6 @@ def theatre_none_available(monkeypatch):
 
 
 @pytest.fixture
-def surgeon_name_resolves(monkeypatch):
-    """
-    get_staff_details -> a staff record with a usable full_name, so the route
-    can resolve doctor_id -> surgeon_name for the Room & Bed dispatch.
-    """
-    stub = MagicMock(
-        name="get_staff_details",
-        return_value={
-            "ok": True,
-            "staff": {"staff_id": DOCTOR["id"], "full_name": "Dr Daniel Chen"},
-        },
-    )
-    monkeypatch.setattr(su_module, "get_staff_details", stub)
-    return stub
-
-
-@pytest.fixture
 def dispatch_accepted(monkeypatch):
     """notify_room_and_bed -> Room & Bed accepted the arrangement."""
     stub = MagicMock(
@@ -230,14 +212,13 @@ def test_successful_creation_stores_resolved_bed_id_and_keeps_row(
     as_doctor,
     admission_active,
     theatre_available,
-    surgeon_name_resolves,
     dispatch_accepted,
 ):
     """
     Happy path end to end:
       * admission is active (gate passes),
       * get_available_theatre returns bed_id 9001,
-      * get_staff_details resolves the surgeon's name,
+      * the authenticated Student 2 doctor name is used as the surgeon name,
       * notify_room_and_bed accepts.
 
     Asserts:
@@ -268,7 +249,7 @@ def test_successful_creation_stores_resolved_bed_id_and_keeps_row(
     assert stored["doctor_id"] == DOCTOR["id"]
     assert stored["status"] == "scheduled"
 
-    # Dispatch received the resolved bed_id and a surgeon NAME, not an id.
+    # Dispatch received the authenticated clinician name, not a Student 5 id.
     dispatch_args = su_module.notify_room_and_bed.call_args.args
     assert dispatch_args[1] == "Dr Daniel Chen"   # surgeon_name
     assert dispatch_args[2] == STUB_BED_ID        # bed_id
@@ -286,7 +267,6 @@ def test_creation_blocked_409_when_admission_inactive(
     as_doctor,
     admission_inactive,
     theatre_available,
-    surgeon_name_resolves,
     dispatch_accepted,
 ):
     """
@@ -322,7 +302,6 @@ def test_no_theatre_available_returns_409_and_writes_nothing(
     as_doctor,
     admission_active,
     theatre_none_available,
-    surgeon_name_resolves,
     dispatch_accepted,
 ):
     """
@@ -360,7 +339,6 @@ def test_room_and_bed_refusal_rolls_back_the_created_row(
     as_doctor,
     admission_active,
     theatre_available,
-    surgeon_name_resolves,
     dispatch_refused,
 ):
     """

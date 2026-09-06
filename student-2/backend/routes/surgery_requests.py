@@ -21,8 +21,9 @@ POST does more work than a plain create, and the ORDER of that work matters:
     3. Theatre     - get_available_theatre() must return a real bed_id.
                      No theatre free  -> 409, NOTHING is written.
                      Lookup failed    -> 503, NOTHING is written.
-    4. Surgeon     - resolve doctor_id -> surgeon NAME via get_staff_details()
-                     (Room & Bed wants a name, not an id).
+    4. Surgeon     - use the authenticated Student 2 doctor's own name
+                     (Room & Bed wants a name, not an id). Student 2 and
+                     Student 5 IDs are not assumed to share an identity map.
     5. Local row   - create_surgery_request() with the RESOLVED bed_id. This is
                      the first and only local write, and it only happens once a
                      bed_id is confirmed.
@@ -87,7 +88,6 @@ from services.admission_validation import (
 )
 from services.external_services import (
     get_available_theatre,
-    get_staff_details,
     notify_room_and_bed,
 )
 
@@ -124,12 +124,6 @@ def _pick(body, fields):
     return {key: body[key] for key in fields if key in body}
 
 
-def _current():
-    """(role, user_id) for the acting user."""
-    user = get_current_user() or {}
-    return user.get("role"), user.get("id")
-
-
 def _requests_for_admission(admission_id):
     """
     Every surgery_requests row whose admission_id matches, and nothing else.
@@ -153,7 +147,8 @@ def _requests_for_admission(admission_id):
 @surgery_requests_bp.post("/")
 @require_role("doctor")  # nurses / specialists / non-clinical roles rejected here
 def create_surgery_request():
-    role, user_id = _current()
+    current_user = get_current_user() or {}
+    user_id = current_user.get("id")
     body = request.get_json(silent=True) or {}
 
     # --- basic payload validation -----------------------------------------
@@ -211,34 +206,14 @@ def create_surgery_request():
             reason=theatre.get("reason", "none_available"),
         )
 
-    # --- step 4: resolve the surgeon's NAME from doctor_id --------------
-    # Room & Bed expects a name, not an id. Do this before the local write so a
-    # bad/unreachable Staff & Shift service doesn't leave an orphan row behind.
-    staff_result = get_staff_details(user_id)
-    if not staff_result.get("ok"):
-        # not_found -> the acting doctor_id isn't a known staff member (400-ish
-        # config problem); unavailable -> Staff & Shift is down (503).
-        if staff_result.get("error") == "not_found":
-            return _error(
-                "Scheduling doctor (id {}) is not a known staff member - cannot "
-                "resolve a surgeon name for Room & Bed.".format(user_id),
-                400,
-            )
-        return _error(
-            "Staff & Shift Management is unavailable - could not resolve the "
-            "surgeon's name. The surgery request was not created; please try "
-            "again shortly.",
-            503,
-            reason=staff_result.get("error", "unavailable"),
-        )
-
-    surgeon_name = (staff_result.get("staff") or {}).get("full_name")
+    # --- step 4: use Student 2's authenticated clinician identity --------
+    # There is no shared clinician-to-Staff-&-Shift identity mapping API, so a
+    # Student 2 doctor_id must never be treated as a Student 5 staff_id.
+    surgeon_name = current_user.get("name")
     if not surgeon_name:
-        # Staff record exists but carries no usable name - don't dispatch a
-        # nameless surgeon to Room & Bed.
         return _error(
-            "Staff record for doctor id {} has no name - cannot dispatch to "
-            "Room & Bed.".format(user_id),
+            "Authenticated doctor id {} has no name - cannot dispatch to Room "
+            "& Bed.".format(user_id),
             502,
         )
 
