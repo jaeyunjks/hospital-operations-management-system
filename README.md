@@ -1,19 +1,18 @@
 # Hospital Operations Management System
 
-> **Status:** Repository initialisation / scaffolding only. No feature business
-> logic, CRUD endpoints, database schemas, authentication, or AI workflows are
-> implemented yet.
+> **Status:** Release 0 integrated application. Student 1–5 feature services,
+> shared UI, Ollama AI-Mode, agentic workflow, Docker Compose, and CI workflows
+> are implemented.
 
 ## Project
 
 **Hospital Operations Management System** — an integrated Agentic AI application
 supporting hospital operational coordination.
 
-The system is developed as **five independently owned student feature sets**.
-Each feature set contains an **HTMX frontend microservice**, a **Flask
-backend/API microservice**, and a **SQLite database microservice**. These are
-later integrated into a single team application with a shared UI and shared AI
-mode.
+The system comprises **five independently owned student feature sets**. Each
+feature set contains an **HTMX frontend microservice**, a **Flask backend/API
+microservice**, and a **SQLite database microservice**, integrated through the
+root Docker Compose application, shared HTMX homepage, and shared AI-Mode.
 
 ## Purpose
 
@@ -21,13 +20,13 @@ Provide an integrated, Agentic-AI-assisted platform that supports the day-to-day
 operational coordination of a hospital across admissions, clinical staffing,
 medication administration, bed management, and shift management.
 
-## Planned feature areas
+## Release 0 feature areas
 
 | # | Feature area | Owner |
 |---|-----------------------------------------|-------------------------|
 | 1 | Patient & Admission Management          | _Jesse_ — see `docs/architecture/feature-ownership.md`_ |
-| 2 | Doctor / Clinical Staff Management      | _Jordan_ |
-| 3 | Medication Administration Records       | _Tirth_ |
+| 2 | Clinical Staff Management               | _Jordan_ |
+| 3 | Pharmacy & Medication Inventory Management | _Tirth_ |
 | 4 | Room & Bed Management                   | _Asher_ |
 | 5 | Staff / Shift Management                | _Yafie_ |
 
@@ -62,7 +61,8 @@ Cloud deployment will eventually target **Microsoft Azure** (preferred service:
 - **AI-Mode** backed by **Ollama** + an approved open-source LLM.
 - Agentic loop: **Plan → Act → Observe → Adapt**.
 - **Docker Compose** integration of all services.
-- Individual **CI/CD** workflow per student.
+- Individual **CI/CD** workflows: `student-1.yml` through `student-5.yml`.
+- Whole-group integration workflow: `integration-ci.yml`.
 
 ### Release 1
 - **MCP** (Model Context Protocol) services.
@@ -84,13 +84,13 @@ The layout is **aligned with the ASD 2026 prescribed repository structure**.
 
 ```
 .
-├── .github/workflows/     # CI/CD placeholders: student-1..5 + integration + deployment
+├── .github/workflows/     # Student CI workflows and whole-group integration CI
 ├── docs/                  # Architecture, reports, and per-release documentation
-├── shared/                # Shared frontend (index, CSS/UI theme) and configuration
+├── shared/                # Shared HTMX homepage, CSS/UI theme, and configuration
 ├── student-1 .. student-5/ # Independently owned feature microservice sets
-├── ai-services/           # AI-Mode, MCP, RAG, and Multi-Agent services (later releases)
+├── ai-services/           # Shared Release 0 agentic loop and future AI services
 ├── scripts/               # Build / test / deploy helper scripts
-└── docker-compose.yml     # Root orchestration scaffold
+└── docker-compose.yml     # Root integrated application orchestration
 ```
 
 Each `student-N/` contains `frontend/`, `backend/`, `database/`, `tests/`, and a
@@ -98,42 +98,40 @@ Each `student-N/` contains `frontend/`, `backend/`, `database/`, `tests/`, and a
 
 ## Team members and feature ownership
 
-_Placeholder — to be completed by the team._
-
-| Student | Name | GitHub handle | Feature area |
-|---------|------|---------------|--------------|
-| student-1 | _TBD_ | _TBD_ | _TBD_ |
-| student-2 | _TBD_ | _TBD_ | _TBD_ |
-| student-3 | _TBD_ | _TBD_ | _TBD_ |
-| student-4 | _TBD_ | _TBD_ | _TBD_ |
-| student-5 | _TBD_ | _TBD_ | _TBD_ |
+| Student | Owner | Feature area |
+|---------|-------|--------------|
+| student-1 | Jesse | Patient & Admission Management |
+| student-2 | Jordan | Clinical Staff Management |
+| student-3 | Tirth | Pharmacy & Medication Inventory Management |
+| student-4 | Asher | Room & Bed Management |
+| student-5 | Yafie | Staff & Shift Management |
 
 ## Local setup
 
-_Placeholder — to be completed as services are implemented._
+Prerequisites: Docker & Docker Compose, Git, and Ollama with the models named
+by the active service configuration available locally. If a configured model is
+unavailable, AI-ready features use their documented deterministic fallback
+instead of genuine model inference.
 
-Prerequisites (planned): Python 3.x, Docker & Docker Compose, Git, and Ollama
-with an approved model pulled locally. A typical future workflow will be:
+Start the integrated Release 0 application from the repository root:
 
 ```bash
-# Clone
-git clone <repo-url>
-cd hospital-operations-management-system
-
-# (Later) bring up the integrated stack
-docker compose up --build
+docker compose up -d --build
+docker compose ps
 ```
+
+Open the shared homepage at [http://localhost:3000](http://localhost:3000).
 
 ## Architecture
 
 See [`docs/architecture/`](docs/architecture/). High-level: five independent
-microservice sets integrated behind a shared frontend and a shared AI mode, with
-AI services (Ollama, and later MCP / RAG / Multi-Agent) provided centrally under
-[`ai-services/`](ai-services/).
+microservice sets integrated behind a shared frontend and shared Ollama AI-Mode,
+with the Release 0 Plan → Act → Observe → Adapt workflow under
+[`ai-services/agentic-loop/`](ai-services/agentic-loop/).
 
 ## Development workflow
 
-_Placeholder — to be agreed by the team._ Suggested starting points:
+Development is organised by feature ownership:
 
 - Each student works within their own `student-N/` directory.
 - Shared assets under `shared/` change via team agreement / review.
