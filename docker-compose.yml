@@ -339,11 +339,13 @@ services:
       HOST: 0.0.0.0
       PORT: 5100
       DATABASE_URL: http://student-1-database:6100
+      OLLAMA_URL: http://ollama:11434
       FLASK_DEBUG: 0
     depends_on:
       - student-1-database
     ports:
       - "5100:5100"
+    networks: [default, homs-net]
     command: python -m backend.app
 
   student-1-frontend:
