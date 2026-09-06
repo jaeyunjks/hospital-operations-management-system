@@ -32,50 +32,88 @@ propagate):
                                 -> {"ok": False, "error": "refused", "detail": ...}
         timeout / connection    -> {"ok": False, "error": "unavailable"}
 
-STUB STATUS:
-  All five functions are STUBS returning canned responses. Some of the target
-  services do not exist yet. Each stub is written so the real HTTP call can be
-  dropped in later WITHOUT changing the function signature or return shape -
-  see the `# REAL CALL:` comment in each one.
+CONTRACT-MISMATCH HANDLING (added when the real calls were wired in):
+  The contracts below were built against local stubs and earlier team
+  discussion, never against the other members' services actually running. When
+  a real response does NOT match the assumed shape - a field renamed, a status
+  code different, an envelope wrapped one level deeper - these functions do NOT
+  silently coerce or guess. They return
 
-  The stubs for get_available_theatre and notify_room_and_bed read module-level
-  simulation switches so the failure / empty / refusal branches can be exercised
-  by tests before the real calls exist.
+        {"ok": False, "error": "contract_mismatch", "detail": "<precise reason>"}
+
+  naming exactly which field / status code / URL disagreed, so the mismatch is
+  fixed at the source (either their service or this module's assumption) rather
+  than papered over here. "contract_mismatch" is a distinct error kind from
+  "unavailable" / "not_found" / "refused"; callers that don't recognise it fall
+  through to their own defensive branch and surface the detail.
+
+STUB STATUS:
+  Every function can still run as a STUB returning canned responses, so this
+  feature is developable when a teammate's service is down or not built yet.
+  The real HTTP call is the default; the stub path is opt-in:
+
+    * USE_EXTERNAL_STUBS=true                 - ALL five functions use stubs
+    * SIMULATE_THEATRE       in {ok,empty,down}   - forces get_available_theatre
+                                                   onto the stub with that outcome
+    * SIMULATE_ROOM_DISPATCH in {ok,refused,down} - forces notify_room_and_bed
+                                                   onto the stub with that outcome
+
+  The original stub bodies are preserved verbatim below as _stub_* functions;
+  nothing was deleted.
 """
 
 import os
 
-# import requests  # uncomment when the real HTTP calls are wired in
+import requests
 
 # ------------------------------------------------------------
 # Base URLs - env-overridable for Docker, localhost default for local dev.
-# Kept here now so switching a stub to a real call is a one-line change.
+#
+# In the shared docker-compose.yml these are set to the other members'
+# docker-compose SERVICE NAMES (never localhost), e.g.
+#   PATIENT_ADMISSION_API_URL=http://student-1-backend:5100/api
+#   STAFF_SHIFT_API_URL=http://student5-backend:5500/api
+#   ROOM_BED_API_URL=http://student-4-backend:5400/api
+#
+# The localhost defaults below are for running THIS backend outside compose
+# with the three dependencies port-forwarded on their real API ports. They are
+# only ever reached when USE_EXTERNAL_STUBS is false AND compose did not set the
+# variable - in practice the stub path is what a lone local dev uses.
 # ------------------------------------------------------------
 PATIENT_ADMISSION_API_URL = os.environ.get(
-    "PATIENT_ADMISSION_API_URL", "http://localhost:6100"
+    "PATIENT_ADMISSION_API_URL", "http://localhost:5100/api"
 ).rstrip("/")
 STAFF_SHIFT_API_URL = os.environ.get(
-    "STAFF_SHIFT_API_URL", "http://localhost:6300"
+    "STAFF_SHIFT_API_URL", "http://localhost:5500/api"
 ).rstrip("/")
 ROOM_BED_API_URL = os.environ.get(
-    "ROOM_BED_API_URL", "http://localhost:6400"
+    "ROOM_BED_API_URL", "http://localhost:5400/api"
 ).rstrip("/")
 
-# Per-request timeout (seconds), connect + read. Used by the real calls later.
+# Per-request timeout (seconds), connect + read.
 TIMEOUT = 10
 
 
 # ============================================================
-# STUB SIMULATION SWITCHES
-# Flip these (in a test, via monkeypatch, or by env var) to force the
-# non-happy paths while everything is still a stub.
-#   "ok"      - normal success
-#   "empty"   - get_available_theatre: call worked, no theatre free
-#   "refused" - notify_room_and_bed: Room & Bed returns 409 success:false
-#   "down"    - simulate a timeout / connection failure
+# STUB CONTROLS
+#   USE_EXTERNAL_STUBS - master switch: "true" routes every function to its
+#                        _stub_* body. Use when developing offline or when a
+#                        teammate's service is down.
+#   SIMULATE_THEATRE / SIMULATE_ROOM_DISPATCH - per-call override that ALSO
+#                        forces the stub, and picks which branch it exercises:
+#     "ok"      - normal success
+#     "empty"   - get_available_theatre: call worked, no theatre free
+#     "refused" - notify_room_and_bed: Room & Bed returns 409 success:false
+#     "down"    - simulate a timeout / connection failure
+#   Leaving SIMULATE_* unset (the default) means the real call is used unless
+#   USE_EXTERNAL_STUBS is true.
 # ============================================================
-SIMULATE_THEATRE = os.environ.get("SIMULATE_THEATRE", "ok")
-SIMULATE_ROOM_DISPATCH = os.environ.get("SIMULATE_ROOM_DISPATCH", "ok")
+def _use_stubs():
+    return os.environ.get("USE_EXTERNAL_STUBS", "false").strip().lower() == "true"
+
+
+SIMULATE_THEATRE = os.environ.get("SIMULATE_THEATRE", "").strip().lower()
+SIMULATE_ROOM_DISPATCH = os.environ.get("SIMULATE_ROOM_DISPATCH", "").strip().lower()
 
 
 # ------------------------------------------------------------
@@ -97,32 +135,448 @@ def _unavailable(service):
     }
 
 
+def _mismatch(detail):
+    """
+    Contract-mismatch envelope - the real response did not match what this
+    module was built to expect. `detail` names exactly what disagreed.
+    """
+    return {"ok": False, "error": "contract_mismatch", "detail": detail}
+
+
+def _json_or_none(response):
+    """Parse a response body as JSON, or None if it isn't JSON."""
+    try:
+        return response.json()
+    except ValueError:
+        return None
+
+
 # ============================================================
-# Patient & Admission service
+# Patient & Admission service  (student-1-backend, real routes under /api)
+#   GET {PATIENT_ADMISSION_API_URL}/patients/<id>
+#   GET {PATIENT_ADMISSION_API_URL}/admissions/<id>
+# Both return the BARE table row (no envelope, no wrapper key) on hit.
 # ============================================================
 def get_patient_details(patient_id):
     """
-    Validate a patient_id and get display details (name, DOB, etc.).
+    Validate a patient_id and get display details.
 
     Returns:
-      {"ok": True, "patient": {...}}          - patient exists
-      {"ok": False, "error": "not_found"}     - no such patient
-      {"ok": False, "error": "unavailable"}   - service down / timed out
+      {"ok": True, "patient": {...}}                - patient exists
+      {"ok": False, "error": "not_found"}           - no such patient
+      {"ok": False, "error": "unavailable"}         - service down / timed out
+      {"ok": False, "error": "contract_mismatch", "detail": ...}
+                                                    - response shape unexpected
 
-    # REAL CALL:
-    #   try:
-    #       r = requests.get(
-    #           f"{PATIENT_ADMISSION_API_URL}/patients/{patient_id}",
-    #           timeout=TIMEOUT,
-    #       )
-    #   except requests.RequestException:
-    #       return _unavailable("Patient & Admission")
-    #   if r.status_code == 404:
-    #       return {"ok": False, "error": "not_found"}
-    #   if not r.ok:
-    #       return _unavailable("Patient & Admission")
-    #   return _ok(patient=r.json())
+    NOTE: not currently called by any route in this service (admission_validation
+    .py makes its own admission-status call). Kept to contract so a future caller
+    can rely on the signature and return shape.
     """
+    if _use_stubs():
+        return _stub_get_patient_details(patient_id)
+
+    url = f"{PATIENT_ADMISSION_API_URL}/patients/{patient_id}"
+    try:
+        r = requests.get(url, timeout=TIMEOUT)
+    except requests.RequestException:
+        return _unavailable("Patient & Admission")
+
+    body = _json_or_none(r)
+
+    # Miss. Patient & Admission's DataError handler returns HTTP 400 (not 404)
+    # with {"error": "...not found"} for an unknown id, so treat either a 404 or
+    # a 400-whose-body-says-not-found as "not_found". Anything else 4xx/5xx is a
+    # real failure.
+    if r.status_code == 404:
+        return {"ok": False, "error": "not_found"}
+    if r.status_code == 400 and isinstance(body, dict) and "not found" in str(
+        body.get("error", "")
+    ).lower():
+        return {"ok": False, "error": "not_found"}
+    if not r.ok:
+        return _unavailable("Patient & Admission")
+
+    if not isinstance(body, dict):
+        return _mismatch(
+            f"GET {url} returned {r.status_code} with a non-object body "
+            f"({type(body).__name__}); expected the patient row as a JSON object"
+        )
+    # Patient & Admission serves the bare row on this route. If it is instead
+    # wrapped ({"data": {...}} or {"patient": {...}}), say so rather than guess.
+    if "patient_id" not in body:
+        if "data" in body or "patient" in body:
+            return _mismatch(
+                f"GET {url} wrapped the patient in "
+                f"'{'data' if 'data' in body else 'patient'}'; expected the bare "
+                f"row (a top-level 'patient_id')"
+            )
+        return _mismatch(
+            f"GET {url} response has no 'patient_id' field; got keys "
+            f"{sorted(body)}"
+        )
+    return _ok(patient=body)
+
+
+def get_admission_status(admission_id):
+    """
+    Validate an admission_id and get its current status + display details.
+
+    admission_status is one of: 'Pending', 'Active', 'Cancelled', 'Completed'.
+
+    Returns:
+      {"ok": True, "admission": {...}}              - admission exists
+      {"ok": False, "error": "not_found"}           - no such admission
+      {"ok": False, "error": "unavailable"}         - service down / timed out
+      {"ok": False, "error": "contract_mismatch", "detail": ...}
+                                                    - response shape unexpected
+    """
+    if _use_stubs():
+        return _stub_get_admission_status(admission_id)
+
+    url = f"{PATIENT_ADMISSION_API_URL}/admissions/{admission_id}"
+    try:
+        r = requests.get(url, timeout=TIMEOUT)
+    except requests.RequestException:
+        return _unavailable("Patient & Admission")
+
+    body = _json_or_none(r)
+
+    if r.status_code == 404:
+        return {"ok": False, "error": "not_found"}
+    if r.status_code == 400 and isinstance(body, dict) and "not found" in str(
+        body.get("error", "")
+    ).lower():
+        return {"ok": False, "error": "not_found"}
+    if not r.ok:
+        return _unavailable("Patient & Admission")
+
+    if not isinstance(body, dict):
+        return _mismatch(
+            f"GET {url} returned {r.status_code} with a non-object body "
+            f"({type(body).__name__}); expected the admission row as a JSON object"
+        )
+    if "admission_status" not in body:
+        if isinstance(body.get("data"), dict) and "admission_status" in body["data"]:
+            return _mismatch(
+                f"GET {url} wrapped the admission in 'data'; expected the bare "
+                f"row with a top-level 'admission_status'"
+            )
+        if isinstance(body.get("admission"), dict):
+            return _mismatch(
+                f"GET {url} wrapped the admission in 'admission'; expected the "
+                f"bare row with a top-level 'admission_status'"
+            )
+        return _mismatch(
+            f"GET {url} response has no 'admission_status' field; got keys "
+            f"{sorted(body)}"
+        )
+
+    valid = {"Pending", "Active", "Cancelled", "Completed"}
+    if body["admission_status"] not in valid:
+        return _mismatch(
+            f"GET {url} returned admission_status="
+            f"{body['admission_status']!r}; expected one of {sorted(valid)}"
+        )
+    return _ok(admission=body)
+
+
+# ============================================================
+# Staff & Shift service  (student5-backend, real routes under /api)
+#   GET {STAFF_SHIFT_API_URL}/staff/<id>
+# Success body: {"staff": {"staff_id", "name", "role", "department",
+#                          "specialisation", ...}}  (record wrapped in "staff")
+# Miss: HTTP 404 {"error": "not_found", "message": ...}
+# doctor_id, nurse_id, specialist_id are ALL staff_id values - this one
+# function validates and looks up any of them.
+# ============================================================
+def get_staff_details(staff_id):
+    """
+    Validate a staff_id and get display details.
+    Also used to resolve doctor_id -> surgeon name before a surgery dispatch;
+    the caller reads result["staff"]["full_name"].
+
+    Returns:
+      {"ok": True, "staff": {...}}                  - staff member exists.
+            The dict ALWAYS carries a "full_name" key (mapped from the source
+            "name" field) so callers relying on the agreed contract keep working.
+      {"ok": False, "error": "not_found"}           - no such staff member
+      {"ok": False, "error": "unavailable"}         - service down / timed out
+      {"ok": False, "error": "contract_mismatch", "detail": ...}
+                                                    - response shape unexpected
+    """
+    if _use_stubs():
+        return _stub_get_staff_details(staff_id)
+
+    url = f"{STAFF_SHIFT_API_URL}/staff/{staff_id}"
+    try:
+        r = requests.get(url, timeout=TIMEOUT)
+    except requests.RequestException:
+        return _unavailable("Staff & Shift")
+
+    if r.status_code == 404:
+        return {"ok": False, "error": "not_found"}
+    if r.status_code == 403:
+        # Staff & Shift gates /staff/<id> behind require_self_or_manager; a
+        # header-less caller is treated as Staff Manager, so a 403 here means
+        # that default changed. Surface it - do not treat it as "not_found".
+        return _mismatch(
+            f"GET {url} returned 403; this call sends no identity header and "
+            f"relied on Staff & Shift defaulting a header-less caller to Staff "
+            f"Manager. That default appears to have changed."
+        )
+    if not r.ok:
+        return _unavailable("Staff & Shift")
+
+    body = _json_or_none(r)
+    if not isinstance(body, dict):
+        return _mismatch(
+            f"GET {url} returned {r.status_code} with a non-object body "
+            f"({type(body).__name__}); expected {{'staff': {{...}}}}"
+        )
+
+    # Real service wraps the record in "staff". Accept either the wrapped form
+    # or a bare row, but name the shape if it is neither.
+    if isinstance(body.get("staff"), dict):
+        record = body["staff"]
+    elif "staff_id" in body:
+        record = body
+    else:
+        return _mismatch(
+            f"GET {url} response is neither {{'staff': {{...}}}} nor a bare row "
+            f"with 'staff_id'; got keys {sorted(body)}"
+        )
+
+    # The caller needs result["staff"]["full_name"]. Staff & Shift's field is
+    # "name". Map it; if NEITHER is present, that is a contract mismatch to
+    # report, not a nameless surgeon to dispatch.
+    name = record.get("full_name") or record.get("name")
+    if not name:
+        return _mismatch(
+            f"GET {url} staff record for id {staff_id} has neither 'full_name' "
+            f"nor 'name'; got keys {sorted(record)}. A surgeon name cannot be "
+            f"resolved for Room & Bed."
+        )
+
+    normalised = dict(record)
+    normalised["full_name"] = name
+    # Also expose the agreed 'specialty' alias if only 'specialisation' is set,
+    # so any caller using the old field name still works.
+    if "specialty" not in normalised and "specialisation" in normalised:
+        normalised["specialty"] = normalised["specialisation"]
+    return _ok(staff=normalised)
+
+
+# ============================================================
+# Room & Bed service  (student-4-backend, real routes under /api)
+#   GET  {ROOM_BED_API_URL}/rooms/availability?care_category=Surgical&bed_status=available
+#        -> {"success": true, "data": [ <bed row>, ... ], "error": null}
+#           each bed row: {"bed_id", "bed_status", "care_category", ...}
+#   POST {ROOM_BED_API_URL}/arrangements
+#        accepted -> HTTP 201 {"success": true, "data": <arrangement>, "error": null}
+#        refused  -> HTTP 409 {"success": false, "data": null, "error": "<reason>"}
+# ============================================================
+_SURGICAL_CARE_CATEGORY = "Surgical"
+_AVAILABLE_BED_STATUS = "available"
+
+
+def get_available_theatre():
+    """
+    Pick a surgical theatre bed for a new surgery request.
+
+    THREE distinct outcomes (the calling route branches on these):
+      {"ok": True,  "bed_id": <int>}                      - theatre chosen
+      {"ok": True,  "bed_id": None, "reason": "none_available"}
+                                                          - call worked, nothing free
+      {"ok": False, "error": "unavailable"}               - call failed
+      {"ok": False, "error": "contract_mismatch", "detail": ...}
+                                                          - response shape unexpected
+    """
+    if SIMULATE_THEATRE in {"ok", "empty", "down"}:
+        return _stub_get_available_theatre(SIMULATE_THEATRE)
+    if _use_stubs():
+        return _stub_get_available_theatre("ok")
+
+    url = f"{ROOM_BED_API_URL}/rooms/availability"
+    try:
+        r = requests.get(
+            url,
+            params={
+                "care_category": _SURGICAL_CARE_CATEGORY,
+                "bed_status": _AVAILABLE_BED_STATUS,
+            },
+            timeout=TIMEOUT,
+        )
+    except requests.RequestException:
+        return _unavailable("Room & Bed")
+    if not r.ok:
+        return _unavailable("Room & Bed")
+
+    body = _json_or_none(r)
+    if not isinstance(body, dict):
+        return _mismatch(
+            f"GET {url} returned a non-object body ({type(body).__name__}); "
+            f"expected the {{'success', 'data', 'error'}} envelope"
+        )
+    if "data" not in body:
+        # e.g. an older assumed shape of {"beds": [...]}
+        if "beds" in body:
+            return _mismatch(
+                f"GET {url} returned {{'beds': [...]}}; expected the team "
+                f"envelope with the bed list under 'data'"
+            )
+        return _mismatch(
+            f"GET {url} response has no 'data' key; got keys {sorted(body)}"
+        )
+
+    beds = body["data"]
+    if not isinstance(beds, list):
+        return _mismatch(
+            f"GET {url} 'data' is {type(beds).__name__}, not a list of bed rows"
+        )
+    if not beds:
+        # Call worked, nothing surgical + available.
+        return _ok(bed_id=None, reason="none_available")
+
+    # Pick the first row that is actually an available surgical bed. The query
+    # already filters, but re-check so a filtering change on their side surfaces
+    # instead of dispatching a non-available bed.
+    for row in beds:
+        if not isinstance(row, dict) or "bed_id" not in row:
+            row_desc = sorted(row) if isinstance(row, dict) else repr(row)
+            return _mismatch(
+                f"GET {url} returned a bed row without a 'bed_id' field; row "
+                f"was {row_desc}"
+            )
+        status_ok = row.get("bed_status", _AVAILABLE_BED_STATUS) == _AVAILABLE_BED_STATUS
+        category_ok = row.get("care_category", _SURGICAL_CARE_CATEGORY) == _SURGICAL_CARE_CATEGORY
+        if status_ok and category_ok:
+            return _ok(bed_id=row["bed_id"])
+
+    # Rows came back but none is an available surgical bed - the filter did not
+    # do what its parameters say.
+    return _mismatch(
+        f"GET {url}?care_category={_SURGICAL_CARE_CATEGORY}"
+        f"&bed_status={_AVAILABLE_BED_STATUS} returned {len(beds)} row(s) but "
+        f"none had bed_status={_AVAILABLE_BED_STATUS!r} and "
+        f"care_category={_SURGICAL_CARE_CATEGORY!r}"
+    )
+
+
+def notify_room_and_bed(surgery_request, surgeon_name, bed_id):
+    """
+    Dispatch a scheduled surgery to Room & Bed as a room arrangement.
+
+    The caller MUST resolve surgeon_name and bed_id before calling this.
+
+    Outcomes the calling route branches on:
+      {"ok": True,  "arrangement": {...}}       - Room & Bed accepted it
+      {"ok": False, "error": "refused",  "detail": <str>}
+            - HTTP 409 + success:false. A real refusal: a time clash, a theatre
+              under maintenance, a theatre out of service. NOT a transport error.
+      {"ok": False, "error": "unavailable"}     - timeout / connection failure
+      {"ok": False, "error": "contract_mismatch", "detail": ...}
+            - response shape / status unexpected
+
+    Room & Bed's POST /arrangements requires 'start_time' (not 'scheduled_at'),
+    plus 'procedure_name' and 'surgeon_name' for a Surgery. The surgery_request
+    row from this service carries 'scheduled_at' and 'procedure_type', so both
+    are re-mapped here to the names Room & Bed expects.
+    """
+    if SIMULATE_ROOM_DISPATCH in {"ok", "refused", "down"}:
+        return _stub_notify_room_and_bed(
+            SIMULATE_ROOM_DISPATCH, surgery_request, surgeon_name, bed_id
+        )
+    if _use_stubs():
+        return _stub_notify_room_and_bed(
+            "ok", surgery_request, surgeon_name, bed_id
+        )
+
+    # scheduled_at -> start_time, procedure_type -> procedure_name.
+    start_time = surgery_request.get("scheduled_at")
+    procedure_name = surgery_request.get("procedure_type")
+    if not start_time:
+        return _mismatch(
+            "surgery_request has no 'scheduled_at' to map to Room & Bed's "
+            "required 'start_time'"
+        )
+    if not procedure_name:
+        return _mismatch(
+            "surgery_request has no 'procedure_type' to map to Room & Bed's "
+            "required 'procedure_name'"
+        )
+
+    payload = {
+        "purpose": "Surgery",
+        "procedure_name": procedure_name,
+        "surgeon_name": surgeon_name,
+        "bed_id": bed_id,
+        "patient_id": surgery_request.get("patient_id"),
+        "admission_id": surgery_request.get("admission_id"),
+        "start_time": start_time,
+    }
+
+    url = f"{ROOM_BED_API_URL}/arrangements"
+    try:
+        r = requests.post(url, json=payload, timeout=TIMEOUT)
+    except requests.RequestException:
+        return _unavailable("Room & Bed")
+
+    body = _json_or_none(r)
+
+    # 409 + success:false is a real refusal, checked explicitly and kept
+    # distinct from a transport failure.
+    if r.status_code == 409:
+        if isinstance(body, dict) and body.get("success") is False:
+            detail = body.get("error") or body.get("message") or body.get("detail")
+            if not detail:
+                return _mismatch(
+                    f"POST {url} returned 409 success:false but carried no "
+                    f"'error' message to surface; body keys {sorted(body)}"
+                )
+            return {"ok": False, "error": "refused", "detail": detail}
+        got = sorted(body) if isinstance(body, dict) else repr(body)
+        return _mismatch(
+            f"POST {url} returned 409 but the body is not "
+            f"{{'success': false, 'error': '<reason>'}}; got {got}"
+        )
+
+    if not r.ok:
+        # Any other non-2xx: we can't tell if the arrangement was recorded.
+        # Treat as unavailable (route deletes its local row and reports an
+        # uncertain outcome), but attach the status so it's diagnosable.
+        return {
+            "ok": False,
+            "error": "unavailable",
+            "detail": f"Room & Bed returned HTTP {r.status_code} for POST {url}",
+        }
+
+    if not isinstance(body, dict):
+        return _mismatch(
+            f"POST {url} returned {r.status_code} with a non-object body "
+            f"({type(body).__name__}); expected the {{'success','data','error'}} "
+            f"envelope"
+        )
+    if body.get("success") is not True:
+        return _mismatch(
+            f"POST {url} returned {r.status_code} without success:true; body "
+            f"keys {sorted(body)}"
+        )
+    if "data" not in body:
+        return _mismatch(
+            f"POST {url} success response has no 'data' (the created "
+            f"arrangement); got keys {sorted(body)}"
+        )
+    return _ok(arrangement=body["data"])
+
+
+# ============================================================
+# ============================================================
+# ORIGINAL STUBS - preserved verbatim, reachable via USE_EXTERNAL_STUBS=true
+# or the SIMULATE_* switches. Not called unless a stub path is selected above.
+# Each returns exactly the same envelope shape as its real counterpart.
+# ============================================================
+# ============================================================
+def _stub_get_patient_details(patient_id):
     # --- STUB: pretend every patient_id 1..9999 exists -------------------
     if not isinstance(patient_id, int) or patient_id <= 0:
         return {"ok": False, "error": "not_found"}
@@ -136,33 +590,7 @@ def get_patient_details(patient_id):
     )
 
 
-def get_admission_status(admission_id):
-    """
-    Validate an admission_id and get its current status + display details.
-
-    admission_status is one of: 'Pending', 'Active', 'Cancelled', 'Completed'.
-    The caller decides what to do with it (admission_validation.py holds the
-    "must be Active to create" rule - this function only reports).
-
-    Returns:
-      {"ok": True, "admission": {...}}        - admission exists
-      {"ok": False, "error": "not_found"}     - no such admission
-      {"ok": False, "error": "unavailable"}   - service down / timed out
-
-    # REAL CALL:
-    #   try:
-    #       r = requests.get(
-    #           f"{PATIENT_ADMISSION_API_URL}/admissions/{admission_id}",
-    #           timeout=TIMEOUT,
-    #       )
-    #   except requests.RequestException:
-    #       return _unavailable("Patient & Admission")
-    #   if r.status_code == 404:
-    #       return {"ok": False, "error": "not_found"}
-    #   if not r.ok:
-    #       return _unavailable("Patient & Admission")
-    #   return _ok(admission=r.json())
-    """
+def _stub_get_admission_status(admission_id):
     # --- STUB: every positive admission_id is "Active" -------------------
     if not isinstance(admission_id, int) or admission_id <= 0:
         return {"ok": False, "error": "not_found"}
@@ -176,35 +604,7 @@ def get_admission_status(admission_id):
     )
 
 
-# ============================================================
-# Staff & Shift service
-# doctor_id, nurse_id, specialist_id are ALL staff_id values - this one
-# function validates and looks up any of them.
-# ============================================================
-def get_staff_details(staff_id):
-    """
-    Validate a staff_id and get display details (name, role, specialty).
-    Also used to resolve doctor_id -> surgeon_name before a surgery dispatch.
-
-    Returns:
-      {"ok": True, "staff": {...}}            - staff member exists
-      {"ok": False, "error": "not_found"}     - no such staff member
-      {"ok": False, "error": "unavailable"}   - service down / timed out
-
-    # REAL CALL:
-    #   try:
-    #       r = requests.get(
-    #           f"{STAFF_SHIFT_API_URL}/staff/{staff_id}",
-    #           timeout=TIMEOUT,
-    #       )
-    #   except requests.RequestException:
-    #       return _unavailable("Staff & Shift")
-    #   if r.status_code == 404:
-    #       return {"ok": False, "error": "not_found"}
-    #   if not r.ok:
-    #       return _unavailable("Staff & Shift")
-    #   return _ok(staff=r.json())
-    """
+def _stub_get_staff_details(staff_id):
     # --- STUB: every positive staff_id exists --------------------------
     if not isinstance(staff_id, int) or staff_id <= 0:
         return {"ok": False, "error": "not_found"}
@@ -219,106 +619,24 @@ def get_staff_details(staff_id):
     )
 
 
-# ============================================================
-# Room & Bed service
-# ============================================================
-def get_available_theatre():
-    """
-    Pick a surgical theatre bed for a new surgery request.
-
-    Room & Bed's POST /api/arrangements will not accept a booking without a
-    bed_id, so theatre selection happens here first via
-      GET /api/rooms/availability?care_category=Surgical&bed_status=available
-    and we choose one of the returned beds.
-
-    THREE distinct outcomes (the calling route branches on these):
-      {"ok": True,  "bed_id": <int>}                      - theatre chosen
-      {"ok": True,  "bed_id": None, "reason": "none_available"}
-                                                          - call worked, nothing free
-      {"ok": False, "error": "unavailable"}               - call failed
-
-    # REAL CALL:
-    #   try:
-    #       r = requests.get(
-    #           f"{ROOM_BED_API_URL}/api/rooms/availability",
-    #           params={"care_category": "Surgical", "bed_status": "available"},
-    #           timeout=TIMEOUT,
-    #       )
-    #   except requests.RequestException:
-    #       return _unavailable("Room & Bed")
-    #   if not r.ok:
-    #       return _unavailable("Room & Bed")
-    #   beds = r.json().get("beds", [])
-    #   if not beds:
-    #       return _ok(bed_id=None, reason="none_available")
-    #   return _ok(bed_id=beds[0]["bed_id"])   # simple pick-first policy
-    """
-    # --- STUB: behaviour driven by SIMULATE_THEATRE -------------------
-    if SIMULATE_THEATRE == "down":
+def _stub_get_available_theatre(mode):
+    # --- STUB: behaviour driven by `mode` (ok | empty | down) ----------
+    if mode == "down":
         # Simulated timeout / connection failure.
         return _unavailable("Room & Bed")
-    if SIMULATE_THEATRE == "empty":
+    if mode == "empty":
         # Simulated: availability lookup succeeded but no theatre is free.
         return _ok(bed_id=None, reason="none_available")
     # Simulated success: a theatre bed was available.
     return _ok(bed_id=9001)  # canned stub bed_id
 
 
-def notify_room_and_bed(surgery_request, surgeon_name, bed_id):
-    """
-    Dispatch a scheduled surgery to Room & Bed as a room_arrangements row.
-
-    Confirmed contract - fold the surgery_requests row into an arrangement:
-      purpose        = "Surgery"
-      procedure_name = surgery_request["procedure_type"]
-      surgeon_name   = <resolved from doctor_id via get_staff_details>  (a NAME,
-                       not an ID - Room & Bed expects a name)
-      bed_id         = <resolved earlier by get_available_theatre>
-    plus patient_id / admission_id / scheduled_at for context.
-
-    The caller MUST resolve surgeon_name and bed_id before calling this.
-
-    Outcomes the calling route branches on:
-      {"ok": True,  "arrangement": {...}}       - Room & Bed accepted it
-      {"ok": False, "error": "refused",  "detail": <str>}
-            - HTTP 409 with success:false in the body. A real refusal:
-              a time clash, a theatre under maintenance, a theatre out of
-              service. NOT a transport error - checked explicitly.
-      {"ok": False, "error": "unavailable"}     - timeout / connection failure
-
-    # REAL CALL:
-    #   payload = {
-    #       "purpose": "Surgery",
-    #       "procedure_name": surgery_request["procedure_type"],
-    #       "surgeon_name": surgeon_name,
-    #       "bed_id": bed_id,
-    #       "patient_id": surgery_request["patient_id"],
-    #       "admission_id": surgery_request["admission_id"],
-    #       "scheduled_at": surgery_request["scheduled_at"],
-    #   }
-    #   try:
-    #       r = requests.post(
-    #           f"{ROOM_BED_API_URL}/api/arrangements",
-    #           json=payload,
-    #           timeout=TIMEOUT,
-    #       )
-    #   except requests.RequestException:
-    #       return _unavailable("Room & Bed")
-    #   # 409 + success:false is a real refusal, not a transport failure.
-    #   if r.status_code == 409:
-    #       body = r.json() if r.content else {}
-    #       if body.get("success") is False:
-    #           return {"ok": False, "error": "refused",
-    #                   "detail": body.get("message", "Room & Bed refused the booking")}
-    #   if not r.ok:
-    #       return _unavailable("Room & Bed")
-    #   return _ok(arrangement=r.json())
-    """
-    # --- STUB: behaviour driven by SIMULATE_ROOM_DISPATCH -------------
-    if SIMULATE_ROOM_DISPATCH == "down":
+def _stub_notify_room_and_bed(mode, surgery_request, surgeon_name, bed_id):
+    # --- STUB: behaviour driven by `mode` (ok | refused | down) --------
+    if mode == "down":
         # Simulated timeout / connection failure.
         return _unavailable("Room & Bed")
-    if SIMULATE_ROOM_DISPATCH == "refused":
+    if mode == "refused":
         # Simulated 409 success:false - clash / maintenance / out of service.
         return {
             "ok": False,

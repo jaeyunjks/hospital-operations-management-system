@@ -266,9 +266,21 @@ services:
       context: ./student-2/backend
     environment:
       DATABASE_API_URL: http://student-2-database:6200
+      # Cross-service calls (backend/services/external_services.py). Point at the
+      # other members' docker-compose SERVICE NAMES, not localhost. The base URLs
+      # include the /api prefix each of those services mounts its routes under:
+      #   Patient & Admission  GET  {base}/patients/<id>, {base}/admissions/<id>
+      #   Staff & Shift        GET  {base}/staff/<id>
+      #   Room & Bed           GET  {base}/rooms/availability , POST {base}/arrangements
+      # PATIENT_ADMISSION_API_URL is also read by services/admission_validation.py,
+      # which appends /admissions/<id> to it.
       PATIENT_ADMISSION_API_URL: "${student2_PATIENT_ADMISSION_API_URL:-http://student-1-backend:5100/api}"
       STAFF_SHIFT_API_URL: "${student2_STAFF_SHIFT_API_URL:-http://student5-backend:5500/api}"
-      ROOM_BED_API_URL: "${student2_ROOM_BED_API_URL:-http://student-4-backend:5400}"
+      ROOM_BED_API_URL: "${student2_ROOM_BED_API_URL:-http://student-4-backend:5400/api}"
+      # "true" forces external_services.py onto its local stubs so this feature
+      # stays developable when a teammate's service is down or not yet built.
+      # Default "false": make the real HTTP calls above.
+      USE_EXTERNAL_STUBS: "${student2_USE_EXTERNAL_STUBS:-false}"
       OLLAMA_BASE_URL: "${student2_OLLAMA_BASE_URL:-http://ollama:11434}"
       OLLAMA_MODEL: "${student2_OLLAMA_MODEL:-llama3.1:8b}"
       OLLAMA_TIMEOUT: "${student2_OLLAMA_TIMEOUT:-8}"
