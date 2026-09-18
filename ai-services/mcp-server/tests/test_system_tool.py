@@ -35,16 +35,18 @@ def assert_validation_error(result, reason):
     assert result.structured_content["error"]["details"]["reason"] == reason
 
 
-def test_registers_exactly_homs_echo():
+def test_registers_echo_and_ward_occupancy():
     async def discover():
         async with Client(server_module.mcp_server) as client:
             return await client.list_tools()
 
     listing = asyncio.run(discover())
 
-    assert [tool.name for tool in listing.tools] == ["homs_echo"]
+    assert [tool.name for tool in listing.tools] == ["homs_echo", "homs_ward_occupancy_status"]
     assert listing.tools[0].input_schema["required"] == ["message"]
     assert listing.tools[0].input_schema["properties"]["message"]["maxLength"] == 200
+    assert listing.tools[1].input_schema["additionalProperties"] is False
+    assert "required" not in listing.tools[1].input_schema
 
 
 def test_valid_request_returns_structured_success():

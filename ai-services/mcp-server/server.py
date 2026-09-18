@@ -9,9 +9,11 @@ Run from the repository root with::
 from __future__ import annotations
 
 import json
+import math
 import os
 from dataclasses import dataclass
 from typing import Any, Dict
+from urllib.parse import urlsplit
 
 import uvicorn
 from mcp.server import Server, ServerRequestContext
@@ -25,13 +27,15 @@ from mcp.types import (
 )
 
 from tools.system import MAX_MESSAGE_LENGTH, TOOL_NAME, homs_echo, validation_error
-
+from tools import ward_occupancy
 
 SERVER_NAME = "HOMS Shared MCP Server"
 SERVER_VERSION = "0.1.0"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8000
 DEFAULT_PATH = "/mcp"
+DEFAULT_STUDENT4_API_URL = "http://127.0.0.1:5400/api"
+DEFAULT_STUDENT4_API_TIMEOUT = 10.0
 
 
 @dataclass(frozen=True)
@@ -41,6 +45,8 @@ class ServerConfig:
     host: str
     port: int
     path: str
+    student4_api_url: str
+    student4_api_timeout: float
 
 
 def load_config() -> ServerConfig:
@@ -62,7 +68,48 @@ def load_config() -> ServerConfig:
     if not path.startswith("/") or path == "/":
         raise ValueError("HOMS_MCP_PATH must start with '/' and name an endpoint")
 
-    return ServerConfig(host=host, port=port, path=path.rstrip("/"))
+    api_url = (
+        os.environ.get("HOMS_STUDENT4_API_URL", DEFAULT_STUDENT4_API_URL)
+        .strip()
+        .rstrip("/")
+    )
+    try:
+        parsed = urlsplit(api_url)
+        valid_url = (
+            parsed.scheme in ("http", "https")
+            and parsed.hostname
+            and parsed.username is None
+            and parsed.password is None
+            and not parsed.query
+            and not parsed.fragment
+        )
+        if parsed.port is not None and not 1 <= parsed.port <= 65535:
+            valid_url = False
+    except ValueError:
+        valid_url = False
+    if not valid_url:
+        raise ValueError(
+            "HOMS_STUDENT4_API_URL must be an HTTP(S) API base URL without credentials, query or fragment"
+        )
+
+    try:
+        api_timeout = float(
+            os.environ.get(
+                "HOMS_STUDENT4_API_TIMEOUT", str(DEFAULT_STUDENT4_API_TIMEOUT)
+            )
+        )
+    except ValueError as error:
+        raise ValueError("HOMS_STUDENT4_API_TIMEOUT must be a number") from error
+    if not math.isfinite(api_timeout) or not 0.1 <= api_timeout <= 30:
+        raise ValueError("HOMS_STUDENT4_API_TIMEOUT must be between 0.1 and 30 seconds")
+
+    return ServerConfig(
+        host=host,
+        port=port,
+        path=path.rstrip("/"),
+        student4_api_url=api_url,
+        student4_api_timeout=api_timeout,
+    )
 
 
 HOMS_ECHO_TOOL = Tool(
@@ -124,13 +171,37 @@ HOMS_ECHO_TOOL = Tool(
 )
 
 
+HOMS_WARD_OCCUPANCY_TOOL = Tool(
+    name=ward_occupancy.TOOL_NAME,
+    title="HOMS Ward Occupancy Status",
+    description=(
+        "Read the current privacy-safe ward occupancy snapshot from Student 4's "
+        "published backend API. Optional ward is an exact canonical name, not a "
+        "Student 5 department. Does not assign beds, infer staffing or forecast occupancy."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "ward": {
+                "type": ["string", "null"],
+                "minLength": 1,
+                "maxLength": ward_occupancy.MAX_WARD_LENGTH,
+                "description": "Exact Student 4 ward name; omitted/null returns all wards.",
+            }
+        },
+        "additionalProperties": False,
+    },
+    output_schema=ward_occupancy.OUTPUT_SCHEMA,
+)
+
+
 async def list_tools(
     ctx: ServerRequestContext,
     params: PaginatedRequestParams | None,
 ) -> ListToolsResult:
-    """Advertise exactly the neutral connectivity tool."""
+    """Advertise the connectivity and controlled cross-service read tools."""
 
-    return ListToolsResult(tools=[HOMS_ECHO_TOOL])
+    return ListToolsResult(tools=[HOMS_ECHO_TOOL, HOMS_WARD_OCCUPANCY_TOOL])
 
 
 def _result(payload: Dict[str, Any]) -> CallToolResult:
@@ -153,6 +224,25 @@ async def call_tool(
     params: CallToolRequestParams,
 ) -> CallToolResult:
     """Dispatch a tool call and preserve the structured result contract."""
+
+    if params.name == ward_occupancy.TOOL_NAME:
+        arguments = params.arguments or {}
+        unexpected = sorted(set(arguments) - {"ward"})
+        if unexpected:
+            return _result(
+                ward_occupancy.tool_error(
+                    "validation_error",
+                    "Only the optional 'ward' argument is accepted.",
+                    {"reason": "unexpected_fields", "fields": unexpected},
+                )
+            )
+        return _result(
+            await ward_occupancy.homs_ward_occupancy_status(
+                arguments.get("ward"),
+                api_url=config.student4_api_url,
+                timeout=config.student4_api_timeout,
+            )
+        )
 
     if params.name != TOOL_NAME:
         return _result(
