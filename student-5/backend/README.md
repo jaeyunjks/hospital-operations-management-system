@@ -21,6 +21,16 @@ Database Microservice      <- student-5/database/service.py (port 6500)
 SQLite
 ```
 
+The optional Release 1 path is read-only and crosses the shared MCP boundary:
+
+```
+Student 5 backend -> shared local MCP -> Student 4 Room & Bed API
+```
+
+It never calls Student 4 directly or reads Student 4 data files. The shared
+MCP server runs outside Student 5 containers and is not required for normal
+Release 0 operation.
+
 The backend holds the application logic and validation. **It never opens the
 SQLite file** — every read and write crosses the HTTP boundary in
 `database_client.py`. If the database service is down, the backend returns
@@ -40,6 +50,8 @@ SQLite file** — every read and write crosses the HTTP boundary in
 | `routes/assignment_routes.py` | Assignment endpoints |
 | `routes/coverage_routes.py` | Staffing coverage endpoint |
 | `routes/ai_routes.py` | AI-ready endpoints (structure only) |
+| `routes/mcp_routes.py` | Manager-only ward occupancy MCP gateway |
+| `services/mcp_client.py` | Narrow shared-MCP adapter |
 | `services/*.py` | Application logic, separated from routing and storage |
 
 ## Endpoints
@@ -218,6 +230,19 @@ service, so it is reviewable and citable as an artefact in its own right.
 |--------|------|---------|
 | GET | `/health` | Liveness, including database service reachability |
 | GET | `/api` | Machine-readable endpoint index |
+
+### Optional shared MCP integration
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MCP_ENABLED` | `false` | Enables the independent read-only MCP path |
+| `MCP_SERVER_URL` | `http://127.0.0.1:8000/mcp` | Local shared MCP Streamable HTTP endpoint |
+| `MCP_TIMEOUT` | `15` | Overall MCP operation deadline in seconds |
+
+`GET /api/mcp/ward-occupancy` calls only
+`homs_ward_occupancy_status`. Its optional `ward` query parameter is an exact
+Student 4 ward name; Student 5 does not infer department-to-ward mappings.
+MCP availability is intentionally excluded from `/health`.
 
 ## Requirements
 

@@ -2131,6 +2131,17 @@ def create_app() -> Flask:
         """
         return _render_summary(request.args.get("date") or _today(), narrate=True)
 
+    @app.get("/partials/ward-occupancy")
+    def ward_occupancy_partial():
+        """Load the independent, read-only Room & Bed snapshot via Student 5."""
+        try:
+            occupancy = api_client.get_ward_occupancy()
+        except (BackendUnavailableError, BackendError) as error:
+            return render_template("partials/ward_occupancy.html",
+                                   occupancy=None, error=str(error), initial=False)
+        return render_template("partials/ward_occupancy.html",
+                               occupancy=occupancy, error=None, initial=False)
+
     return app
 
 

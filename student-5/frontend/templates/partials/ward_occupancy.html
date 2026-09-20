@@ -1,0 +1,76 @@
+{# The persistent #ward-occupancy-panel wrapper lives in the overview shell.
+   This partial replaces only its contents, so Retry never re-arms itself. #}
+{% if initial %}
+<div class="stack stack--sm">
+  <p class="u-muted">Load the current aggregate ward occupancy snapshot when needed.</p>
+  <div class="suggest-actions">
+    <button class="btn-secondary btn-compact" type="button"
+            hx-get="/partials/ward-occupancy"
+            hx-target="#ward-occupancy-panel" hx-swap="innerHTML"
+            hx-indicator="#loading-indicator" hx-disabled-elt="this"
+            aria-controls="ward-occupancy-panel">Load ward occupancy</button>
+  </div>
+</div>
+
+{% elif error %}
+<div class="stack stack--sm">
+  <div class="alert alert--danger" role="alert">
+    <div>
+      <p class="alert__title">Ward occupancy unavailable</p>
+      <p class="alert__body">{{ error }}</p>
+    </div>
+  </div>
+  <div class="suggest-actions">
+    <button class="btn-secondary btn-compact" type="button"
+            hx-get="/partials/ward-occupancy"
+            hx-target="#ward-occupancy-panel" hx-swap="innerHTML"
+            hx-indicator="#loading-indicator" hx-disabled-elt="this"
+            aria-controls="ward-occupancy-panel">Retry</button>
+  </div>
+</div>
+
+{% else %}
+{% set data = occupancy.data %}
+<div class="stack stack--sm">
+  <dl class="ward-occupancy-totals">
+    <div><dt>Total beds</dt><dd>{{ data.totals.total_beds }}</dd></div>
+    <div><dt>Occupied</dt><dd>{{ data.totals.occupied }}</dd></div>
+    <div><dt>Available</dt><dd>{{ data.totals.available }}</dd></div>
+    <div><dt>Reserved</dt><dd>{{ data.totals.reserved }}</dd></div>
+    <div><dt>Maintenance</dt><dd>{{ data.totals.maintenance }}</dd></div>
+    <div><dt>Occupancy</dt><dd>{{ data.totals.occupancy_pct }}%</dd></div>
+  </dl>
+
+  {% if data.wards %}
+  <ul class="ward-occupancy-list" role="list">
+    {% for ward in data.wards %}
+    <li>
+      <div class="row row--between">
+        <span class="u-strong">{{ ward.ward }}</span>
+        <span class="badge-info">{{ ward.occupancy_pct }}%</span>
+      </div>
+      <p class="drawer__muted">
+        {{ ward.occupied }} occupied · {{ ward.available }} available ·
+        {{ ward.reserved }} reserved · {{ ward.maintenance }} maintenance
+      </p>
+      <p class="drawer__muted">
+        {{ ward.total_beds }} total beds{% if ward.care_categories %} ·
+        {{ ward.care_categories | join(', ') }}{% endif %}
+      </p>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="u-muted">No wards were returned in the current snapshot.</p>
+  {% endif %}
+
+  <p class="u-label">Current snapshot from Room &amp; Bed via shared MCP</p>
+  <div class="suggest-actions">
+    <button class="btn-secondary btn-compact" type="button"
+            hx-get="/partials/ward-occupancy"
+            hx-target="#ward-occupancy-panel" hx-swap="innerHTML"
+            hx-indicator="#loading-indicator" hx-disabled-elt="this"
+            aria-controls="ward-occupancy-panel">Refresh</button>
+  </div>
+</div>
+{% endif %}

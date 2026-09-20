@@ -32,4 +32,13 @@ class Config:
     #: never hold up the roster. A miss costs the rationales, nothing more.
     OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "8"))
 
+    #: Optional Release 1 MCP integration. It is independent of AI Mode and
+    #: deliberately disabled by default so every Release 0 path works without
+    #: the local, non-containerised shared MCP server.
+    MCP_ENABLED = os.environ.get("MCP_ENABLED", "false").lower() == "true"
+    MCP_SERVER_URL = os.environ.get(
+        "MCP_SERVER_URL", "http://127.0.0.1:8000/mcp"
+    )
+    MCP_TIMEOUT = float(os.environ.get("MCP_TIMEOUT", "15"))
+
     JSON_SORT_KEYS = False
