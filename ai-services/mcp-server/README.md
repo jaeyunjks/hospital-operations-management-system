@@ -34,6 +34,7 @@ Configuration is read from the environment:
 | `HOMS_MCP_HOST` | `127.0.0.1` | Network interface on which the local server listens |
 | `HOMS_MCP_PORT` | `8000` | Unused repository port reserved for the MCP server |
 | `HOMS_MCP_PATH` | `/mcp` | Streamable HTTP endpoint path |
+| `HOMS_MCP_ALLOW_DOCKER_HOST` | `false` | Explicitly permit backend containers using `host.docker.internal` |
 | `HOMS_STUDENT4_API_URL` | `http://127.0.0.1:5400/api` | Student 4 backend API base URL, including `/api`; not the database service |
 | `HOMS_STUDENT4_API_TIMEOUT` | `10` | Overall upstream deadline and per-stage HTTP timeout in seconds; range 0.1–30 |
 
@@ -42,10 +43,26 @@ Its destination is operator-configured, never supplied as a tool argument.
 Redirects and environment proxies are disabled. The async HTTP client is a
 direct pinned dependency (`httpx==0.28.1`); `mcp==2.2.0` is unchanged.
 
-The localhost default also preserves the MCP SDK's DNS-rebinding protection.
-Container-to-host routing will be decided when feature backend integration is
-implemented; do not expose this scaffold on a wider interface without an
-explicit transport-security configuration.
+### Network modes
+
+Normal local development is loopback-only: Docker access is disabled and the
+server binds to `127.0.0.1`. This remains the recommended default.
+
+For an explicit Docker development/demo session, run:
+
+```bash
+HOMS_MCP_HOST=0.0.0.0 \
+HOMS_MCP_ALLOW_DOCKER_HOST=true \
+python3 ai-services/mcp-server/server.py
+```
+
+Feature backend containers can then use
+`http://host.docker.internal:8000/mcp`; MCP still runs outside Docker Compose.
+DNS-rebinding protection remains enabled with exact Host values, and browser
+Origins remain limited to loopback. A broad bind is not authentication: enable
+this mode only while developing/demonstrating, on a trusted network or behind
+an appropriate host firewall. Wildcard binding without the explicit Docker
+flag is rejected at startup.
 
 ## Test
 

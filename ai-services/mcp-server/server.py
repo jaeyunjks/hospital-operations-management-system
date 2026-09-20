@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 import uvicorn
 from mcp.server import Server, ServerRequestContext
+from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import (
     CallToolRequestParams,
     CallToolResult,
@@ -36,6 +37,7 @@ DEFAULT_PORT = 8000
 DEFAULT_PATH = "/mcp"
 DEFAULT_STUDENT4_API_URL = "http://127.0.0.1:5400/api"
 DEFAULT_STUDENT4_API_TIMEOUT = 10.0
+WILDCARD_HOSTS = {"0.0.0.0", "::", "[::]", "*"}
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,7 @@ class ServerConfig:
     host: str
     port: int
     path: str
+    allow_docker_host: bool
     student4_api_url: str
     student4_api_timeout: float
 
@@ -63,6 +66,17 @@ def load_config() -> ServerConfig:
         raise ValueError("HOMS_MCP_PORT must be an integer") from error
     if not 1 <= port <= 65535:
         raise ValueError("HOMS_MCP_PORT must be between 1 and 65535")
+
+    raw_allow_docker = os.environ.get(
+        "HOMS_MCP_ALLOW_DOCKER_HOST", "false"
+    ).strip().lower()
+    if raw_allow_docker not in {"true", "false"}:
+        raise ValueError("HOMS_MCP_ALLOW_DOCKER_HOST must be 'true' or 'false'")
+    allow_docker_host = raw_allow_docker == "true"
+    if host in WILDCARD_HOSTS and not allow_docker_host:
+        raise ValueError(
+            "HOMS_MCP_ALLOW_DOCKER_HOST must be true when HOMS_MCP_HOST uses a wildcard bind"
+        )
 
     path = os.environ.get("HOMS_MCP_PATH", DEFAULT_PATH).strip()
     if not path.startswith("/") or path == "/":
@@ -107,8 +121,31 @@ def load_config() -> ServerConfig:
         host=host,
         port=port,
         path=path.rstrip("/"),
+        allow_docker_host=allow_docker_host,
         student4_api_url=api_url,
         student4_api_timeout=api_timeout,
+    )
+
+
+def build_transport_security(config: ServerConfig) -> TransportSecuritySettings:
+    """Build the exact Host/Origin policy for this configured listener."""
+
+    allowed_hosts = [
+        f"127.0.0.1:{config.port}",
+        f"localhost:{config.port}",
+        f"[::1]:{config.port}",
+    ]
+    if config.allow_docker_host:
+        allowed_hosts.append(f"host.docker.internal:{config.port}")
+
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=allowed_hosts,
+        allowed_origins=[
+            f"http://127.0.0.1:{config.port}",
+            f"http://localhost:{config.port}",
+            f"http://[::1]:{config.port}",
+        ],
     )
 
 
@@ -267,6 +304,7 @@ async def call_tool(
 
 
 config = load_config()
+transport_security = build_transport_security(config)
 mcp_server = Server(
     SERVER_NAME,
     version=SERVER_VERSION,
@@ -278,6 +316,7 @@ app = mcp_server.streamable_http_app(
     streamable_http_path=config.path,
     stateless_http=True,
     json_response=True,
+    transport_security=transport_security,
 )
 
 
