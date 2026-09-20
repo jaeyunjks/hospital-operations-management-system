@@ -244,10 +244,17 @@ service, so it is reviewable and citable as an artefact in its own right.
 Student 4 ward name; Student 5 does not infer department-to-ward mappings.
 MCP availability is intentionally excluded from `/health`.
 
+For Docker development, start the shared MCP separately on the host with
+`HOMS_MCP_HOST=0.0.0.0` and `HOMS_MCP_ALLOW_DOCKER_HOST=true`, then start
+Student 5 with `STUDENT5_MCP_ENABLED=true` and
+`STUDENT5_MCP_SERVER_URL=http://host.docker.internal:8000/mcp`. Compose maps
+these into the backend container; MCP remains disabled by default and is never
+a Compose service.
+
 ## Requirements
 
-Python 3.x and Flask. The database client uses the standard library `urllib`,
-so Flask is the only dependency.
+Python 3.x, Flask and the pinned MCP SDK. The database client uses the standard
+library `urllib`.
 
 ```bash
 pip install -r requirements.txt

@@ -55,6 +55,9 @@ services:
       OLLAMA_URL: "${STUDENT5_OLLAMA_URL:-http://ollama:11434}"
       OLLAMA_MODEL: "${STUDENT5_OLLAMA_MODEL:-llama3.1:8b}"
       OLLAMA_TIMEOUT: "${STUDENT5_OLLAMA_TIMEOUT:-30}"
+      MCP_ENABLED: "${STUDENT5_MCP_ENABLED:-false}"
+      MCP_SERVER_URL: "${STUDENT5_MCP_SERVER_URL:-http://host.docker.internal:8000/mcp}"
+      MCP_TIMEOUT: "${STUDENT5_MCP_TIMEOUT:-15}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -84,6 +87,7 @@ services:
       STAFF_SHIFT_API_URL: "${STUDENT5_API_URL:-http://student5-backend:5500}"
       STAFF_SHIFT_API_TIMEOUT: "5"
       STAFF_SHIFT_SUMMARY_API_TIMEOUT: "${STUDENT5_SUMMARY_API_TIMEOUT:-35}"
+      STAFF_SHIFT_MCP_API_TIMEOUT: "${STUDENT5_MCP_API_TIMEOUT:-20}"
       HOMS_SECRET_KEY: "${STUDENT5_HOMS_SECRET_KEY:-student5-docker-development-key}"
     ports:
       - "3500:3500"
