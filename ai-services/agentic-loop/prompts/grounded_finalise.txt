@@ -1,0 +1,4 @@
+The tool budget is used up. Do not request more tools. Using only the tool
+results above, reply now with JSON only:
+
+{"answer": "<concise answer using only cited evidence>", "cited_calls": ["call-1"], "limitations": "<what the evidence cannot show>"}
