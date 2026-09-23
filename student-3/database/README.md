@@ -29,6 +29,7 @@ database/
 ├── app.py                  # Flask CRUD and health endpoints
 ├── db.py                   # SQLite connection, schema, and seed helpers
 ├── init_db.py              # Idempotent initialise and validation command
+├── verify_db.py            # Read-only structure, data, and relationship checks
 ├── schema.sql              # Six table definitions and staff trigger
 ├── seed_data.sql           # Demonstration records
 ├── requirements.txt        # Flask dependency
@@ -48,6 +49,15 @@ cd student-3/database && pip install -r requirements.txt && python3 init_db.py -
 ```
 
 `init_db.py --check` applies the schema, seeds only when `medicines` is empty, then checks all six tables, the 10-record minimum, and seeded manager/staff role counts. Local data is `student-3/database/pharmacy.db`.
+
+To verify an existing database without changing it, run from the repository root:
+
+```bash
+python3 student-3/database/verify_db.py
+python3 student-3/database/verify_db.py --path /tmp/pharmacy.db
+```
+
+The verifier uses `STUDENT3_DATABASE_PATH` when `--path` is omitted, falling back to the local `pharmacy.db`. It prints PASS/FAIL evidence for tables, primary and foreign keys, minimum record counts, staff roles, relationship integrity, batch uniqueness, and relationship queries. Exit status is 0 when all checks pass and 1 otherwise. Initialise a missing database with `init_db.py` first.
 
 ## Running with Docker
 
