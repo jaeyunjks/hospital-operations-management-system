@@ -385,6 +385,34 @@ def batch_ai_advisory():
         return render_template("partials/expiry_advisory_error.html", error=str(exc))
 
 
+# Each tool the panel may call, with the only form fields it forwards as arguments.
+MCP_TOOL_ARGUMENTS = {
+    "homs_pharmacy_stock_alerts": lambda form: {"alert_type": form.get("alert_type", "all")},
+    "homs_echo": lambda form: {"message": form.get("message", "")},
+}
+
+
+@app.get("/mcp/status")
+def mcp_status_badge():
+    try:
+        return render_template("partials/mcp_status.html", status=api_client.mcp_status(), error=None)
+    except api_client.BackendError as exc:
+        return render_template("partials/mcp_status.html", status=None, error=str(exc))
+
+
+@app.post("/mcp/call")
+def mcp_call():
+    """Render one read-only shared MCP tool result for either demonstration role."""
+    tool = request.form.get("tool", "")
+    if tool not in MCP_TOOL_ARGUMENTS:
+        return render_template("partials/mcp_result_error.html", tool=tool, error="Unknown MCP tool")
+    try:
+        call = api_client.mcp_call(tool, MCP_TOOL_ARGUMENTS[tool](request.form))
+        return render_template("partials/mcp_result.html", call=call)
+    except api_client.BackendError as exc:
+        return render_template("partials/mcp_result_error.html", tool=tool, error=str(exc))
+
+
 @app.get("/movements")
 def movements():
     filters = movement_filters()

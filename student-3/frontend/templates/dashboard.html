@@ -19,6 +19,8 @@
 
 <section class="panel" aria-label="Agent status">{% include 'partials/agent_panel.html' %}</section>
 
+<section class="panel" aria-label="Shared MCP tools">{% include 'partials/mcp_panel.html' %}</section>
+
 <section class="panel">
   <header class="panel__header"><div><span class="page-header__eyebrow">Inventory review</span><h2 class="panel__title">Low Stock</h2></div><a class="panel__meta" href="/medicines?stock_status=low">View all low stock</a></header>
   <div class="panel__body panel__body--flush"><div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Medicine</th><th>Stock quantity</th><th>Reorder level</th><th>Supplier</th></tr></thead><tbody>{% for medicine in low_stock %}<tr><td class="table__name">{{ medicine.name }}</td><td class="table__num">{{ medicine.stock_quantity }}</td><td class="table__num">{{ medicine.reorder_level }}</td><td>{{ medicine.supplier_name or '—' }}</td></tr>{% else %}<tr><td colspan="4">No active medicines are at or below their reorder level.</td></tr>{% endfor %}</tbody></table></div></div>
