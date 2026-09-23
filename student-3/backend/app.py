@@ -11,6 +11,7 @@ import urllib.request
 
 from flask import Flask, g, jsonify, request
 
+from services import mcp_client
 from services.ai_client import health_check
 from services.expiry_advisory import advisory as expiry_advisory
 from services.reorder_recommendation import advisory as reorder_advisory, candidates_for as reorder_candidates
@@ -371,6 +372,35 @@ def create_reorder_drafts():
 
 
 # Existing demo-picker proxies, retained while the supplier slice is added.
+MCP_STATUS_CODES = {"ok": 200, "tool_error": 200, "disabled": 503, "unavailable": 502, "timeout": 504}
+MAX_MCP_ARGUMENTS_BYTES = 2000
+
+
+@app.get("/api/mcp/status")
+def mcp_status():
+    """Report whether MCP mode is enabled and which shared tools this feature may use."""
+    return jsonify(mcp_client.status())
+
+
+@app.post("/api/mcp/call")
+def mcp_call():
+    """Forward one allowlisted, read-only tool call to the shared local MCP server."""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return fail("Request body must be a JSON object", 400)
+    tool, arguments = payload.get("tool"), payload.get("arguments", {})
+    if not isinstance(tool, str) or not tool.strip():
+        return fail("tool is required", 400)
+    if tool not in mcp_client.FEATURE_TOOLS:
+        return fail(f"{tool} is not available to the pharmacy feature", 403)
+    if not isinstance(arguments, dict):
+        return fail("arguments must be a JSON object", 400)
+    if len(json.dumps(arguments)) > MAX_MCP_ARGUMENTS_BYTES:
+        return fail("arguments are too large", 400)
+    result = mcp_client.call_tool(tool, arguments)
+    return jsonify(result.to_dict()), MCP_STATUS_CODES[result.outcome]
+
+
 @app.get("/api/staff")
 def staff_list():
     try: return jsonify({"staff": database_request("/staff")})
