@@ -1,9 +1,11 @@
 # HOMS Shared MCP Server
 
 Minimal Release 1 Model Context Protocol server shared by the five HOMS
-feature areas. It exposes `homs_echo` for connectivity and
+feature areas. It exposes `homs_echo` for connectivity,
 `homs_ward_occupancy_status` for read-only controlled access to Student 4's
-published backend API. It never accesses student databases, Ollama, or RAG.
+published backend API, and `homs_pharmacy_stock_alerts` for read-only access to
+Student 3's published backend API. It never accesses student databases, Ollama,
+or RAG.
 
 ## Runtime
 
@@ -37,8 +39,10 @@ Configuration is read from the environment:
 | `HOMS_MCP_ALLOW_DOCKER_HOST` | `false` | Explicitly permit backend containers using `host.docker.internal` |
 | `HOMS_STUDENT4_API_URL` | `http://127.0.0.1:5400/api` | Student 4 backend API base URL, including `/api`; not the database service |
 | `HOMS_STUDENT4_API_TIMEOUT` | `10` | Overall upstream deadline and per-stage HTTP timeout in seconds; range 0.1–30 |
+| `HOMS_STUDENT3_API_URL` | `http://127.0.0.1:5300/api` | Student 3 backend API base URL, including `/api`; not the database service |
+| `HOMS_STUDENT3_API_TIMEOUT` | `10` | Same deadline rules as the Student 4 timeout |
 
-The upstream URL must use HTTP(S), with no credentials, query or fragment.
+Each upstream URL must use HTTP(S), with no credentials, query or fragment.
 Its destination is operator-configured, never supplied as a tool argument.
 Redirects and environment proxies are disabled. The async HTTP client is a
 direct pinned dependency (`httpx==0.28.1`); `mcp==2.2.0` is unchanged.
@@ -179,3 +183,73 @@ An empty all-wards result is valid, while an empty exact-ward result is not foun
 The current Student 4 occupancy route is read-only and has no authentication
 guard; this adapter does not claim to add authentication. Future read-API
 authentication needs an explicit service credential contract.
+
+## Pharmacy stock alerts tool
+
+`homs_pharmacy_stock_alerts` accepts only the optional `alert_type` argument:
+
+```json
+{}
+```
+
+```json
+{"alert_type": "low_stock"}
+```
+
+`alert_type` must be exactly `all`, `low_stock` or `expiring_soon`;
+omitted/null means `all`. Unexpected fields are rejected before HTTP access.
+
+The only upstream operation is `GET /api/dashboard/summary` on the Student 3
+backend (port 5300). MCP does not import Student 3 services or access port
+6300/SQLite, and it never issues, receives, orders or writes off stock.
+
+Success uses the shared envelope:
+
+```json
+{
+  "schema_version": "1.0",
+  "ok": true,
+  "tool": "homs_pharmacy_stock_alerts",
+  "data": {
+    "alert_type": "all",
+    "counts": {
+      "active_medicines": 12,
+      "low_stock": 1,
+      "expiring_within_30_days": 1,
+      "expiring_within_7_days": 1,
+      "expired_batches": 0,
+      "pending_approvals": 1
+    },
+    "low_stock": [{
+      "name": "Paracetamol 500mg",
+      "stock_quantity": 20,
+      "reorder_level": 200,
+      "supplier_name": "MedSupply Australia"
+    }],
+    "expiring_soon": [{
+      "medicine_name": "Salbutamol Inhaler",
+      "batch_number": "SAL-0042",
+      "expiry_date": "2026-09-27",
+      "quantity_remaining": 12,
+      "days_until_expiry": 4
+    }],
+    "source": "student-3-pharmacy-api"
+  },
+  "error": null
+}
+```
+
+These numbers are illustrative. Counts are always returned; a list that was
+not requested is `null`, while an empty list means no current alerts. Student 3
+caps each list at 10 rows, so a count may exceed its list length.
+`days_until_expiry` is relative to the Student 3 backend's current date.
+
+The tool validates types, that every low-stock row is at or below its reorder
+level, that every batch is within the 30-day window, and that lists and counts
+agree. It then builds an allowlisted result. Recent stock movements (which name
+staff) and scheduled-agent state are discarded.
+
+Failures use the same codes as the ward tool: `validation_error`,
+`upstream_unavailable`, `upstream_timeout` and `upstream_invalid_response`.
+The Student 3 dashboard route is read-only and has no role guard; this adapter
+does not add authentication.
