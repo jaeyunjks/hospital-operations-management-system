@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
-"""Shared Release 0 Plan -> Act -> Observe -> Adapt validation loop.
+"""Shared Plan -> Act -> Observe -> Adapt validation loop.
 
-The loop uses one Ollama model for PLAN and ADAPT. ACT is always the exact
-validation command supplied by the user, executed without a shell in the
-selected ``student-x`` directory. OBSERVE records the command's real output.
+``--mode`` selects what ACT exercises:
+
+- ``command`` (default, Release 0): one Ollama model for PLAN and ADAPT; ACT is
+  the exact validation command supplied by the user, executed without a shell
+  in the selected ``student-x`` directory. OBSERVE records its real output.
+- ``mcp`` (Release 1): ACT calls tools on the shared MCP server
+  (``grounded_loop.py``).
+- ``rag`` (Release 1): ACT queries the shared RAG server and deterministic
+  checks validate grounding and insufficient-context handling (``rag_loop.py``).
 """
 
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 import re
@@ -28,6 +35,7 @@ DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_OLLAMA_TIMEOUT = 120.0
 DEFAULT_COMMAND_TIMEOUT = 600.0
 DEFAULT_EVIDENCE_LIMIT = 12_000
+MODES = {"command": None, "mcp": "grounded_loop", "rag": "rag_loop"}
 
 AGENT_DIR = Path(__file__).resolve().parent
 DEFAULT_REPO_ROOT = AGENT_DIR.parents[1]
@@ -276,9 +284,23 @@ def save_evidence(record: Dict[str, Any], logs_dir: Path) -> Dict[str, Path]:
     return {"json": json_path, "markdown": markdown_path}
 
 
+def select_mode(argv: Sequence[str]) -> tuple[str, List[str]]:
+    """Split ``--mode`` from the arguments that belong to the selected mode."""
+
+    selector = argparse.ArgumentParser(add_help=False)
+    selector.add_argument("--mode", choices=sorted(MODES), default="command")
+    known, rest = selector.parse_known_args(list(argv))
+    return known.mode, rest
+
+
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run the shared Release 0 Plan -> Act -> Observe -> Adapt loop."
+        description="Run the shared Plan -> Act -> Observe -> Adapt loop "
+        "(Release 0 command mode; use --mode mcp or --mode rag for Release 1 validation)."
+    )
+    parser.add_argument(
+        "--mode", choices=sorted(MODES), default="command",
+        help="command (default): run a validation command; mcp / rag: see --mode X --help",
     )
     parser.add_argument("--student", required=True, help="Student number or student-N")
     parser.add_argument("--command", required=True, help="Validation command to run")
@@ -305,7 +327,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
-    args = parse_args(argv)
+    mode, rest = select_mode(sys.argv[1:] if argv is None else argv)
+    if MODES[mode]:
+        if str(AGENT_DIR) not in sys.path:
+            sys.path.insert(0, str(AGENT_DIR))
+        return importlib.import_module(MODES[mode]).main(rest)
+    args = parse_args(rest)
     repo_root = args.repo_root.resolve()
     try:
         component = resolve_component(repo_root, args.student)
