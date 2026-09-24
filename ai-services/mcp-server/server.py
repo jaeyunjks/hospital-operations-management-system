@@ -28,7 +28,7 @@ from mcp.types import (
 )
 
 from tools.system import MAX_MESSAGE_LENGTH, TOOL_NAME, homs_echo, validation_error
-from tools import ward_occupancy
+from tools import pharmacy_stock, ward_occupancy
 
 SERVER_NAME = "HOMS Shared MCP Server"
 SERVER_VERSION = "0.1.0"
@@ -37,6 +37,8 @@ DEFAULT_PORT = 8000
 DEFAULT_PATH = "/mcp"
 DEFAULT_STUDENT4_API_URL = "http://127.0.0.1:5400/api"
 DEFAULT_STUDENT4_API_TIMEOUT = 10.0
+DEFAULT_STUDENT3_API_URL = "http://127.0.0.1:5300/api"
+DEFAULT_STUDENT3_API_TIMEOUT = 10.0
 WILDCARD_HOSTS = {"0.0.0.0", "::", "[::]", "*"}
 
 
@@ -50,6 +52,45 @@ class ServerConfig:
     allow_docker_host: bool
     student4_api_url: str
     student4_api_timeout: float
+    student3_api_url: str
+    student3_api_timeout: float
+
+
+def _api_url(name: str, default: str) -> str:
+    """Read one operator-configured upstream API base URL."""
+
+    api_url = os.environ.get(name, default).strip().rstrip("/")
+    try:
+        parsed = urlsplit(api_url)
+        valid_url = (
+            parsed.scheme in ("http", "https")
+            and parsed.hostname
+            and parsed.username is None
+            and parsed.password is None
+            and not parsed.query
+            and not parsed.fragment
+        )
+        if parsed.port is not None and not 1 <= parsed.port <= 65535:
+            valid_url = False
+    except ValueError:
+        valid_url = False
+    if not valid_url:
+        raise ValueError(
+            f"{name} must be an HTTP(S) API base URL without credentials, query or fragment"
+        )
+    return api_url
+
+
+def _api_timeout(name: str, default: float) -> float:
+    """Read one bounded upstream deadline in seconds."""
+
+    try:
+        api_timeout = float(os.environ.get(name, str(default)))
+    except ValueError as error:
+        raise ValueError(f"{name} must be a number") from error
+    if not math.isfinite(api_timeout) or not 0.1 <= api_timeout <= 30:
+        raise ValueError(f"{name} must be between 0.1 and 30 seconds")
+    return api_timeout
 
 
 def load_config() -> ServerConfig:
@@ -82,48 +123,19 @@ def load_config() -> ServerConfig:
     if not path.startswith("/") or path == "/":
         raise ValueError("HOMS_MCP_PATH must start with '/' and name an endpoint")
 
-    api_url = (
-        os.environ.get("HOMS_STUDENT4_API_URL", DEFAULT_STUDENT4_API_URL)
-        .strip()
-        .rstrip("/")
-    )
-    try:
-        parsed = urlsplit(api_url)
-        valid_url = (
-            parsed.scheme in ("http", "https")
-            and parsed.hostname
-            and parsed.username is None
-            and parsed.password is None
-            and not parsed.query
-            and not parsed.fragment
-        )
-        if parsed.port is not None and not 1 <= parsed.port <= 65535:
-            valid_url = False
-    except ValueError:
-        valid_url = False
-    if not valid_url:
-        raise ValueError(
-            "HOMS_STUDENT4_API_URL must be an HTTP(S) API base URL without credentials, query or fragment"
-        )
-
-    try:
-        api_timeout = float(
-            os.environ.get(
-                "HOMS_STUDENT4_API_TIMEOUT", str(DEFAULT_STUDENT4_API_TIMEOUT)
-            )
-        )
-    except ValueError as error:
-        raise ValueError("HOMS_STUDENT4_API_TIMEOUT must be a number") from error
-    if not math.isfinite(api_timeout) or not 0.1 <= api_timeout <= 30:
-        raise ValueError("HOMS_STUDENT4_API_TIMEOUT must be between 0.1 and 30 seconds")
-
     return ServerConfig(
         host=host,
         port=port,
         path=path.rstrip("/"),
         allow_docker_host=allow_docker_host,
-        student4_api_url=api_url,
-        student4_api_timeout=api_timeout,
+        student4_api_url=_api_url("HOMS_STUDENT4_API_URL", DEFAULT_STUDENT4_API_URL),
+        student4_api_timeout=_api_timeout(
+            "HOMS_STUDENT4_API_TIMEOUT", DEFAULT_STUDENT4_API_TIMEOUT
+        ),
+        student3_api_url=_api_url("HOMS_STUDENT3_API_URL", DEFAULT_STUDENT3_API_URL),
+        student3_api_timeout=_api_timeout(
+            "HOMS_STUDENT3_API_TIMEOUT", DEFAULT_STUDENT3_API_TIMEOUT
+        ),
     )
 
 
@@ -232,13 +244,42 @@ HOMS_WARD_OCCUPANCY_TOOL = Tool(
 )
 
 
+HOMS_PHARMACY_STOCK_TOOL = Tool(
+    name=pharmacy_stock.TOOL_NAME,
+    title="HOMS Pharmacy Stock Alerts",
+    description=(
+        "Read current pharmacy stock alerts from Student 3's published backend API: "
+        "alert counts, medicines at or below their reorder level, and batches "
+        "expiring within 30 days (each list capped at 10 rows). Read-only; does "
+        "not issue, order, receive or write off stock."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "alert_type": {
+                "type": ["string", "null"],
+                "enum": [*pharmacy_stock.ALERT_TYPES, None],
+                "description": (
+                    "'low_stock', 'expiring_soon' or 'all'; omitted/null returns all. "
+                    "Counts are always returned; lists not requested are null."
+                ),
+            }
+        },
+        "additionalProperties": False,
+    },
+    output_schema=pharmacy_stock.OUTPUT_SCHEMA,
+)
+
+
 async def list_tools(
     ctx: ServerRequestContext,
     params: PaginatedRequestParams | None,
 ) -> ListToolsResult:
     """Advertise the connectivity and controlled cross-service read tools."""
 
-    return ListToolsResult(tools=[HOMS_ECHO_TOOL, HOMS_WARD_OCCUPANCY_TOOL])
+    return ListToolsResult(
+        tools=[HOMS_ECHO_TOOL, HOMS_WARD_OCCUPANCY_TOOL, HOMS_PHARMACY_STOCK_TOOL]
+    )
 
 
 def _result(payload: Dict[str, Any]) -> CallToolResult:
@@ -278,6 +319,25 @@ async def call_tool(
                 arguments.get("ward"),
                 api_url=config.student4_api_url,
                 timeout=config.student4_api_timeout,
+            )
+        )
+
+    if params.name == pharmacy_stock.TOOL_NAME:
+        arguments = params.arguments or {}
+        unexpected = sorted(set(arguments) - {"alert_type"})
+        if unexpected:
+            return _result(
+                pharmacy_stock.tool_error(
+                    "validation_error",
+                    "Only the optional 'alert_type' argument is accepted.",
+                    {"reason": "unexpected_fields", "fields": unexpected},
+                )
+            )
+        return _result(
+            await pharmacy_stock.homs_pharmacy_stock_alerts(
+                arguments.get("alert_type"),
+                api_url=config.student3_api_url,
+                timeout=config.student3_api_timeout,
             )
         )
 

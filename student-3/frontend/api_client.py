@@ -147,3 +147,17 @@ def open_purchase_orders(medicine_id): return _request("/api/purchase-orders/ope
 def get_purchase_order(po_id): return _request(f"/api/purchase-orders/{po_id}")["purchase_order"]
 def save_purchase_order(payload,role,po_id=None): return _request(f"/api/purchase-orders/{po_id}" if po_id else "/api/purchase-orders","PUT" if po_id else "POST",payload,role)
 def transition_purchase_order(po_id,action,reason,role): return _request(f"/api/purchase-orders/{po_id}/{action}","POST",{"decision_reason":reason},role)
+
+
+def mcp_status():
+    """Ask the backend whether shared MCP access is enabled and reachable."""
+    return _request("/api/mcp/status", timeout=30)
+
+
+def mcp_call(tool, arguments):
+    """Call one shared MCP tool through the backend, never the MCP server directly.
+
+    A tool-level error is a normal structured result (``ok`` false); disabled or
+    unreachable MCP raises :class:`BackendError` with the backend's message.
+    """
+    return _request("/api/mcp/call", "POST", {"tool": tool, "arguments": arguments}, timeout=30)

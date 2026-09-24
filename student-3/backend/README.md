@@ -42,13 +42,14 @@ backend/
 ├── services/
 │   ├── ai_client.py           # Bounded Ollama JSON client and prompt loader
 │   ├── expiry_advisory.py     # Expiry calculations and fallbacks
+│   ├── mcp_client.py          # Bounded client for the shared MCP server
 │   ├── reorder_recommendation.py # Reorder calculations and fallbacks
 │   └── scheduled_agent.py     # Plan → Act → Observe → Adapt worker
 ├── prompts/                   # Immutable versioned prompts
 ├── AGENT.md                   # Agent operating constraints
 ├── ai_smoke.py                # Ollama connectivity smoke script
 ├── tests/                     # Mocked database and workflow tests
-├── requirements.txt           # Flask dependency
+├── requirements.txt           # Flask and MCP SDK dependencies
 ├── Dockerfile                 # Port-5300 image
 └── README.md                  # This document
 ```
@@ -82,6 +83,9 @@ Compose waits for database health, uses `http://student-3-database:6300` on `hom
 | `OLLAMA_URL` | `http://ollama:11434` | No | Ollama API base URL. |
 | `OLLAMA_MODEL` | `llama3.2:3b` | No | Model submitted to Ollama. |
 | `OLLAMA_TIMEOUT` | `90` seconds | No | Bound per model call; invalid input reverts to 90. |
+| `MCP_ENABLED` | `false` | No | Exactly `true` enables calls to the shared MCP server; CI leaves it off. |
+| `MCP_SERVER_URL` | `http://127.0.0.1:8000/mcp` | No | Shared MCP endpoint; Compose uses `http://host.docker.internal:8000/mcp`. |
+| `MCP_TIMEOUT` | `15` seconds | No | Bound per MCP operation; invalid input reverts to 15. |
 | `AGENT_ENABLED` | `true` | No | Starts background draft-proposal cycles. |
 | `AGENT_INTERVAL_SECONDS` | `300` | No | Delay between cycles; invalid/low values become 300. |
 | `AGENT_MAX_PROPOSALS` | `3` | No | Maximum created per cycle. |
@@ -98,6 +102,8 @@ Manager-changing routes require `X-HOMS-Role: Pharmacy Manager`.
 | GET | `/api/agent/status` | Agent status. |
 | GET | `/api/ai/health` | Non-crashing Ollama reachability check. |
 | POST | `/api/ai/expiry-advisory` | Read-only AI/fallback expiry advice. |
+| GET | `/api/mcp/status` | MCP flag, server URL, allowlist and (when enabled) discovered tools. |
+| POST | `/api/mcp/call` | Forward one allowlisted tool call to the shared MCP server. |
 | POST | `/api/ai/suggest-reorder` | Read-only AI/fallback reorder advice. |
 | POST | `/api/ai/suggest-reorder/create-drafts` | Create manager-selected pending drafts. |
 | GET | `/api/staff`, `/api/staff/{id}` | Demo identity data. |
@@ -178,13 +184,54 @@ When enabled, app startup starts a daemon thread. It never approves, orders, iss
 
 Every cycle logs a UTC timestamp and number. A cycle failure is logged without killing the thread. Pending proposals suppress duplicates; a later rejected/edited decision can affect a new suggestion.
 
+## Shared MCP access
+
+The frontend never talks to MCP directly. It calls this backend, which opens one
+short-lived Streamable HTTP session per request to the shared, non-containerised
+MCP server using the official `mcp` Python SDK.
+
+```mermaid
+flowchart LR
+  F[Frontend :3300] -->|POST /api/mcp/call| B[Backend :5300]
+  B -->|MCP tools/call| M[Shared MCP server :8000]
+  M -->|GET /api/dashboard/summary| B
+```
+
+Only `homs_pharmacy_stock_alerts` and `homs_echo` are reachable through this
+feature; other students' tools return 403 before MCP is contacted. The MCP
+server validates each tool's arguments.
+
+```bash
+curl -X POST localhost:5300/api/mcp/call -H 'Content-Type: application/json' \
+  -d '{"tool":"homs_pharmacy_stock_alerts","arguments":{"alert_type":"low_stock"}}'
+```
+
+The response carries `ok`, `outcome`, `tool`, `arguments`, `duration_ms` and
+the tool's structured `result` envelope. Each call is logged to the terminal as
+`[MCP] call_tool tool=... outcome=... duration_ms=...`.
+
+| Outcome | HTTP | Meaning |
+|---|---|---|
+| `ok` | 200 | Tool succeeded; `result.data` holds its output. |
+| `tool_error` | 200 | Tool rejected the input or its upstream; `result.error` explains. |
+| `disabled` | 503 | `MCP_ENABLED` is not `true` (the CI setting). |
+| `unavailable` | 502 | MCP server unreachable or `MCP_SERVER_URL` invalid. |
+| `timeout` | 504 | No answer within `MCP_TIMEOUT`. |
+
+Request errors (non-object body, missing tool, non-object or oversized
+arguments) return 400.
+
+To run it locally, start the MCP server from the repository root
+(`python3 ai-services/mcp-server/server.py`), then start this backend with
+`MCP_ENABLED=true`.
+
 ## Running the tests
 
 ```bash
 cd student-3/backend && python3 -m unittest discover -s tests -v
 ```
 
-Tests mock every database-service call, never using port 6300. They cover CRUD validation, FEFO, receipt/write-off, AI source/fallback behaviour, dashboard bulk reads, and agent duplicate/adaptation behaviour. The current suite passes **23 tests**.
+Tests mock every database-service call, never using port 6300. They cover CRUD validation, FEFO, receipt/write-off, AI source/fallback behaviour, dashboard bulk reads, agent duplicate/adaptation behaviour, and MCP access (disabled flag, tool allowlist, in-process MCP round trip, 502/504 mapping). The current suite passes **33 tests**; MCP round-trip tests are skipped if the `mcp` SDK is not installed.
 
 ## Troubleshooting
 
@@ -193,6 +240,8 @@ Tests mock every database-service call, never using port 6300. They cover CRUD v
 | `Database service unavailable` | Start 6300 first or set `DATABASE_URL`. |
 | Advisory is slow | Set a numeric `OLLAMA_TIMEOUT`; fallback returns after timeout. |
 | `Pharmacy Manager role required` | Include `X-HOMS-Role: Pharmacy Manager`. |
+| MCP call returns 503 | Set `MCP_ENABLED=true`. |
+| MCP call returns 502 | Start `ai-services/mcp-server/server.py`; from Docker, run it in Docker mode (see its README). |
 | Agent logs fallback | Start Ollama if AI judgement is needed; rule proposals still run. |
 
 ## Known issues and limitations

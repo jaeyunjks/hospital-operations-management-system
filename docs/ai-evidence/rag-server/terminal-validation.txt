@@ -1,0 +1,229 @@
+# HOMS shared RAG server - terminal validation
+# 2026-09-24T06:47:28Z
+
+$ python3 ai-services/rag-server/cli.py health
+{
+  "schema_version": "1.0",
+  "status": "ok",
+  "service": "homs-rag-server",
+  "features": [
+    "student-1",
+    "student-2",
+    "student-3",
+    "student-4",
+    "student-5"
+  ],
+  "thresholds": {
+    "relevance": 0.62,
+    "medium": 0.7,
+    "high": 0.8
+  },
+  "index": {
+    "ready": true,
+    "chunks": 20,
+    "documents": 6,
+    "embed_model": "nomic-embed-text",
+    "created_at": "2026-09-24T06:41:46+00:00",
+    "stale": false
+  },
+  "ollama": {
+    "reachable": true,
+    "embed_model": {
+      "name": "nomic-embed-text",
+      "installed": true
+    },
+    "chat_model": {
+      "name": "llama3.2:3b",
+      "installed": true
+    }
+  }
+}
+(exit 0)
+
+$ python3 ai-services/rag-server/cli.py sources --feature student-3
+{
+  "schema_version": "1.0",
+  "feature": "student-3",
+  "documents": [
+    {
+      "source": "student-3/ai-advisories-and-agent.md",
+      "feature": "student-3",
+      "title": "Pharmacy AI Advisories and Scheduled Agent",
+      "sections": [
+        "Advisory-only AI",
+        "Reorder suggestions",
+        "Scheduled agent"
+      ],
+      "chunks": 3
+    },
+    {
+      "source": "student-3/expiry-and-write-off.md",
+      "feature": "student-3",
+      "title": "Batch Expiry and Write-Off",
+      "sections": [
+        "Expiry categories",
+        "Writing off a batch",
+        "Expiry and waste advisory"
+      ],
+      "chunks": 3
+    },
+    {
+      "source": "student-3/inventory-and-low-stock.md",
+      "feature": "student-3",
+      "title": "Pharmacy Inventory and Low Stock",
+      "sections": [
+        "Medicine records",
+        "Low stock rule",
+        "Roles and permissions",
+        "Dashboard"
+      ],
+      "chunks": 4
+    },
+    {
+      "source": "student-3/issuing-and-receiving-stock.md",
+      "feature": "student-3",
+      "title": "Issuing and Receiving Stock",
+      "sections": [
+        "FEFO issuing",
+        "Receiving deliveries",
+        "Stock movement ledger"
+      ],
+      "chunks": 3
+    },
+    {
+      "source": "student-3/reorder-and-purchase-orders.md",
+      "feature": "student-3",
+      "title": "Reordering and Purchase Orders",
+      "sections": [
+        "When a medicine is reordered",
+        "Suggested reorder quantity",
+        "Purchase order lifecycle",
+        "Human approval"
+      ],
+      "chunks": 4
+    }
+  ]
+}
+(exit 0)
+
+$ python3 ai-services/rag-server/cli.py retrieve "Who can write off an expired batch?" --feature student-3
+Question:  Who can write off an expired batch?
+Feature:   student-3 (relevance threshold 0.62)
+  1. 0.8420 relevant        student-3/expiry-and-write-off.md > Writing off a batch
+  2. 0.7756 relevant        student-3/expiry-and-write-off.md > Expiry categories
+  3. 0.7631 relevant        student-3/expiry-and-write-off.md > Expiry and waste advisory
+  4. 0.7191 relevant        student-3/issuing-and-receiving-stock.md > FEFO issuing
+(exit 0)
+
+$ python3 ai-services/rag-server/cli.py query "Who can write off an expired batch?" --feature student-3 --expect answered
+Question:   Who can write off an expired batch?
+Feature:    student-3
+Status:     answered
+Confidence: high
+Retrieval:  top score 0.842 vs threshold 0.62; 4/4 chunks relevant
+Models:     nomic-embed-text + llama3.2:3b (655 ms)
+Answer:
+  According to [S1], only a Pharmacy Manager can write off a batch, and a reason is required.
+Citations:
+  [S1] student-3/expiry-and-write-off.md > Writing off a batch (score 0.842)
+       "Writing off removes a batch's remaining stock, usually because it has expired or been
+       damaged. Only a Pharmacy Manager can write off a batch, and a reason is required (the
+       default reason is "Expired"). A batch that is already empty cannot be written off. A
+       write-off sets the bat…"
+(exit 0)
+
+$ python3 ai-services/rag-server/cli.py query "How does FEFO issuing work?" --feature student-3 --expect answered
+Question:   How does FEFO issuing work?
+Feature:    student-3
+Status:     answered
+Confidence: high
+Retrieval:  top score 0.8279 vs threshold 0.62; 2/4 chunks relevant
+Models:     nomic-embed-text + llama3.2:3b (1539 ms)
+Answer:
+  According to [S1], FEFO issuing works by sorting the medicine's non-expired batches by expiry
+  date and taking stock from the batch that expires first. When a quantity is issued, stock is
+  taken from the batch that expires first, and the process moves to the next batch only when the
+  earlier one is empty.
+Citations:
+  [S1] student-3/issuing-and-receiving-stock.md > FEFO issuing (score 0.8279)
+       "Stock is issued First-Expiry, First-Out (FEFO). When a quantity is issued, the backend
+       sorts the medicine's non-expired batches by expiry date and takes stock from the batch
+       that expires first, moving to the next batch only when the earlier one is empty. For
+       example, issuing 12…"
+(exit 0)
+
+$ python3 ai-services/rag-server/cli.py query "What does the scheduled agent do and can it approve orders?" --feature student-3 --expect answered
+Question:   What does the scheduled agent do and can it approve orders?
+Feature:    student-3
+Status:     answered
+Confidence: medium
+Retrieval:  top score 0.7846 vs threshold 0.62; 4/4 chunks relevant
+Models:     nomic-embed-text + llama3.2:3b (2160 ms)
+Answer:
+  The scheduled agent runs a Plan, Act, Observe, Adapt cycle in the background, every 300
+  seconds by default. It creates at most 3 proposals per cycle with a total value of at most
+  $500.00. The agent only creates `pending_approval` purchase orders marked as created by
+  `agent`, but it never approves, orders, issues, or dispenses stock. Every proposal still needs
+  a Pharmacy Manager's approval. [S1]
+Citations:
+  [S1] student-3/ai-advisories-and-agent.md > Scheduled agent (score 0.7846)
+       "The scheduled pharmacy agent runs a Plan, Act, Observe, Adapt cycle in the background,
+       every 300 seconds by default: - **Plan** — reads stock, 30-day usage, supplier lead
+       times, open orders and near-expiry stock, and finds reorder candidates. - **Act** —
+       drafts reasoned reorder…"
+(exit 0)
+
+$ python3 ai-services/rag-server/cli.py query "What port does the pharmacy backend use?" --feature student-3 --expect answered
+Question:   What port does the pharmacy backend use?
+Feature:    student-3
+Status:     answered
+Confidence: low
+Retrieval:  top score 0.6929 vs threshold 0.62; 3/4 chunks relevant
+Models:     nomic-embed-text + llama3.2:3b (407 ms)
+Answer:
+  According to [S1], the pharmacy backend uses port 5300.
+Citations:
+  [S1] shared/homs-overview.md > Microservice architecture (score 0.6929)
+       "Every feature is split into three containerised microservices: a frontend, a backend/API
+       and a database service. The frontend only calls its own backend, and the backend is the
+       only component that calls its database service. Feature ports follow one pattern:
+       frontends use 3x00,…"
+(exit 0)
+
+$ python3 ai-services/rag-server/cli.py query "What is the recommended paracetamol dose for a child?" --feature student-3 --expect insufficient_context
+Question:   What is the recommended paracetamol dose for a child?
+Feature:    student-3
+Status:     insufficient_context (no_relevant_context)
+Confidence: none
+Retrieval:  top score 0.5982 vs threshold 0.62; 0/4 chunks relevant
+Models:     nomic-embed-text + llama3.2:3b (22 ms)
+Answer:
+  The knowledge base does not contain enough relevant information to answer this question, so no
+  answer was generated.
+(exit 0)
+
+$ python3 ai-services/rag-server/cli.py query "What is the capital of France?" --feature student-3 --expect insufficient_context
+Question:   What is the capital of France?
+Feature:    student-3
+Status:     insufficient_context (no_relevant_context)
+Confidence: none
+Retrieval:  top score 0.4953 vs threshold 0.62; 0/4 chunks relevant
+Models:     nomic-embed-text + llama3.2:3b (22 ms)
+Answer:
+  The knowledge base does not contain enough relevant information to answer this question, so no
+  answer was generated.
+(exit 0)
+
+$ python3 ai-services/rag-server/cli.py query "How many beds are free in the emergency ward?" --feature student-3 --expect insufficient_context
+Question:   How many beds are free in the emergency ward?
+Feature:    student-3
+Status:     insufficient_context (no_relevant_context)
+Confidence: none
+Retrieval:  top score 0.5637 vs threshold 0.62; 0/4 chunks relevant
+Models:     nomic-embed-text + llama3.2:3b (21 ms)
+Answer:
+  The knowledge base does not contain enough relevant information to answer this question, so no
+  answer was generated.
+(exit 0)
+
+# 0 failed command(s)

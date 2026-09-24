@@ -3,8 +3,11 @@
 # Owner: student-3  (see docs/architecture/feature-ownership.md)
 #
 # Scoped to student-3/** so it never runs against another student's work.
-# Stages: syntax check -> build all three images -> verify database seeding
-# and backend enrichment -> tear down. Ollama and AI endpoints are excluded.
+# Stages: syntax check and unit tests -> build all three images -> verify
+# database seeding and backend enrichment -> verify MCP is retained but
+# disabled in the backend and frontend -> tear down. Ollama and AI endpoints
+# are excluded. The shared MCP server is never started in CI: MCP_ENABLED is
+# false, so the MCP routes and dashboard panel must report "disabled".
 # ==========================================================================
 name: student-3
 
@@ -15,9 +18,12 @@ on:
     paths: ['student-3/**', '.github/workflows/student-3.yml']
   workflow_dispatch:
 
+env:
+  MCP_ENABLED: 'false'
+
 jobs:
   test:
-    name: Check Python syntax
+    name: Check Python syntax and run unit tests
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repository
@@ -30,7 +36,24 @@ jobs:
 
       - name: Check syntax of all three services
         run: |
-          python -m py_compile student-3/database/app.py student-3/backend/app.py student-3/frontend/app.py
+          python -m compileall -q student-3/database student-3/backend student-3/frontend
+
+      - name: Install service dependencies
+        # The mcp SDK lets backend tests exercise an in-process MCP server; no
+        # network MCP server is contacted.
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest \
+            -r student-3/database/requirements.txt \
+            -r student-3/backend/requirements.txt \
+            -r student-3/frontend/requirements.txt
+
+      - name: Run unit tests for each service
+        # Each service has its own app.py, so each suite runs in its own process.
+        run: |
+          python -m pytest -q student-3/database/tests
+          python -m pytest -q student-3/backend/tests
+          python -m pytest -q student-3/frontend/tests
 
   docker:
     name: Build container images and smoke test
@@ -81,7 +104,8 @@ jobs:
       - name: Start the backend connected to the database
         run: |
           docker run -d --name s3-be --network homs-s3-ci -p 127.0.0.1:5300:5300 \
-            -e DATABASE_SERVICE_URL=http://s3-db:6300 student-3-backend
+            -e DATABASE_SERVICE_URL=http://s3-db:6300 \
+            -e MCP_ENABLED="$MCP_ENABLED" student-3-backend
 
       - name: Wait for backend health
         run: |
@@ -110,14 +134,68 @@ jobs:
           print(f'Backend returned {len(medicines)} enriched medicines')
           PY
 
+      - name: Verify MCP is retained but disabled in the backend
+        run: |
+          curl -fsS --connect-timeout 2 --max-time 10 http://localhost:5300/api/mcp/status -o /tmp/s3-mcp-status.json
+          code=$(curl -sS --connect-timeout 2 --max-time 10 -o /tmp/s3-mcp-call.json -w '%{http_code}' \
+            -X POST http://localhost:5300/api/mcp/call -H 'Content-Type: application/json' \
+            -d '{"tool":"homs_pharmacy_stock_alerts","arguments":{"alert_type":"all"}}')
+          echo "POST /api/mcp/call -> HTTP $code"
+          test "$code" = 503
+          python - <<'PY'
+          import json
+          status = json.load(open('/tmp/s3-mcp-status.json'))
+          call = json.load(open('/tmp/s3-mcp-call.json'))
+          print('MCP status:', status)
+          print('MCP call:', call)
+          assert status['enabled'] is False and status['reachable'] is False, 'MCP must be disabled in CI'
+          assert status['tools'] == [], 'Disabled MCP must not discover tools'
+          assert 'homs_pharmacy_stock_alerts' in status['allowed_tools'], 'MCP integration was removed'
+          assert call['outcome'] == 'disabled' and call['ok'] is False, 'Disabled MCP call was not refused'
+          print('MCP integration is present and disabled for CI')
+          PY
+
+      - name: Start the frontend connected to the backend
+        run: |
+          docker run -d --name s3-fe --network homs-s3-ci -p 127.0.0.1:3300:3300 \
+            -e BACKEND_API_URL=http://s3-be:5300 student-3-frontend
+
+      - name: Wait for frontend health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS --connect-timeout 2 --max-time 10 http://localhost:3300/health; then
+              echo "Frontend is healthy"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Frontend did not start in time"
+          exit 1
+
+      - name: Verify the dashboard MCP panel reports MCP disabled
+        # Sign in as a seeded pharmacist, then use the same HTMX routes as the UI.
+        run: |
+          jar=/tmp/s3-cookies.txt
+          curl -fsS --max-time 10 -c "$jar" -b "$jar" -o /dev/null \
+            -X POST http://localhost:3300/demo/enter -d role=Pharmacist -d staff_id=3
+          curl -fsS --max-time 30 -b "$jar" http://localhost:3300/ -o /tmp/s3-dashboard.html
+          curl -fsS --max-time 30 -b "$jar" http://localhost:3300/mcp/status -o /tmp/s3-mcp-badge.html
+          curl -fsS --max-time 30 -b "$jar" -X POST http://localhost:3300/mcp/call \
+            -d tool=homs_pharmacy_stock_alerts -d alert_type=all -o /tmp/s3-mcp-panel.html
+          grep -q 'Shared MCP tools' /tmp/s3-dashboard.html
+          grep -q 'MCP disabled' /tmp/s3-mcp-badge.html
+          grep -q 'MCP mode is disabled' /tmp/s3-mcp-panel.html
+          echo "Frontend MCP panel is present and reports MCP disabled"
+
       - name: Container logs on failure
         if: failure()
         run: |
           docker logs s3-db || true
           docker logs s3-be || true
+          docker logs s3-fe || true
 
       - name: Tear down containers and network
         if: always()
         run: |
-          docker rm -f s3-be s3-db || true
+          docker rm -f s3-fe s3-be s3-db || true
           docker network rm homs-s3-ci || true

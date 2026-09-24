@@ -88,7 +88,7 @@ Compose waits for backend health and uses `http://student-3-backend:5300` on `ho
 | Route | What it does |
 |---|---|
 | `/demo` | Select simulated role and staff identity. |
-| `/` | Live inventory dashboard: stock/expiry counts, movements, agent strip. |
+| `/` | Live inventory dashboard: stock/expiry counts, movements, agent strip, shared MCP tools panel. |
 | `/medicines` | Filter/view medicines; manager maintenance, issue/receive, CSV export. |
 | `/batches` | Filter batches, view expiry, request advice, manager write-off, export. |
 | `/movements` | Filter and export append-only stock history. |
@@ -96,7 +96,7 @@ Compose waits for backend health and uses `http://student-3-backend:5300` on `ho
 | `/purchase-orders` | Filter/export orders, view detail, advice, human review, agent panel. |
 | `/health` | Frontend health response. |
 
-HTMX routes such as `/medicines/table`, `/batches/table`, `/purchase-orders/table`, form/detail routes, and advisory panel routes render partial templates for their associated pages.
+HTMX routes such as `/medicines/table`, `/batches/table`, `/purchase-orders/table`, form/detail routes, advisory panel routes, and `/mcp/status` / `/mcp/call` render partial templates for their associated pages.
 
 ## Demo roles and access
 
@@ -117,6 +117,7 @@ Browser-facing routes above return HTML. `api_client.py` is the only API client 
 | POST | `/api/stock/issue`, `/api/stock/receive`, `/api/batches/{id}/write-off` | Inventory actions. |
 | GET, POST, PUT | `/api/purchase-orders` and order detail/action paths | Approval workflow. |
 | POST | `/api/ai/expiry-advisory`, `/api/ai/suggest-reorder` | Read-only advice. |
+| GET, POST | `/api/mcp/status`, `/api/mcp/call` | Dashboard shared MCP tools panel. |
 
 For example, an issued-medicine form causes this backend JSON request:
 
@@ -136,13 +137,31 @@ GET /health
 {"service":"student-3-frontend","status":"ok"}
 ```
 
+## Shared MCP tools panel
+
+The dashboard's **Shared MCP tools** panel reaches the shared local MCP server
+only through the backend (`/api/mcp/*`); the frontend never contacts MCP. Its
+status badge loads after the page, so a slow or stopped MCP server never delays
+the dashboard.
+
+- **Get stock alerts via MCP** calls `homs_pharmacy_stock_alerts` with the
+  chosen `alert_type` and renders its counts, low-stock and expiring-batch
+  tables, plus the raw structured result.
+- **Test connectivity** calls `homs_echo` with the entered message.
+
+`/mcp/call` forwards only the form fields each tool accepts (`alert_type` or
+`message`); any other tool name is refused without calling the backend. Both
+demonstration roles may use the panel because the tools are read-only. When
+MCP is disabled or unreachable the panel shows the backend's error and states
+that no inventory data changed.
+
 ## Running the tests
 
 ```bash
 cd student-3/frontend && python3 -m unittest discover -s tests -v
 ```
 
-Tests mock `api_client`, so they never use a live backend on port 5300. They cover rendering routes, dashboard data, manager gates, agent panel output, and timeout/connection-error display. The current suite passes **9 tests**.
+Tests mock `api_client`, so they never use a live backend on port 5300. They cover rendering routes, dashboard data, manager gates, agent panel output, MCP panel rendering and argument forwarding, and timeout/connection-error display. The current suite passes **16 tests**.
 
 ## Troubleshooting
 

@@ -1,0 +1,45 @@
+{% set envelope = call.result or {} %}
+{% set data = envelope.data %}
+<article class="mcp-result">
+  <div class="mcp-result__head">
+    <div>
+      <strong class="mcp-code">{{ call.tool }}</strong>
+      <span class="table__muted">arguments <span class="mcp-code">{{ call.arguments|tojson }}</span> · {{ call.duration_ms }} ms</span>
+    </div>
+    <div>
+      {% if call.ok %}<span class="badge badge-success">Valid tool result</span>{% else %}<span class="badge badge-warning">Tool returned an error</span>{% endif %}
+    </div>
+  </div>
+
+  {% if not call.ok %}
+    <div class="alert alert--warning"><div><p class="alert__title">{{ envelope.error.code if envelope.error else 'tool_error' }}</p><p class="alert__body">{{ envelope.error.message if envelope.error else 'The tool did not return a structured error.' }}</p></div></div>
+  {% elif call.tool == 'homs_pharmacy_stock_alerts' and data %}
+    <dl class="mcp-counts">
+      {% for key, label in [('active_medicines', 'Active medicines'), ('low_stock', 'Low stock'), ('expiring_within_30_days', 'Expiring ≤ 30 days'), ('expiring_within_7_days', 'Expiring ≤ 7 days'), ('expired_batches', 'Expired batches'), ('pending_approvals', 'Pending approvals')] %}
+        <div><dt>{{ label }}</dt><dd>{{ data.counts[key] }}</dd></div>
+      {% endfor %}
+    </dl>
+    {% if data.low_stock is not none %}
+      <h3 class="mcp-subtitle">Low stock <span class="table__muted">({{ data.low_stock|length }} of {{ data.counts.low_stock }} shown)</span></h3>
+      <div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Medicine</th><th>Stock quantity</th><th>Reorder level</th><th>Supplier</th></tr></thead><tbody>
+        {% for row in data.low_stock %}<tr><td class="table__name">{{ row.name }}</td><td class="table__num">{{ row.stock_quantity }}</td><td class="table__num">{{ row.reorder_level }}</td><td>{{ row.supplier_name or '—' }}</td></tr>
+        {% else %}<tr><td colspan="4">No medicines are at or below their reorder level.</td></tr>{% endfor %}
+      </tbody></table></div>
+    {% endif %}
+    {% if data.expiring_soon is not none %}
+      <h3 class="mcp-subtitle">Expiring within 30 days <span class="table__muted">({{ data.expiring_soon|length }} of {{ data.counts.expiring_within_30_days }} shown)</span></h3>
+      <div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Medicine</th><th>Batch</th><th>Expiry date</th><th>Quantity remaining</th><th>Days remaining</th></tr></thead><tbody>
+        {% for row in data.expiring_soon %}<tr{% if row.days_until_expiry <= 7 %} class="table-row--urgent"{% endif %}><td class="table__name">{{ row.medicine_name }}</td><td>{{ row.batch_number }}</td><td>{{ row.expiry_date }}</td><td class="table__num">{{ row.quantity_remaining }}</td><td class="table__num">{{ row.days_until_expiry }}</td></tr>
+        {% else %}<tr><td colspan="5">No non-empty batches expire within 30 days.</td></tr>{% endfor %}
+      </tbody></table></div>
+    {% endif %}
+    <p class="table__muted">Source: {{ data.source }}</p>
+  {% elif call.tool == 'homs_echo' and data %}
+    <p>The shared MCP server echoed: <strong>{{ data.message }}</strong></p>
+  {% endif %}
+
+  <details class="mcp-raw">
+    <summary>Structured result (JSON)</summary>
+    <pre class="mcp-json">{{ envelope|tojson(indent=2) }}</pre>
+  </details>
+</article>

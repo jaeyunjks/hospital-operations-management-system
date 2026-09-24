@@ -206,7 +206,14 @@ services:
       OLLAMA_URL: http://ollama:11434
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
       OLLAMA_TIMEOUT: 90
+      # Shared MCP server runs on the host, outside Compose; start it in Docker mode
+      # (HOMS_MCP_HOST=0.0.0.0 HOMS_MCP_ALLOW_DOCKER_HOST=true).
+      MCP_ENABLED: "${STUDENT3_MCP_ENABLED:-true}"
+      MCP_SERVER_URL: "${STUDENT3_MCP_SERVER_URL:-http://host.docker.internal:8000/mcp}"
+      MCP_TIMEOUT: "${STUDENT3_MCP_TIMEOUT:-15}"
       FLASK_DEBUG: 0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports: ["5300:5300"]
     depends_on:
       student-3-database:

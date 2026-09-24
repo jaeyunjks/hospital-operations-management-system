@@ -1,0 +1,32 @@
+<div class="panel__header">
+  <div>
+    <span class="page-header__eyebrow">Model Context Protocol</span>
+    <h2 class="panel__title">Shared MCP tools</h2>
+  </div>
+  <div id="mcp-status" hx-get="/mcp/status" hx-trigger="load" hx-swap="innerHTML"><span class="badge badge-neutral">Checking MCP…</span></div>
+</div>
+<div class="panel__body">
+  <p class="table__muted">Runs a registered tool on the shared local MCP server through the pharmacy backend. These tools are read-only and never change inventory.</p>
+  <div class="mcp-forms">
+    <form class="toolbar__group" hx-post="/mcp/call" hx-target="#mcp-result" hx-swap="innerHTML" hx-indicator="#mcp-loading" hx-disabled-elt="find button">
+      <input type="hidden" name="tool" value="homs_pharmacy_stock_alerts">
+      <label class="mcp-field">Alert type
+        <select class="select" name="alert_type">
+          <option value="all">All alerts</option>
+          <option value="low_stock">Low stock</option>
+          <option value="expiring_soon">Expiring soon</option>
+        </select>
+      </label>
+      <button class="btn btn-primary" type="submit">Get stock alerts via MCP</button>
+    </form>
+    <form class="toolbar__group" hx-post="/mcp/call" hx-target="#mcp-result" hx-swap="innerHTML" hx-indicator="#mcp-loading" hx-disabled-elt="find button">
+      <input type="hidden" name="tool" value="homs_echo">
+      <label class="mcp-field">Message
+        <input class="input" name="message" value="pharmacy connectivity check" maxlength="200" required>
+      </label>
+      <button class="btn btn-secondary" type="submit">Test connectivity</button>
+    </form>
+  </div>
+  <p id="mcp-loading" class="htmx-indicator table__muted" role="status">Calling the shared MCP server…</p>
+  <div id="mcp-result" aria-live="polite"></div>
+</div>

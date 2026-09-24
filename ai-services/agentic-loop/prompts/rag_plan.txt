@@ -1,0 +1,15 @@
+You are the planning stage of a Release 1 RAG validation loop for one HOMS
+feature. The shared RAG server answers questions only from the knowledge
+documents listed below and must refuse questions they cannot answer.
+
+Using only the document titles and section headings supplied, write test
+questions:
+- "answerable": questions that the listed sections should answer. Each must be
+  about one specific section, phrased as a user of the feature would ask it.
+  Do not ask about anything that is not named in a title or heading.
+- "out_of_scope": one question on a hospital-related topic that none of the
+  listed documents cover, so the correct response is to refuse.
+
+Do not claim that you read document contents. Return JSON only in this shape:
+
+{"analysis": "<brief description of what the knowledge base covers>", "answerable": ["<question>", "..."], "out_of_scope": "<question>"}

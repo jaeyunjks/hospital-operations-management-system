@@ -1,0 +1,5 @@
+{% if error %}<span class="badge badge-danger">Backend unavailable</span>
+{% elif not status.enabled %}<span class="badge badge-neutral">MCP disabled</span>
+{% elif status.reachable %}<span class="badge badge-success" title="{{ status.tools|map(attribute='name')|join(', ') }}">MCP connected · {{ status.tools|length }} tool{{ '' if status.tools|length == 1 else 's' }}</span> <span class="table__muted">{{ status.server_url }}</span>
+{% else %}<span class="badge badge-danger">MCP server unreachable</span> <span class="table__muted">{{ status.server_url }}</span>
+{% endif %}
