@@ -4508,6 +4508,84 @@ def test_operational_demand_invents_no_occupancy_data(
     assert "Gap 1" in body
 
 
+# -------------------------------------------- Release 1 MCP occupancy panel
+def _occupancy_result():
+    return {
+        "schema_version": "1.0", "ok": True,
+        "tool": "homs_ward_occupancy_status",
+        "data": {
+            "requested_ward": None,
+            "wards": [{
+                "ward": "Emergency", "total_beds": 10, "occupied": 6,
+                "available": 2, "reserved": 1, "maintenance": 1,
+                "monitored_beds": 10, "occupancy_pct": 60.0,
+                "care_categories": ["Short-term"],
+            }],
+            "totals": {
+                "total_beds": 10, "occupied": 6, "available": 2,
+                "reserved": 1, "maintenance": 1, "occupancy_pct": 60.0,
+            },
+            "source": "student-4-room-bed-api",
+        },
+        "error": None,
+    }
+
+
+def test_overview_contains_manual_mcp_panel(frontend_client):
+    body = frontend_client.get("/").data.decode()
+    assert "Ward occupancy — via MCP" in body
+    assert "Load ward occupancy" in body
+    assert 'hx-get="/partials/ward-occupancy"' in body
+    assert body.index("Operational summary") < body.index("Ward occupancy — via MCP")
+    assert body.index("Ward occupancy — via MCP") < body.index("Workforce forecast")
+    assert "Generate AI summary" not in body  # summary itself still loads as a partial
+
+
+def test_ward_occupancy_partial_renders_aggregates_and_provenance(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_ward_occupancy", _occupancy_result)
+    response = frontend_client.get("/partials/ward-occupancy")
+    body = response.data.decode()
+    assert response.status_code == 200
+    assert "Emergency" in body
+    assert "10 total beds" in body
+    assert "6 occupied" in body
+    assert "2 available" in body
+    assert "60.0%" in body
+    assert "Current snapshot from Room &amp; Bed via shared MCP" in body
+    assert "AI-generated" not in body
+
+
+def test_ward_occupancy_error_is_local_and_retryable(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_ward_occupancy", _raise_unavailable)
+    response = frontend_client.get("/partials/ward-occupancy")
+    body = response.data.decode()
+    assert response.status_code == 200
+    assert "Ward occupancy unavailable" in body
+    assert "Retry" in body
+    assert 'hx-target="#ward-occupancy-panel"' in body
+    assert "Operational summary" not in body
+
+
+def test_frontend_mcp_client_uses_backend_and_dedicated_timeout(
+        fe_api_client, monkeypatch):
+    captured = {}
+
+    def fake_request(method, path, **kwargs):
+        captured.update(method=method, path=path, **kwargs)
+        return _occupancy_result()
+
+    monkeypatch.setattr(fe_api_client, "_request", fake_request)
+    result = fe_api_client.get_ward_occupancy("Emergency")
+    assert result["tool"] == "homs_ward_occupancy_status"
+    assert captured == {
+        "method": "GET", "path": "/api/mcp/ward-occupancy",
+        "params": {"ward": "Emergency"},
+        "timeout": fe_api_client.MCP_API_TIMEOUT,
+    }
+
+
 def test_demand_callout_spacing_is_not_an_inline_style(
         frontend_client, fe_api_client, monkeypatch):
     _daily_stubs(monkeypatch, fe_api_client, [

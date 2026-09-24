@@ -32,6 +32,10 @@ API_TIMEOUT = float(os.environ.get("STAFF_SHIFT_API_TIMEOUT", "5"))
 SUMMARY_API_TIMEOUT = float(os.environ.get(
     "STAFF_SHIFT_SUMMARY_API_TIMEOUT", str(max(API_TIMEOUT, 10.0))))
 
+#: The MCP-backed endpoint has a longer bounded upstream path than ordinary
+#: workforce calls. Keep its allowance local rather than slowing every call.
+MCP_API_TIMEOUT = float(os.environ.get("STAFF_SHIFT_MCP_API_TIMEOUT", "20"))
+
 
 class BackendUnavailableError(Exception):
     """The backend/API microservice could not be reached at all."""
@@ -172,6 +176,12 @@ def get_coverage(shift_date: Optional[str] = None,
     return _request("GET", "/api/shifts/coverage",
                      params={"shift_date": shift_date, "department": department,
                              "shift_status": shift_status})
+
+
+def get_ward_occupancy(ward: Optional[str] = None) -> Dict[str, Any]:
+    """GET Student 5's MCP gateway; the frontend never contacts MCP itself."""
+    return _request("GET", "/api/mcp/ward-occupancy",
+                    params={"ward": ward}, timeout=MCP_API_TIMEOUT)
 
 
 def list_shifts(department: Optional[str] = None,

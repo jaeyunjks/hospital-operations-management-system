@@ -93,6 +93,22 @@
         </div>
       </section>
 
+      <section class="panel" aria-labelledby="ward-occupancy-title">
+        <div class="panel__header">
+          <div>
+            <h2 class="panel__title" id="ward-occupancy-title">Ward occupancy — via MCP</h2>
+            <p class="panel__meta">Read-only Room &amp; Bed operational snapshot</p>
+          </div>
+        </div>
+        <div class="panel__body">
+          <div id="ward-occupancy-panel">
+            {% with occupancy=None, error=None, initial=True %}
+              {% include "partials/ward_occupancy.html" %}
+            {% endwith %}
+          </div>
+        </div>
+      </section>
+
       <!-- A deliberately compact placeholder: forecasting is not part of this
            Release 0 workflow and should not compete with real operational data. -->
       <section class="panel forecast-strip" aria-labelledby="forecast-title">

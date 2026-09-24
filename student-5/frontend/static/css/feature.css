@@ -393,6 +393,39 @@
   min-width: 0;
 }
 
+.ward-occupancy-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border: var(--border-hair);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.ward-occupancy-totals > div {
+  padding: var(--space-3);
+  border-right: var(--border-hair);
+  border-bottom: var(--border-hair);
+}
+
+.ward-occupancy-totals > div:nth-child(3n) { border-right: 0; }
+.ward-occupancy-totals > div:nth-last-child(-n + 3) { border-bottom: 0; }
+.ward-occupancy-totals dt { color: var(--color-text-muted); font-size: var(--size-ui-xs); }
+.ward-occupancy-totals dd { margin: var(--space-1) 0 0; font-weight: var(--weight-semibold); }
+
+.ward-occupancy-list {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ward-occupancy-list li {
+  padding-top: var(--space-3);
+  border-top: var(--border-hair);
+}
+
 /* Forecast placeholder — a compact strip below the real summary,
    restrained and explicitly non-functional. */
 

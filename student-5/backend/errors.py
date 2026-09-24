@@ -58,6 +58,27 @@ class DatabaseServiceError(ApiError):
     error_code = "database_service_unavailable"
 
 
+class MCPUnavailableError(ApiError):
+    """The optional shared MCP path is disabled or cannot be reached."""
+
+    status_code = 503
+    error_code = "mcp_unavailable"
+
+
+class MCPTimeoutError(ApiError):
+    """The bounded shared MCP operation exceeded its deadline."""
+
+    status_code = 504
+    error_code = "mcp_timeout"
+
+
+class MCPBadGatewayError(ApiError):
+    """The MCP server returned an invalid protocol or tool contract."""
+
+    status_code = 502
+    error_code = "mcp_invalid_response"
+
+
 def register_error_handlers(app: Flask) -> None:
     """Attach JSON error handling to the application."""
 

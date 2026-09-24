@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       STUDENT5_AI_ENABLED: "false"
+      STUDENT5_MCP_ENABLED: "false"
 
     steps:
       - name: Check out repository
