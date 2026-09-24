@@ -1,7 +1,8 @@
 # AI Services
 
 Central AI capabilities shared across the five feature microservices.
-**Scaffold only — nothing implemented yet.**
+Release 1 implements the shared `mcp-server/` and `rag-server/`; both run locally,
+outside Docker Compose.
 
 | Directory            | Purpose                                   | Release   |
 |----------------------|-------------------------------------------|-----------|
