@@ -16,6 +16,14 @@
       hx-post="{{ '/partials/shifts' if mode == 'create' else '/partials/shifts/' ~ shift_id }}"
       hx-target="#shift-drawer" hx-swap="innerHTML"
       hx-indicator="#loading-indicator">
+  {% if grid_context %}
+  <div class="shift-form__quick-context" role="status">
+    <span class="u-label">Quick create</span>
+    <strong>{{ grid_context.date_label }} · {{ grid_context.daypart }}</strong>
+    <span>Choose a template or enter the actual start and end times.</span>
+  </div>
+  {% endif %}
+
   {% if error %}
   <div class="alert alert--danger" role="alert">
     <div>

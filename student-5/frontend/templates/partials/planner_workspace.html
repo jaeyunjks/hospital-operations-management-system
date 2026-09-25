@@ -25,23 +25,25 @@
   <div class="planner-commandbar">
     <div class="planner-week-heading">
       <span class="u-label">Planning period</span>
-      <h2>Week of {{ week_start.strftime('%-d %B') }} – {{ week_end.strftime('%-d %B %Y') }}</h2>
-      <div class="week-nav" aria-label="Week navigation">
-        <button class="btn-ghost btn-compact week-nav__step" type="button"
-                hx-get="/partials/planner" hx-include="#planner-state"
-                hx-vals='{"week_start":"{{ (week_start - timedelta(days=7)).isoformat() }}","selected_date":"{{ (selected_date - timedelta(days=7)).isoformat() }}","selected_shift_id":""}'>
-          <span aria-hidden="true">‹</span> Previous week
-        </button>
-        <button class="btn-secondary btn-compact week-nav__reset" type="button"
-                hx-get="/partials/planner" hx-include="#planner-state"
-                hx-vals='{"week_start":"{{ today_week_start }}","selected_date":"{{ today_iso }}","selected_shift_id":""}'>
-          This week
-        </button>
-        <button class="btn-ghost btn-compact week-nav__step" type="button"
-                hx-get="/partials/planner" hx-include="#planner-state"
-                hx-vals='{"week_start":"{{ (week_start + timedelta(days=7)).isoformat() }}","selected_date":"{{ (selected_date + timedelta(days=7)).isoformat() }}","selected_shift_id":""}'>
-          Next week <span aria-hidden="true">›</span>
-        </button>
+      <div class="planning-period-row">
+        <h2>Week of {{ week_start.strftime('%-d %B') }} – {{ week_end.strftime('%-d %B %Y') }}</h2>
+        <nav class="week-nav" aria-label="Week navigation">
+          <button class="btn-ghost btn-compact week-nav__step" type="button"
+                  hx-get="/partials/planner" hx-include="#planner-state"
+                  hx-vals='{"week_start":"{{ (week_start - timedelta(days=7)).isoformat() }}","selected_date":"{{ (selected_date - timedelta(days=7)).isoformat() }}","selected_shift_id":""}'>
+            <span aria-hidden="true">‹</span> Previous week
+          </button>
+          <button class="btn-secondary btn-compact week-nav__reset" type="button"
+                  hx-get="/partials/planner" hx-include="#planner-state"
+                  hx-vals='{"week_start":"{{ today_week_start }}","selected_date":"{{ today_iso }}","selected_shift_id":""}'>
+            This week
+          </button>
+          <button class="btn-ghost btn-compact week-nav__step" type="button"
+                  hx-get="/partials/planner" hx-include="#planner-state"
+                  hx-vals='{"week_start":"{{ (week_start + timedelta(days=7)).isoformat() }}","selected_date":"{{ (selected_date + timedelta(days=7)).isoformat() }}","selected_shift_id":""}'>
+            Next week <span aria-hidden="true">›</span>
+          </button>
+        </nav>
       </div>
     </div>
     <div class="planner-commandbar__actions">
@@ -261,6 +263,7 @@
       </div>
       {% for day in week_dates %}
       {% set cell = row.cells[loop.index0] if row else none %}
+      {% set cell_daypart = row.label if row else fallback_label %}
       <div class="week-grid__cell{{ ' week-grid__cell--empty' if not cell or not cell.shifts else ' week-grid__cell--' ~ cell.state.tone }}">
         {% if cell and cell.shifts %}
           {% for shift in cell.shifts %}
@@ -274,7 +277,14 @@
           </button>
           {% endfor %}
         {% else %}
-        <span class="no-shift-mark">—</span><small>No shift</small>
+        <button class="grid-create" type="button" data-shift-drawer-open
+                aria-label="Create shift for {{ selected_department }} on {{ day.strftime('%A %-d %B') }}, {{ cell_daypart }}"
+                hx-get="{{ url_for('new_shift_partial', shift_date=day.isoformat(), department=selected_department, planning_period='week_grid', daypart=cell_daypart) }}"
+                hx-target="#shift-drawer" hx-swap="innerHTML"
+                hx-indicator="#loading-indicator">
+          <span aria-hidden="true">+</span>
+          <strong>Create shift</strong>
+        </button>
         {% endif %}
       </div>
       {% endfor %}

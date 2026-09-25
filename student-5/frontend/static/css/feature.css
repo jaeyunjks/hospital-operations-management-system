@@ -304,14 +304,16 @@
    3. Workforce Overview layout and cells
    ========================================================================== */
 
-/* Real operational data leads the page: demand gets the wider track and the
-   deterministic/AI-assisted summary stays visible beside it. */
+/* Shared overview row. Workforce Overview adds .overview-flow below because
+   its dynamic panels must not be height-coupled in opposing columns. */
 .panel-row {
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(280px, 0.9fr);
   gap: var(--gutter);
   align-items: start;
 }
+
+.overview-flow { grid-template-columns: minmax(0, 1fr); }
 
 /* The shared .table targets wide, full-page data grids: min-width 640px and
    generous --row-pad-x. The demand table has five compact columns inside a
@@ -383,9 +385,7 @@
   flex-shrink: 0;
 }
 
-/* The secondary rail uses its natural content height. Keeping the forecast
-   below the summary fills the otherwise-empty part of that rail without
-   inventing any operational content. */
+/* Summary, occupancy and forecast retain their existing order and partials. */
 .overview-secondary-stack {
   display: flex;
   flex-direction: column;
@@ -1026,6 +1026,24 @@
   font-size: var(--size-ui-sm);
 }
 
+.shift-form__quick-context {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border-left: var(--border-accent);
+  background: var(--color-accent-soft);
+}
+
+.shift-form__quick-context strong {
+  color: var(--color-text-primary);
+  font-size: var(--size-ui-sm);
+}
+
+.shift-form__quick-context > :last-child {
+  color: var(--color-text-muted);
+  font-size: var(--size-ui-xs);
+}
+
 .shift-form__section {
   min-width: 0;
   margin: 0;
@@ -1266,6 +1284,19 @@
   padding: var(--space-5);
 }
 
+.planner-week-heading {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.planning-period-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+}
+
 .planner-week-heading h2,
 .planning-board__header h2,
 .demand-panel__heading h2,
@@ -1288,7 +1319,7 @@
 }
 
 .week-nav {
-  margin-top: var(--space-3);
+  flex-shrink: 0;
   gap: var(--space-1);
 }
 
@@ -1687,6 +1718,39 @@
   background: var(--color-surface-muted);
 }
 
+.grid-create {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-label);
+  font-size: var(--size-label);
+}
+
+.grid-create:hover {
+  background: var(--color-surface-hover);
+  color: var(--color-accent-ink);
+}
+
+.grid-create:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: -2px;
+}
+
+.grid-create > span {
+  font-family: var(--font-mono);
+  font-size: var(--size-data);
+  line-height: 1;
+}
+
+.grid-create > strong { font-weight: var(--weight-medium); }
+
 .grid-shift {
   display: flex;
   flex: 1;
@@ -1710,8 +1774,6 @@
 .week-grid__cell--covered .grid-shift { color: var(--color-success); }
 .week-grid__cell--short-one .grid-shift { color: var(--color-warning); }
 .week-grid__cell--short-many .grid-shift { color: var(--color-danger); }
-.no-shift-mark { font-family: var(--font-mono); font-size: var(--size-data); }
-
 .week-grid__empty {
   grid-column: 1 / -1;
   padding: var(--space-7);

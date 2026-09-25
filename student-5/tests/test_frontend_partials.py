@@ -851,6 +851,36 @@ def test_new_shift_form_uses_selected_date(
     assert 'min="1"' in body
 
 
+def test_grid_quick_create_prefills_context_but_not_shift_times(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_form_options(monkeypatch, fe_api_client)
+    body = frontend_client.get(
+        "/partials/shifts/new?shift_date=2026-08-29&department=Emergency"
+        "&planning_period=week_grid&daypart=Afternoon").data.decode()
+
+    assert "Quick create" in body
+    assert "Saturday 29 · Afternoon" in body
+    assert 'value="2026-08-29"' in body
+    assert 'value="Emergency" selected' in body
+    assert 'name="start_time" type="time"\n             value=""' in body
+    assert 'name="end_time" type="time"\n             value=""' in body
+    assert 'value="Custom" selected' in body
+    assert "Choose a template or enter the actual start and end times." in body
+
+
+def test_invalid_grid_daypart_is_ignored_and_uses_manual_defaults(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_form_options(monkeypatch, fe_api_client)
+    body = frontend_client.get(
+        "/partials/shifts/new?shift_date=2026-08-29&department=Emergency"
+        "&planning_period=week_grid&daypart=Evening").data.decode()
+
+    assert "Quick create" not in body
+    assert 'value="Emergency" selected' not in body
+    assert 'name="start_time" type="time"\n             value="07:00"' in body
+    assert 'name="end_time" type="time"\n             value="15:00"' in body
+
+
 def test_shift_form_options_are_real_distinct_sorted_selects(
         frontend_client, fe_api_client, monkeypatch):
     _stub_shift_form_options(monkeypatch, fe_api_client)
@@ -880,6 +910,9 @@ def test_shift_templates_are_ui_only_and_create_defaults_to_morning(
     assert 'Afternoon · 15:00–23:00' in body
     assert 'Night · 23:00–07:00' in body
     assert 'value="Custom"' in body
+    assert "Quick create" not in body
+    assert 'name="start_time" type="time"\n             value="07:00"' in body
+    assert 'name="end_time" type="time"\n             value="15:00"' in body
 
 
 def test_shift_form_groups_workflow_without_changing_required_staff_contract(
@@ -1262,7 +1295,7 @@ def test_week_planner_aggregates_daily_demand_and_real_department_gaps(
     assert "<dt>Coverage</dt><dd>50%</dd>" in body
     assert "<dt>Staffing gap</dt><dd>2</dd>" in body
     assert 'aria-label="2 unfilled"' in body
-    assert "No shift" in body
+    assert "Create shift" in body
     assert "<strong>Morning</strong>" in body
     assert "<strong>Afternoon</strong>" in body
     assert "<strong>Night</strong>" in body
@@ -1288,6 +1321,25 @@ def test_week_grid_preserves_multiple_real_shifts_in_one_cell(
     assert "2/3" in body
     assert "0/1" in body
     assert "Registered Nurse" in body and "Doctor" in body
+    assert 'aria-label="Manage Emergency 07:00 shift on 2026-08-26' in body
+    assert 'hx-get="/partials/planner"' in body
+
+
+def test_empty_week_grid_cell_opens_existing_create_drawer_with_ui_context(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+    body = frontend_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=Emergency").data.decode()
+
+    assert 'class="grid-create"' in body
+    assert 'aria-label="Create shift for Emergency on Saturday 29 August, Afternoon"' in body
+    assert (
+        "/partials/shifts/new?shift_date=2026-08-29&amp;department=Emergency"
+        "&amp;planning_period=week_grid&amp;daypart=Afternoon"
+    ) in body
+    assert 'hx-target="#shift-drawer"' in body
+    assert "No shift" not in body
 
 
 def test_planner_role_and_status_filters_are_server_derived(
@@ -1318,10 +1370,16 @@ def test_planner_controls_group_filters_notice_and_clear_week_navigation(
     assert 'name="shift_status"' in department_section
     assert 'class="department-strip__notice"' in department_section
     assert "unfilled position" in department_section
-    assert '‹</span> Previous week' in body
-    assert 'class="btn-secondary btn-compact week-nav__reset"' in body
-    assert "This week" in body
-    assert 'Next week <span aria-hidden="true">›</span>' in body
+    period_start = body.index('<div class="planning-period-row">')
+    period_end = body.index("</div>", period_start)
+    period_header = body[period_start:period_end]
+    assert "Week of 24 August – 30 August 2026" in period_header
+    assert 'aria-label="Week navigation"' in period_header
+    assert '‹</span> Previous week' in period_header
+    assert 'class="btn-secondary btn-compact week-nav__reset"' in period_header
+    assert "This week" in period_header
+    assert 'Next week <span aria-hidden="true">›</span>' in period_header
+    assert body.index('class="planner-commandbar__actions"') > period_end
 
 
 def test_day_timeline_renders_real_positions_and_overnight_tail(
@@ -4474,10 +4532,12 @@ def test_overview_prioritises_demand_and_summary_before_compact_forecast(
     _overview_stubs(monkeypatch, fe_api_client)
     body = frontend_client.get("/").data.decode()
 
+    assert '<div class="panel-row overview-flow">' in body
     assert '<div class="overview-secondary-stack">' in body
     assert '<section class="panel forecast-strip"' in body
     assert body.index("Operational demand") < body.index("Operational summary")
-    assert body.index("Operational summary") < body.index("Workforce forecast")
+    assert body.index("Operational summary") < body.index("Ward occupancy — via MCP")
+    assert body.index("Ward occupancy — via MCP") < body.index("Workforce forecast")
 
 
 # ------------------------------ weekly availability: employee owns editing

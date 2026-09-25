@@ -145,6 +145,9 @@ def _shift_period(start_time: str) -> str:
     return "Night"
 
 
+GRID_DAYPARTS = frozenset(("Morning", "Afternoon", "Night"))
+
+
 def _week_start_for(value: str) -> datetime.date:
     """Return the Monday containing an ISO date, falling back to today."""
     try:
@@ -1320,13 +1323,14 @@ def create_app() -> Flask:
             )
         return departments, roles, reference_error
 
-    def _render_shift_form(values, mode, shift_id=None, error=None):
+    def _render_shift_form(values, mode, shift_id=None, error=None,
+                           grid_context=None):
         departments, roles, reference_error = _shift_form_reference_options(values)
         return render_template(
             "partials/shift_form.html", values=values, mode=mode,
             shift_id=shift_id, statuses=api_client.SHIFT_STATUSES, error=error,
             departments=departments, roles=roles,
-            reference_error=reference_error)
+            reference_error=reference_error, grid_context=grid_context)
 
     @app.get("/partials/roster-status")
     def roster_status_partial():
@@ -1413,12 +1417,30 @@ def create_app() -> Flask:
         selected_date = request.args.get("shift_date") or _today()
         if not _valid_iso_date(selected_date):
             selected_date = _today()
+
+        # The optional grid marker and daypart are presentation context only.
+        # They deliberately do not select a template or infer shift hours.
+        daypart = request.args.get("daypart")
+        grid_context = None
+        department = ""
+        start_time, end_time = "07:00", "15:00"
+        if (request.args.get("planning_period") == "week_grid"
+                and daypart in GRID_DAYPARTS):
+            department = (request.args.get("department") or "").strip()
+            start_time, end_time = "", ""
+            selected_day = datetime.datetime.strptime(
+                selected_date, "%Y-%m-%d").date()
+            grid_context = {
+                "date_label": selected_day.strftime("%A %-d"),
+                "daypart": daypart,
+            }
+
         return _render_shift_form({
-            "department": "", "shift_date": selected_date,
-            "start_time": "07:00", "end_time": "15:00",
+            "department": department, "shift_date": selected_date,
+            "start_time": start_time, "end_time": end_time,
             "required_role": "", "required_staff_count": 1,
             "shift_status": "Planned", "notes": "",
-        }, "create")
+        }, "create", grid_context=grid_context)
 
     @app.get("/partials/shifts/<int:shift_id>/edit")
     def edit_shift_partial(shift_id: int):
