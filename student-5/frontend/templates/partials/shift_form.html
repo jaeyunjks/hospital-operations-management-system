@@ -1,5 +1,14 @@
-<div class="drawer__header">
-  <h2 class="u-label" id="shift-drawer-heading">{{ 'Create shift' if mode == 'create' else 'Edit shift' }}</h2>
+<div class="drawer__header shift-form__header">
+  <div>
+    <span class="u-label">{{ 'New schedule entry' if mode == 'create' else 'Editing schedule entry' }}</span>
+    <h2 class="shift-form__title" id="shift-drawer-heading">
+      {{ 'Create shift' if mode == 'create' else 'Edit shift' }}
+    </h2>
+    <p class="shift-form__header-copy">
+      {{ 'Set the service, timing and staffing requirement.' if mode == 'create'
+         else 'Update the shift details without changing its assignments.' }}
+    </p>
+  </div>
   <button class="drawer__close" type="button" data-drawer-close aria-label="Close shift form">×</button>
 </div>
 
@@ -25,86 +34,109 @@
   </div>
   {% endif %}
 
-  <p class="drawer__muted">
-    Use the operational fields accepted by the Staff &amp; Shift API. Shift IDs are assigned by the service.
-  </p>
-
   {% set selected_template = 'Morning' if values.start_time == '07:00' and values.end_time == '15:00'
                         else 'Afternoon' if values.start_time == '15:00' and values.end_time == '23:00'
                         else 'Night' if values.start_time == '23:00' and values.end_time == '07:00'
                         else 'Custom' %}
-  <div class="shift-form__grid">
-    <label class="filter">
-      <span class="filter__label">Department</span>
-      <select class="select" name="department" required>
-        <option value="" {% if not values.department %}selected{% endif %} disabled>Select department</option>
-        {% for department in departments %}
-        <option value="{{ department }}" {% if values.department == department %}selected{% endif %}>{{ department }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label class="filter">
-      <span class="filter__label">Shift date</span>
-      <input class="input" name="shift_date" type="date" value="{{ values.shift_date }}" required>
-    </label>
-    <label class="filter shift-form__wide" for="shift-template">
-      <span class="filter__label">Shift template</span>
-      <span class="shift-form__status-row">
-        <select class="select" id="shift-template" data-shift-template
-                aria-describedby="shift-template-help">
-          <option value="Morning" {% if selected_template == 'Morning' %}selected{% endif %}>Morning · 07:00–15:00</option>
-          <option value="Afternoon" {% if selected_template == 'Afternoon' %}selected{% endif %}>Afternoon · 15:00–23:00</option>
-          <option value="Night" {% if selected_template == 'Night' %}selected{% endif %}>Night · 23:00–07:00</option>
-          <option value="Custom" {% if selected_template == 'Custom' %}selected{% endif %}>Custom</option>
-        </select>
-        <span class="shift-form__help" id="shift-template-help">
-          Prefills start and end; both times remain editable.
-        </span>
-      </span>
-    </label>
-    <label class="filter">
-      <span class="filter__label">Start time</span>
-      <input class="input" id="shift-start-time" name="start_time" type="time"
-             value="{{ values.start_time }}" data-shift-time required>
-    </label>
-    <label class="filter">
-      <span class="filter__label">End time</span>
-      <input class="input" id="shift-end-time" name="end_time" type="time"
-             value="{{ values.end_time }}" data-shift-time required>
-    </label>
-    <label class="filter">
-      <span class="filter__label">Required role</span>
-      <select class="select" name="required_role" required>
-        <option value="" {% if not values.required_role %}selected{% endif %} disabled>Select required role</option>
-        {% for role in roles %}
-        <option value="{{ role }}" {% if values.required_role == role %}selected{% endif %}>{{ role }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label class="filter">
-      <span class="filter__label">Required staff count</span>
-      <input class="input" name="required_staff_count" type="number" min="1" step="1"
-             value="{{ values.required_staff_count }}" required>
-    </label>
-    <label class="filter shift-form__wide shift-form__status" for="shift-status">
-      <span class="filter__label">Shift status</span>
-      <span class="shift-form__status-row">
-        <select class="select" id="shift-status" name="shift_status"
-                aria-describedby="shift-status-help">
-          {% for status in statuses %}
-          <option value="{{ status }}" {% if values.shift_status == status %}selected{% endif %}>{{ status }}</option>
+  <fieldset class="shift-form__section">
+    <legend>Service and date</legend>
+    <p class="shift-form__section-copy">Choose where and when this shift belongs.</p>
+    <div class="shift-form__grid">
+      <label class="filter">
+        <span class="filter__label">Department</span>
+        <select class="select" name="department" required>
+          <option value="" {% if not values.department %}selected{% endif %} disabled>Select department</option>
+          {% for department in departments %}
+          <option value="{{ department }}" {% if values.department == department %}selected{% endif %}>{{ department }}</option>
           {% endfor %}
         </select>
-        <span class="shift-form__help" id="shift-status-help">
-          Lifecycle state of the shift; coverage comes from assignments.
+      </label>
+      <label class="filter">
+        <span class="filter__label">Shift date</span>
+        <input class="input" name="shift_date" type="date" value="{{ values.shift_date }}" required>
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset class="shift-form__section">
+    <legend>Timing</legend>
+    <p class="shift-form__section-copy">Start with a template or enter a custom time range.</p>
+    <div class="shift-form__grid">
+      <label class="filter shift-form__wide" for="shift-template">
+        <span class="filter__label">Shift template</span>
+        <span class="shift-form__status-row">
+          <select class="select" id="shift-template" data-shift-template
+                  aria-describedby="shift-template-help">
+            <option value="Morning" {% if selected_template == 'Morning' %}selected{% endif %}>Morning · 07:00–15:00</option>
+            <option value="Afternoon" {% if selected_template == 'Afternoon' %}selected{% endif %}>Afternoon · 15:00–23:00</option>
+            <option value="Night" {% if selected_template == 'Night' %}selected{% endif %}>Night · 23:00–07:00</option>
+            <option value="Custom" {% if selected_template == 'Custom' %}selected{% endif %}>Custom</option>
+          </select>
+          <span class="shift-form__help" id="shift-template-help">
+            Prefills start and end; both times remain editable.
+          </span>
         </span>
-      </span>
-    </label>
-    <label class="filter shift-form__wide">
-      <span class="filter__label">Notes <span class="u-muted">(optional)</span></span>
-      <textarea class="textarea" name="notes" rows="4">{{ values.notes }}</textarea>
-    </label>
-  </div>
+      </label>
+      <label class="filter">
+        <span class="filter__label">Start time</span>
+        <input class="input" id="shift-start-time" name="start_time" type="time"
+             value="{{ values.start_time }}" data-shift-time required>
+      </label>
+      <label class="filter">
+        <span class="filter__label">End time</span>
+        <input class="input" id="shift-end-time" name="end_time" type="time"
+             value="{{ values.end_time }}" data-shift-time required>
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset class="shift-form__section shift-form__section--requirement">
+    <legend>Staffing requirement</legend>
+    <p class="shift-form__section-copy" id="required-staff-help">
+      Set by the manager. Room &amp; Bed context is informational and never changes this requirement.
+    </p>
+    <div class="shift-form__grid">
+      <label class="filter">
+        <span class="filter__label">Required role</span>
+        <select class="select" name="required_role" required>
+          <option value="" {% if not values.required_role %}selected{% endif %} disabled>Select required role</option>
+          {% for role in roles %}
+          <option value="{{ role }}" {% if values.required_role == role %}selected{% endif %}>{{ role }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label class="filter shift-form__required-count">
+        <span class="filter__label">Required staff count</span>
+        <input class="input" name="required_staff_count" type="number" min="1" step="1"
+               value="{{ values.required_staff_count }}" aria-describedby="required-staff-help" required>
+      </label>
+    </div>
+  </fieldset>
+
+  <fieldset class="shift-form__section">
+    <legend>Workflow details</legend>
+    <p class="shift-form__section-copy">Assignments and coverage are reviewed after the shift is saved.</p>
+    <div class="shift-form__grid">
+      <label class="filter shift-form__wide shift-form__status" for="shift-status">
+        <span class="filter__label">Shift status</span>
+        <span class="shift-form__status-row">
+          <select class="select" id="shift-status" name="shift_status"
+                  aria-describedby="shift-status-help">
+            {% for status in statuses %}
+            <option value="{{ status }}" {% if values.shift_status == status %}selected{% endif %}>{{ status }}</option>
+            {% endfor %}
+          </select>
+          <span class="shift-form__help" id="shift-status-help">
+            Lifecycle state of the shift; coverage comes from assignments.
+          </span>
+        </span>
+      </label>
+      <label class="filter shift-form__wide">
+        <span class="filter__label">Notes <span class="u-muted">(optional)</span></span>
+        <textarea class="textarea" name="notes" rows="4">{{ values.notes }}</textarea>
+      </label>
+    </div>
+  </fieldset>
 
   <div class="drawer-actions">
     <button class="btn-primary" type="submit" {% if reference_error %}disabled{% endif %}>{{ 'Create shift' if mode == 'create' else 'Save changes' }}</button>

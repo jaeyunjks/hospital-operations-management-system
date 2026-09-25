@@ -12,6 +12,26 @@
     </div>
   </div>
 
+  <section class="panel planner-occupancy-context"
+           aria-labelledby="planner-ward-occupancy-title">
+    <div class="planner-occupancy-context__header">
+      <div>
+        <span class="page-header__eyebrow">Operational context</span>
+        <h2 class="panel__title" id="planner-ward-occupancy-title">
+          Room &amp; Bed context — via MCP
+        </h2>
+        <p class="panel__meta">Current operational snapshot · Informational only</p>
+      </div>
+      <span class="badge-info">Decision support</span>
+    </div>
+    <div class="planner-occupancy-context__body"
+         id="planner-ward-occupancy-panel" aria-live="polite">
+      {% with occupancy=None, error=None, initial=True %}
+        {% include "partials/ward_occupancy_compact.html" %}
+      {% endwith %}
+    </div>
+  </section>
+
   {# The persistent wrapper owns the only load trigger. Returned planner
      fragments never contain a load trigger, so swaps cannot re-arm it. #}
   <div id="planner-workspace" aria-live="polite"

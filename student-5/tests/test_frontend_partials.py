@@ -740,6 +740,21 @@ def test_shift_planner_shell_and_navigation(frontend_client, fe_api_client, monk
     assert 'hx-trigger="load, shifts-updated from:body"' in body
 
 
+def test_shift_planner_contains_manual_compact_mcp_context(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "list_shifts",
+                        lambda **kwargs: {"count": 1, "shifts": [SHIFT_FIXTURE]})
+    body = frontend_client.get("/shifts?date=2026-08-27").data.decode()
+
+    assert "Room &amp; Bed context — via MCP" in body
+    assert "Current operational snapshot" in body
+    assert "Informational only" in body
+    assert "Load occupancy" in body
+    assert 'hx-get="/partials/ward-occupancy?view=compact"' in body
+    assert 'hx-target="#planner-ward-occupancy-panel"' in body
+    assert body.index("Room &amp; Bed context — via MCP") < body.index('id="planner-workspace"')
+
+
 def test_shift_planner_shell_survives_backend_failure(
         frontend_client, fe_api_client, monkeypatch):
     monkeypatch.setattr(fe_api_client, "list_shifts", _raise_unavailable)
@@ -865,6 +880,21 @@ def test_shift_templates_are_ui_only_and_create_defaults_to_morning(
     assert 'Afternoon · 15:00–23:00' in body
     assert 'Night · 23:00–07:00' in body
     assert 'value="Custom"' in body
+
+
+def test_shift_form_groups_workflow_without_changing_required_staff_contract(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_form_options(monkeypatch, fe_api_client)
+    body = frontend_client.get("/partials/shifts/new").data.decode()
+
+    assert "Service and date" in body
+    assert "Timing" in body
+    assert "Staffing requirement" in body
+    assert "Workflow details" in body
+    assert "Room &amp; Bed context is informational" in body
+    assert "never changes this requirement" in body
+    assert 'name="required_staff_count" type="number" min="1" step="1"' in body
+    assert "Assignments and coverage are reviewed after the shift is saved." in body
 
 
 def test_shift_form_reference_failure_is_isolated_and_submit_is_disabled(
@@ -4566,6 +4596,38 @@ def test_ward_occupancy_error_is_local_and_retryable(
     assert "Retry" in body
     assert 'hx-target="#ward-occupancy-panel"' in body
     assert "Operational summary" not in body
+
+
+def test_compact_ward_occupancy_renders_shift_planning_context(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_ward_occupancy", _occupancy_result)
+    response = frontend_client.get("/partials/ward-occupancy?view=compact")
+    body = response.data.decode()
+
+    assert response.status_code == 200
+    assert "Emergency" in body
+    assert "6 / 10 beds" in body
+    assert "2 beds" in body
+    assert "60.0%" in body
+    assert "No department-to-ward mapping is applied" in body
+    assert "do not change required staffing" in body
+    assert "Refresh occupancy" in body
+    assert 'hx-target="#planner-ward-occupancy-panel"' in body
+    assert "10 total beds" not in body  # Detailed totals remain on Workforce Overview.
+
+
+def test_compact_ward_occupancy_error_is_local_and_retryable(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(fe_api_client, "get_ward_occupancy", _raise_unavailable)
+    response = frontend_client.get("/partials/ward-occupancy?view=compact")
+    body = response.data.decode()
+
+    assert response.status_code == 200
+    assert "Room &amp; Bed context unavailable" in body
+    assert "Retry" in body
+    assert 'hx-get="/partials/ward-occupancy?view=compact"' in body
+    assert 'hx-target="#planner-ward-occupancy-panel"' in body
+    assert "Ward occupancy unavailable" not in body
 
 
 def test_frontend_mcp_client_uses_backend_and_dedicated_timeout(

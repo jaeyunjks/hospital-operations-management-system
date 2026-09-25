@@ -900,7 +900,7 @@
 .planner-shift__coverage { text-align: right; }
 .planner-shift__coverage strong { color: var(--color-text-data); }
 
-.drawer--planner { width: min(560px, 100vw); }
+.drawer--planner { width: min(620px, 100vw); }
 
 .shift-detail__identity {
   display: flex;
@@ -1009,7 +1009,54 @@
   gap: var(--space-3);
 }
 
-.shift-form { gap: var(--space-4); }
+.shift-form { gap: var(--space-5); }
+
+.shift-form__header { align-items: flex-start; }
+
+.shift-form__title {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-display);
+  font-size: var(--size-ui-lg);
+  color: var(--color-text-primary);
+}
+
+.shift-form__header-copy {
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--size-ui-sm);
+}
+
+.shift-form__section {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-5);
+  border: var(--border-hair);
+  background: var(--color-surface);
+}
+
+.shift-form__section legend {
+  padding: 0 var(--space-2);
+  font-size: var(--size-ui-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.shift-form__section-copy {
+  margin: 0 0 var(--space-4);
+  font-size: var(--size-ui-xs);
+  line-height: var(--leading-ui);
+  color: var(--color-text-muted);
+}
+
+.shift-form__section--requirement {
+  border-left: var(--border-accent);
+  background: var(--color-accent-soft);
+}
+
+.shift-form__required-count .input {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-semibold);
+}
 
 .shift-form__grid {
   display: grid;
@@ -1101,6 +1148,97 @@
    7. Shift Planner — week workspace refinement
    ========================================================================== */
 .planner-page-header { margin-bottom: var(--space-5); }
+
+.planner-occupancy-context { margin-bottom: var(--space-5); }
+
+.planner-occupancy-context__header,
+.planner-occupancy-context__state,
+.planner-occupancy-context__footer,
+.planner-occupancy-list__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.planner-occupancy-context__header {
+  align-items: flex-start;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: var(--border-hair);
+}
+
+.planner-occupancy-context__header .panel__title {
+  margin-top: var(--space-1);
+}
+
+.planner-occupancy-context__body { padding: var(--space-4) var(--space-5); }
+
+.planner-occupancy-context__state > :first-child { flex: 1; }
+
+.planner-occupancy-context__loaded {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.planner-occupancy-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.planner-occupancy-list > li {
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-hair);
+  background: var(--color-surface-muted);
+}
+
+.planner-occupancy-list__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-3) 0 0;
+}
+
+.planner-occupancy-list__metrics dt {
+  color: var(--color-text-label);
+  font-size: var(--size-label);
+}
+
+.planner-occupancy-list__metrics dd {
+  margin: var(--space-1) 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--size-data-sm);
+  color: var(--color-text-data);
+}
+
+.planner-occupancy-context__footer {
+  align-items: flex-start;
+  padding-top: var(--space-4);
+  border-top: var(--border-hair);
+}
+
+.planner-occupancy-context__note {
+  max-width: 68ch;
+  font-size: var(--size-ui-xs);
+  line-height: var(--leading-ui);
+  color: var(--color-text-muted);
+}
+
+@media (max-width: 620px) {
+  .planner-occupancy-context__header,
+  .planner-occupancy-context__state,
+  .planner-occupancy-context__footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .planner-occupancy-list { grid-template-columns: minmax(0, 1fr); }
+}
 
 .planner-loading,
 .planner-error { padding: var(--space-6); }

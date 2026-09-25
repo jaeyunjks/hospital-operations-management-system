@@ -1,0 +1,71 @@
+{# The persistent #planner-ward-occupancy-panel wrapper lives in the Shift
+   Planner shell. This compact view reuses the same frontend route and
+   Student 5 backend MCP adapter as the detailed Workforce Overview panel. #}
+{% if initial %}
+<div class="planner-occupancy-context__state">
+  <p class="u-muted">
+    Load current Room &amp; Bed context before creating or editing a shift.
+  </p>
+  <button class="btn-secondary btn-compact" type="button"
+          hx-get="/partials/ward-occupancy?view=compact"
+          hx-target="#planner-ward-occupancy-panel" hx-swap="innerHTML"
+          hx-indicator="#loading-indicator" hx-disabled-elt="this"
+          aria-controls="planner-ward-occupancy-panel">Load occupancy</button>
+</div>
+
+{% elif error %}
+<div class="planner-occupancy-context__state">
+  <div class="alert alert--danger" role="alert">
+    <div>
+      <p class="alert__title">Room &amp; Bed context unavailable</p>
+      <p class="alert__body">{{ error }}</p>
+    </div>
+  </div>
+  <button class="btn-secondary btn-compact" type="button"
+          hx-get="/partials/ward-occupancy?view=compact"
+          hx-target="#planner-ward-occupancy-panel" hx-swap="innerHTML"
+          hx-indicator="#loading-indicator" hx-disabled-elt="this"
+          aria-controls="planner-ward-occupancy-panel">Retry</button>
+</div>
+
+{% else %}
+{% set data = occupancy.data %}
+<div class="planner-occupancy-context__loaded">
+  {% if data.wards %}
+  <ul class="planner-occupancy-list" role="list">
+    {% for ward in data.wards %}
+    <li>
+      <div class="planner-occupancy-list__heading">
+        <span class="u-strong">{{ ward.ward }}</span>
+        <span class="badge-info">{{ ward.occupancy_pct }}%</span>
+      </div>
+      <dl class="planner-occupancy-list__metrics">
+        <div>
+          <dt>Occupied</dt>
+          <dd>{{ ward.occupied }} / {{ ward.total_beds }} beds</dd>
+        </div>
+        <div>
+          <dt>Available</dt>
+          <dd>{{ ward.available }} beds</dd>
+        </div>
+      </dl>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="u-muted">No wards were returned in the current snapshot.</p>
+  {% endif %}
+
+  <div class="planner-occupancy-context__footer">
+    <p class="planner-occupancy-context__note">
+      Informational only. No department-to-ward mapping is applied, and these
+      figures do not change required staffing.
+    </p>
+    <button class="btn-secondary btn-compact" type="button"
+            hx-get="/partials/ward-occupancy?view=compact"
+            hx-target="#planner-ward-occupancy-panel" hx-swap="innerHTML"
+            hx-indicator="#loading-indicator" hx-disabled-elt="this"
+            aria-controls="planner-ward-occupancy-panel">Refresh occupancy</button>
+  </div>
+</div>
+{% endif %}
