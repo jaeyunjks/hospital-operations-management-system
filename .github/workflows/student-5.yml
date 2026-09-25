@@ -24,6 +24,7 @@ jobs:
     env:
       STUDENT5_AI_ENABLED: "false"
       STUDENT5_MCP_ENABLED: "false"
+      STUDENT5_RAG_ENABLED: "false"
 
     steps:
       - name: Check out repository
