@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -36,13 +37,30 @@ SUMMARY_API_TIMEOUT = float(os.environ.get(
 #: workforce calls. Keep its allowance local rather than slowing every call.
 MCP_API_TIMEOUT = float(os.environ.get("STAFF_SHIFT_MCP_API_TIMEOUT", "20"))
 
+#: A grounded RAG answer includes retrieval and local model generation behind
+#: the Student 5 API. Keep this allowance just beyond the backend's bounded
+#: 100-second upstream window without slowing ordinary frontend requests.
+RAG_API_TIMEOUT = float(os.environ.get("STAFF_SHIFT_RAG_API_TIMEOUT", "105"))
+
 
 class BackendUnavailableError(Exception):
     """The backend/API microservice could not be reached at all."""
 
 
+class BackendTimeoutError(BackendUnavailableError):
+    """The backend or one of its bounded upstream calls timed out."""
+
+
 class BackendError(Exception):
     """The backend/API microservice responded, but with an error or bad body."""
+
+
+class BackendServiceUnavailableError(BackendError):
+    """The backend is healthy but an optional upstream service is unavailable."""
+
+
+class BackendBadGatewayError(BackendError):
+    """The backend rejected an invalid response from an optional upstream."""
 
 
 class NotFoundError(BackendError):
@@ -143,9 +161,19 @@ def _request(method: str, path: str, params: Optional[Dict[str, Any]] = None,
         if error.code == 400:
             # Validation messages are written for the user; pass them through.
             raise ValidationFailed(detail) from error
+        if error.code == 502:
+            raise BackendBadGatewayError(detail) from error
+        if error.code == 503:
+            raise BackendServiceUnavailableError(detail) from error
+        if error.code == 504:
+            raise BackendTimeoutError(detail) from error
         raise BackendError(f"Staff & Shift service returned {error.code}: {detail}") from error
 
     except urllib.error.URLError as error:
+        if isinstance(error.reason, (TimeoutError, socket.timeout)):
+            raise BackendTimeoutError(
+                "The Staff & Shift service request timed out."
+            ) from error
         raise BackendUnavailableError(
             "Workforce data is temporarily unavailable. "
             "Check that the Staff & Shift service is running."
@@ -155,9 +183,8 @@ def _request(method: str, path: str, params: Optional[Dict[str, Any]] = None,
         # ``urlopen`` may surface a socket read timeout directly rather than
         # wrapping it in URLError. It is still an unavailable upstream, never
         # an internal server error that should escape into an HTMX response.
-        raise BackendUnavailableError(
-            "Workforce data is temporarily unavailable. "
-            "Check that the Staff & Shift service is running."
+        raise BackendTimeoutError(
+            "The Staff & Shift service request timed out."
         ) from error
 
     except json.JSONDecodeError as error:
@@ -182,6 +209,17 @@ def get_ward_occupancy(ward: Optional[str] = None) -> Dict[str, Any]:
     """GET Student 5's MCP gateway; the frontend never contacts MCP itself."""
     return _request("GET", "/api/mcp/ward-occupancy",
                     params={"ward": ward}, timeout=MCP_API_TIMEOUT)
+
+
+def ask_staff_shift_guidance(question: str) -> Dict[str, Any]:
+    """POST Student 5's RAG gateway with only the manager's question.
+
+    Retrieval controls and the shared service address remain owned by the
+    backend adapter. The browser cannot select a feature, model, endpoint or
+    retrieval size through this narrow frontend call.
+    """
+    return _request("POST", "/api/rag/ask", payload={"question": question},
+                    timeout=RAG_API_TIMEOUT)
 
 
 def list_shifts(department: Optional[str] = None,

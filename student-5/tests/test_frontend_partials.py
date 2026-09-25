@@ -4708,6 +4708,243 @@ def test_frontend_mcp_client_uses_backend_and_dedicated_timeout(
     }
 
 
+# -------------------------------------- Release 1 RAG documentation guidance
+def _guidance_answered(confidence="high"):
+    return {
+        "schema_version": "1.0",
+        "status": "answered",
+        "answer": "Coverage is calculated for each shift [S1].",
+        "confidence": confidence,
+        "citations": [{
+            "id": "S1",
+            "source": "student-5/shift-planning-and-coverage.md",
+            "title": "Shift Planning and Coverage",
+            "section": "Per-shift coverage calculation",
+            "score": 0.82,
+            "snippet": "Coverage counts active assignments for each shift.",
+        }],
+        "reason": None,
+    }
+
+
+def _guidance_insufficient():
+    return {
+        "schema_version": "1.0",
+        "status": "insufficient_context",
+        "answer": "The knowledge base does not contain enough relevant information.",
+        "confidence": "none",
+        "citations": [],
+        "reason": "no_relevant_context",
+    }
+
+
+def test_shift_planner_contains_manual_documentation_guidance_panel(
+        planner, fe_api_client, monkeypatch):
+    monkeypatch.setattr(
+        fe_api_client, "ask_staff_shift_guidance",
+        lambda question: (_ for _ in ()).throw(
+            AssertionError("guidance must not run on planner load")))
+
+    body = planner[0].get(
+        _planner_url(department="Emergency")).get_data(as_text=True)
+
+    assert "Staff &amp; Shift Guidance" in body
+    assert "Grounded in project documentation" in body
+    assert 'hx-post="/partials/rag-guidance"' in body
+    assert 'name="question"' in body
+    assert 'maxlength="500"' in body
+    assert "No guidance question asked yet" in body
+    assert "/api/rag/ask" not in body
+
+
+def test_guidance_form_exposes_no_retrieval_or_service_controls(planner):
+    body = planner[0].get(
+        _planner_url(department="Emergency")).get_data(as_text=True)
+    panel = body[body.index('class="panel assist-panel guidance-panel"'):
+                 body.index('class="panel planner-detail-panel"')]
+
+    assert 'name="feature"' not in panel
+    assert 'name="top_k"' not in panel
+    assert 'name="server_url"' not in panel
+    assert 'name="model"' not in panel
+    assert 'name="endpoint"' not in panel
+    assert "Only your question is sent; no roster or employee data" in panel
+
+
+def test_guidance_submission_uses_only_the_existing_backend_adapter(
+        frontend_client, fe_api_client, monkeypatch):
+    calls = []
+
+    def fake_ask(question):
+        calls.append(question)
+        return _guidance_answered()
+
+    monkeypatch.setattr(fe_api_client, "ask_staff_shift_guidance", fake_ask)
+    response = frontend_client.post(
+        "/partials/rag-guidance",
+        data={"question": "  How is shift coverage calculated?  ",
+              "feature": "student-1", "top_k": "99"})
+
+    assert response.status_code == 200
+    assert calls == ["How is shift coverage calculated?"]
+
+
+@pytest.mark.parametrize("confidence,label", [
+    ("high", "High confidence"),
+    ("medium", "Medium confidence"),
+    ("low", "Low confidence"),
+])
+def test_guidance_answer_renders_confidence_and_visible_citation_fields(
+        frontend_client, fe_api_client, monkeypatch, confidence, label):
+    monkeypatch.setattr(
+        fe_api_client, "ask_staff_shift_guidance",
+        lambda question: _guidance_answered(confidence))
+
+    body = frontend_client.post(
+        "/partials/rag-guidance",
+        data={"question": "How is shift coverage calculated?"}
+    ).get_data(as_text=True)
+
+    assert "Coverage is calculated for each shift [S1]." in body
+    assert label in body
+    assert "[S1]" in body
+    assert "Shift Planning and Coverage" in body
+    assert "Per-shift coverage calculation" in body
+    assert "Coverage counts active assignments for each shift." in body
+    assert "student-5/shift-planning-and-coverage.md" not in body
+    assert "Citation markers in the answer match the source cards below" in body
+
+
+def test_guidance_insufficient_context_is_a_safe_non_error_result(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(
+        fe_api_client, "ask_staff_shift_guidance",
+        lambda question: _guidance_insufficient())
+
+    response = frontend_client.post(
+        "/partials/rag-guidance", data={"question": "Who is rostered now?"})
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Insufficient context" in body
+    assert "does not support an answer" in body
+    assert "alert--danger" not in body
+    assert "Retry" not in body
+
+
+@pytest.mark.parametrize("error,title", [
+    ("unavailable", "Guidance unavailable"),
+    ("timeout", "Guidance request timed out"),
+    ("invalid", "Guidance response could not be used"),
+])
+def test_guidance_service_failures_are_local_and_retryable(
+        frontend_client, fe_api_client, monkeypatch, error, title):
+    import api_client
+    failures = {
+        "unavailable": api_client.BackendServiceUnavailableError("INTERNAL_UPSTREAM_DETAIL"),
+        "timeout": api_client.BackendTimeoutError("INTERNAL_TIMEOUT_DETAIL"),
+        "invalid": api_client.BackendBadGatewayError("INTERNAL_GATEWAY_DETAIL"),
+    }
+
+    def fail(_question):
+        raise failures[error]
+
+    monkeypatch.setattr(fe_api_client, "ask_staff_shift_guidance", fail)
+    body = frontend_client.post(
+        "/partials/rag-guidance",
+        data={"question": "How is shift coverage calculated?"}
+    ).get_data(as_text=True)
+
+    assert title in body
+    assert "Retry" in body
+    assert 'hx-post="/partials/rag-guidance"' in body
+    assert 'name="question" value="How is shift coverage calculated?"' in body
+    assert "INTERNAL_UPSTREAM_DETAIL" not in body
+    assert "INTERNAL_TIMEOUT_DETAIL" not in body
+    assert "INTERNAL_GATEWAY_DETAIL" not in body
+
+
+def test_guidance_rejects_malformed_success_response(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(
+        fe_api_client, "ask_staff_shift_guidance", lambda question: {"status": "answered"})
+    body = frontend_client.post(
+        "/partials/rag-guidance", data={"question": "How does coverage work?"}
+    ).get_data(as_text=True)
+    assert "Guidance response could not be used" in body
+    assert "No answer is shown" in body
+
+
+def test_guidance_unauthorized_state_is_explicit(
+        employee_client, fe_api_client, monkeypatch):
+    import api_client
+
+    def forbidden(_question):
+        raise api_client.ForbiddenError("Manager role required")
+
+    monkeypatch.setattr(fe_api_client, "ask_staff_shift_guidance", forbidden)
+    body = employee_client.post(
+        "/partials/rag-guidance", data={"question": "How does coverage work?"}
+    ).get_data(as_text=True)
+    assert "Guidance not permitted" in body
+    assert "available to Staff Managers only" in body
+    assert "Manager role required" not in body
+    assert "Retry" not in body
+
+
+@pytest.mark.parametrize("question", ["", "   ", "x" * 501])
+def test_guidance_question_validation_stops_before_backend(
+        frontend_client, fe_api_client, monkeypatch, question):
+    calls = []
+    monkeypatch.setattr(
+        fe_api_client, "ask_staff_shift_guidance",
+        lambda value: calls.append(value))
+
+    response = frontend_client.post(
+        "/partials/rag-guidance", data={"question": question})
+
+    assert response.status_code == 200
+    assert "Check the question" in response.get_data(as_text=True)
+    assert "500 characters or fewer" in response.get_data(as_text=True)
+    assert calls == []
+
+
+def test_guidance_accepts_exactly_500_characters(
+        frontend_client, fe_api_client, monkeypatch):
+    calls = []
+
+    def fake_ask(question):
+        calls.append(question)
+        return _guidance_answered()
+
+    monkeypatch.setattr(fe_api_client, "ask_staff_shift_guidance", fake_ask)
+    response = frontend_client.post(
+        "/partials/rag-guidance", data={"question": "x" * 500})
+    assert response.status_code == 200
+    assert calls == ["x" * 500]
+
+
+def test_frontend_rag_client_posts_only_question_with_dedicated_timeout(
+        fe_api_client, monkeypatch):
+    captured = {}
+
+    def fake_request(method, path, **kwargs):
+        captured.update(method=method, path=path, **kwargs)
+        return _guidance_answered()
+
+    monkeypatch.setattr(fe_api_client, "_request", fake_request)
+    result = fe_api_client.ask_staff_shift_guidance(
+        "How is shift coverage calculated?")
+
+    assert result["status"] == "answered"
+    assert captured == {
+        "method": "POST", "path": "/api/rag/ask",
+        "payload": {"question": "How is shift coverage calculated?"},
+        "timeout": fe_api_client.RAG_API_TIMEOUT,
+    }
+    assert fe_api_client.RAG_API_TIMEOUT > fe_api_client.API_TIMEOUT
+
+
 def test_demand_callout_spacing_is_not_an_inline_style(
         frontend_client, fe_api_client, monkeypatch):
     _daily_stubs(monkeypatch, fe_api_client, [

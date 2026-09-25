@@ -371,9 +371,42 @@
       <p class="drawer__muted">Calculating weekly roster status…</p>
     </section>
 
-    <section class="panel assist-panel" aria-labelledby="assist-heading">
-      <div class="assist-panel__heading"><span class="u-label">Assist</span><div><h2 id="assist-heading">Workforce planning</h2><p>Release 0 boundary</p></div></div>
-      <div class="assist-panel__body"><span class="u-label">AI recommendations</span><p>AI-assisted workforce planning is not enabled in this Release 0 Shift Planner view.</p><span class="badge-neutral">Coming soon</span></div>
+    <section class="panel assist-panel guidance-panel" aria-labelledby="guidance-heading">
+      <div class="assist-panel__heading">
+        <span class="u-label">Guidance</span>
+        <div>
+          <h2 id="guidance-heading">Staff &amp; Shift Guidance</h2>
+          <p>Grounded in project documentation</p>
+        </div>
+      </div>
+      <div class="assist-panel__body guidance-panel__body">
+        <p class="guidance-panel__intro">
+          Ask how Staff &amp; Shift rules and workflows operate. This provides
+          documentation guidance only; it does not inspect or change the live roster.
+        </p>
+        <form class="guidance-form"
+              hx-post="/partials/rag-guidance"
+              hx-target="#rag-guidance-result" hx-swap="innerHTML"
+              hx-indicator="#rag-guidance-loading"
+              hx-disabled-elt="find button">
+          <label class="field" for="rag-guidance-question">
+            <span class="field__label">Question</span>
+            <textarea class="textarea" id="rag-guidance-question" name="question"
+                      maxlength="500" required rows="4"
+                      placeholder="For example: How is shift coverage calculated?"></textarea>
+            <span class="field__hint">Maximum 500 characters.</span>
+          </label>
+          <div class="guidance-form__actions">
+            <button class="btn-primary btn-compact" type="submit">Ask</button>
+            <span class="guidance-form__scope">Only your question is sent; no roster or employee data.</span>
+          </div>
+        </form>
+        <div class="guidance-loading htmx-indicator" id="rag-guidance-loading"
+             role="status">Searching Staff &amp; Shift documentation…</div>
+        <div class="guidance-result" id="rag-guidance-result" aria-live="polite">
+          <p class="guidance-result__empty">No guidance question asked yet.</p>
+        </div>
+      </div>
     </section>
 
     <section class="panel planner-detail-panel" id="planner-detail" aria-live="polite">

@@ -1,0 +1,65 @@
+{% if error_kind %}
+<div class="guidance-state guidance-state--error">
+  <div class="alert {{ 'alert--warning' if error_kind == 'validation' else 'alert--danger' }}"
+       role="alert">
+    <div>
+      {% if error_kind == 'validation' %}
+      <p class="alert__title">Check the question</p>
+      <p class="alert__body">Enter a non-blank question of 500 characters or fewer.</p>
+      {% elif error_kind == 'unauthorized' %}
+      <p class="alert__title">Guidance not permitted</p>
+      <p class="alert__body">Staff &amp; Shift Guidance is available to Staff Managers only.</p>
+      {% elif error_kind == 'timeout' %}
+      <p class="alert__title">Guidance request timed out</p>
+      <p class="alert__body">The grounded answer took too long to return. Try the request again.</p>
+      {% elif error_kind == 'unavailable' %}
+      <p class="alert__title">Guidance unavailable</p>
+      <p class="alert__body">Staff &amp; Shift Guidance is not available right now. No alternative answer was generated.</p>
+      {% else %}
+      <p class="alert__title">Guidance response could not be used</p>
+      <p class="alert__body">The service returned an unexpected response. No answer is shown.</p>
+      {% endif %}
+    </div>
+  </div>
+  {% if error_kind in ('timeout', 'unavailable', 'invalid') %}
+  <form class="guidance-retry"
+        hx-post="/partials/rag-guidance"
+        hx-target="#rag-guidance-result" hx-swap="innerHTML"
+        hx-indicator="#rag-guidance-loading"
+        hx-disabled-elt="find button">
+    <input type="hidden" name="question" value="{{ question }}">
+    <button class="btn-secondary btn-compact" type="submit">Retry</button>
+  </form>
+  {% endif %}
+</div>
+
+{% elif result.status == 'insufficient_context' %}
+<div class="guidance-state guidance-state--insufficient" role="status">
+  <span class="badge-neutral">Insufficient context</span>
+  <p class="u-strong">The indexed Staff &amp; Shift documentation does not support an answer.</p>
+  <p class="guidance-result__note">Try a question about documented shift planning, coverage, availability, assignments or conflicts.</p>
+</div>
+
+{% else %}
+{% set confidence_tone = {'high': 'success', 'medium': 'warning', 'low': 'neutral'}[result.confidence] %}
+<article class="guidance-answer">
+  <div class="guidance-answer__header">
+    <span class="u-label">Documentation answer</span>
+    <span class="badge-{{ confidence_tone }}">{{ result.confidence|title }} confidence</span>
+  </div>
+  <p class="guidance-answer__text">{{ result.answer }}</p>
+  <p class="guidance-result__note">Citation markers in the answer match the source cards below.</p>
+  <ol class="guidance-citations" aria-label="Answer citations">
+    {% for citation in result.citations %}
+    <li class="guidance-citation">
+      <div class="guidance-citation__heading">
+        <span class="guidance-citation__marker">[{{ citation.id }}]</span>
+        <strong>{{ citation.title }}</strong>
+      </div>
+      <p class="guidance-citation__section">{{ citation.section }}</p>
+      <p class="guidance-citation__snippet">{{ citation.snippet }}</p>
+    </li>
+    {% endfor %}
+  </ol>
+</article>
+{% endif %}

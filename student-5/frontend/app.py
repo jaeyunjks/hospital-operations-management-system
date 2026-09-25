@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import datetime
 import os
+import re
 import sys
 import urllib.parse
 from pathlib import Path
@@ -33,8 +34,10 @@ from flask import (Flask, make_response, redirect, render_template,  # noqa: E40
 
 import api_client  # noqa: E402
 import demo_identity  # noqa: E402
-from api_client import (BackendError, BackendUnavailableError,  # noqa: E402
-                        ForbiddenError, NotFoundError)
+from api_client import (BackendBadGatewayError, BackendError,  # noqa: E402
+                        BackendServiceUnavailableError,
+                        BackendTimeoutError, BackendUnavailableError,
+                        ForbiddenError, NotFoundError, ValidationFailed)
 from demo_identity import ROLE_EMPLOYEE, ROLE_MANAGER  # noqa: E402
 
 DEFAULT_PORT = 3500
@@ -87,6 +90,53 @@ def _date_long(value: str) -> str:
         return parsed.strftime("%a, %d %b %Y").replace(" 0", " ")
     except (TypeError, ValueError):
         return value
+
+
+def _valid_guidance_result(result) -> bool:
+    """Accept only the stable documentation-guidance contract for rendering.
+
+    The backend adapter already validates the shared RAG response. This small
+    frontend boundary check prevents a mocked, stale or otherwise malformed
+    backend response from becoming a misleading answer in the manager UI.
+    """
+    if not isinstance(result, dict) or set(result) != {
+            "schema_version", "status", "answer", "confidence",
+            "citations", "reason"}:
+        return False
+    answer = result.get("answer")
+    citations = result.get("citations")
+    if (result.get("schema_version") != "1.0"
+            or not isinstance(answer, str) or not answer.strip()
+            or not isinstance(citations, list)):
+        return False
+
+    if result.get("status") == "insufficient_context":
+        return (result.get("confidence") == "none" and citations == []
+                and result.get("reason") in {
+                    "no_relevant_context", "model_declined", "uncited_answer"})
+    if result.get("status") != "answered" \
+            or result.get("confidence") not in {"low", "medium", "high"} \
+            or result.get("reason") not in {None, "invalid_citations_removed"} \
+            or not citations:
+        return False
+
+    cited = set(re.findall(r"\bS[1-4]\b", answer))
+    identifiers = set()
+    for citation in citations:
+        if not isinstance(citation, dict):
+            return False
+        identifier = citation.get("id")
+        visible_fields = (citation.get("title"), citation.get("section"),
+                          citation.get("snippet"))
+        if (not isinstance(identifier, str)
+                or re.fullmatch(r"S[1-4]", identifier) is None
+                or identifier not in cited
+                or identifier in identifiers
+                or not all(isinstance(value, str) and value.strip()
+                           for value in visible_fields)):
+            return False
+        identifiers.add(identifier)
+    return True
 
 
 def _coverage(assigned: int, required: int):
@@ -2166,6 +2216,51 @@ def create_app() -> Flask:
                                    occupancy=None, error=str(error), initial=False)
         return render_template(template,
                                occupancy=occupancy, error=None, initial=False)
+
+    @app.post("/partials/rag-guidance")
+    def rag_guidance_partial():
+        """Ask Student 5's manager-only documentation guidance endpoint.
+
+        Only the bounded question crosses this frontend boundary. The result
+        swaps into the guidance panel and cannot alter planner or roster state.
+        """
+        question = request.form.get("question", "")
+        if not question.strip() or len(question) > 500:
+            return render_template(
+                "partials/rag_guidance_result.html", result=None,
+                question=question, error_kind="validation")
+
+        question = question.strip()
+        try:
+            result = api_client.ask_staff_shift_guidance(question)
+        except ValidationFailed:
+            return render_template(
+                "partials/rag_guidance_result.html", result=None,
+                question=question, error_kind="validation")
+        except ForbiddenError:
+            return render_template(
+                "partials/rag_guidance_result.html", result=None,
+                question=question, error_kind="unauthorized")
+        except BackendTimeoutError:
+            return render_template(
+                "partials/rag_guidance_result.html", result=None,
+                question=question, error_kind="timeout")
+        except (BackendUnavailableError, BackendServiceUnavailableError):
+            return render_template(
+                "partials/rag_guidance_result.html", result=None,
+                question=question, error_kind="unavailable")
+        except (BackendBadGatewayError, BackendError):
+            return render_template(
+                "partials/rag_guidance_result.html", result=None,
+                question=question, error_kind="invalid")
+
+        if not _valid_guidance_result(result):
+            return render_template(
+                "partials/rag_guidance_result.html", result=None,
+                question=question, error_kind="invalid")
+        return render_template(
+            "partials/rag_guidance_result.html", result=result,
+            question=question, error_kind=None)
 
     return app
 
