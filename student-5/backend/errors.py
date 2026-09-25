@@ -79,6 +79,27 @@ class MCPBadGatewayError(ApiError):
     error_code = "mcp_invalid_response"
 
 
+class RAGUnavailableError(ApiError):
+    """The optional shared RAG path is disabled or cannot be reached."""
+
+    status_code = 503
+    error_code = "rag_unavailable"
+
+
+class RAGTimeoutError(ApiError):
+    """The bounded shared RAG request exceeded its deadline."""
+
+    status_code = 504
+    error_code = "rag_timeout"
+
+
+class RAGBadGatewayError(ApiError):
+    """The RAG server returned an invalid response contract."""
+
+    status_code = 502
+    error_code = "rag_invalid_response"
+
+
 def register_error_handlers(app: Flask) -> None:
     """Attach JSON error handling to the application."""
 

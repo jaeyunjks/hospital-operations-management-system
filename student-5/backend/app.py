@@ -29,6 +29,7 @@ from routes.ai_routes import ai_blueprint  # noqa: E402
 from routes.assignment_routes import assignment_blueprint  # noqa: E402
 from routes.coverage_routes import coverage_blueprint  # noqa: E402
 from routes.mcp_routes import mcp_blueprint  # noqa: E402
+from routes.rag_routes import rag_blueprint  # noqa: E402
 from routes.request_routes import request_blueprint  # noqa: E402
 from routes.shift_routes import shift_blueprint  # noqa: E402
 from routes.staff_routes import staff_blueprint  # noqa: E402
@@ -49,6 +50,7 @@ def create_app(config_object: type = Config) -> Flask:
     app.register_blueprint(coverage_blueprint)
     app.register_blueprint(ai_blueprint)
     app.register_blueprint(mcp_blueprint)
+    app.register_blueprint(rag_blueprint)
     app.register_blueprint(assignment_blueprint)
     app.register_blueprint(request_blueprint)
     app.register_blueprint(shift_blueprint)
@@ -111,6 +113,9 @@ def create_app(config_object: type = Config) -> Flask:
                 ],
                 "mcp": [
                     "GET    /api/mcp/ward-occupancy",
+                ],
+                "rag": [
+                    "POST   /api/rag/ask",
                 ],
             },
         })

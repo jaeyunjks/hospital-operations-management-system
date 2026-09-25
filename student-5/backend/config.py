@@ -41,4 +41,16 @@ class Config:
     )
     MCP_TIMEOUT = float(os.environ.get("MCP_TIMEOUT", "15"))
 
+    #: Optional Release 1 RAG integration. Student 5 uses it only for
+    #: documentation guidance; live roster data remains behind Student 5's
+    #: existing application services and database boundary.
+    RAG_ENABLED = os.environ.get("RAG_ENABLED", "false").lower() == "true"
+    RAG_SERVER_URL = os.environ.get(
+        "RAG_SERVER_URL", "http://127.0.0.1:8100"
+    )
+
+    #: The shared RAG server allows up to 90 seconds for its local model call.
+    #: Keep the caller deadline just above that bounded operation.
+    RAG_TIMEOUT = float(os.environ.get("RAG_TIMEOUT", "100"))
+
     JSON_SORT_KEYS = False
