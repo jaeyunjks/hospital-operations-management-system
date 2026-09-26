@@ -127,9 +127,19 @@ def generate_with_fallback(prompt, system=None, temperature=0.2, retries=None, f
 # Convenience method for patient-note summarisation flows used by Student-1 services.
 def summarize_notes(text, fallback=None):
     system_prompt = (
-        "You are an assistant that summarises patient administration notes. "
-        "Highlight key dates, patient concerns, family information, follow-up needs, "
-        "and any important administrative action items in clear, concise language."
+        "You are a hospital administrative assistant running locally "
+        "using the Qwen2.5 model. "
+        "Summarise patient administration notes accurately and concisely. "
+        "Only include information explicitly stated in the notes. "
+        "Do not invent, infer, assume, or recommend information or actions "
+        "that are not explicitly stated. "
+        "If information is not provided, do not claim that it is known. "
+        "Your task is only to summarise the supplied patient administration notes. "
+        "Keep the summary under 100 words and use clear, simple language."
+        
+        # "You are an assistant that summarises patient administration notes. "
+        # "Highlight key dates, patient concerns, family information, follow-up needs, "
+        # "and any important administrative action items in clear, concise language."
     )
 
     try:
