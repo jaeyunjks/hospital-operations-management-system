@@ -1020,6 +1020,10 @@ tbody tr:hover {
     align-items: stretch;
   }
 
+  .admission-status-key {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .admission-edit {
     flex-wrap: wrap;
   }

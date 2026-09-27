@@ -16,7 +16,11 @@
       <h1>{{ patient.p_first_name }} {{ patient.p_last_name }}</h1>
     </div>
     <div class="header-actions">
-      <button class="btn btn-secondary" type="button" onclick="document.getElementById('edit-patient-overlay').hidden = false">Edit</button>
+      {% if editing %}
+      <a class="btn btn-secondary" href="{{ url_for('patient_record', patient_id=patient.patient_id) }}">Cancel</a>
+      {% else %}
+      <a class="btn btn-secondary" href="{{ url_for('patient_record', patient_id=patient.patient_id, edit=1) }}">Edit</a>
+      {% endif %}
     </div>
   </div>
 </header>
@@ -31,6 +35,23 @@
     </div>
   </div>
 
+  {% if editing %}
+  <form class="form-grid" method="post">
+    <div class="field-group"><label for="title">Title</label><input id="title" name="title" value="{{ patient.p_title }}" required /></div>
+    <div class="field-group"><label for="first_name">First name</label><input id="first_name" name="first_name" value="{{ patient.p_first_name }}" required /></div>
+    <div class="field-group"><label for="last_name">Last name</label><input id="last_name" name="last_name" value="{{ patient.p_last_name }}" required /></div>
+    <div class="field-group"><label for="dob">Date of birth</label><input id="dob" name="dob" type="date" value="{{ patient.p_date_of_birth }}" required /></div>
+    <div class="field-group"><label for="sex">Sex</label><input id="sex" name="sex" value="{{ patient.p_assigned_sex }}" required /></div>
+    <div class="field-group"><label for="mobile">Mobile</label><input id="mobile" name="mobile" value="{{ patient.p_mobile }}" required /></div>
+    <div class="field-group"><label for="email">Email</label><input id="email" name="email" type="email" value="{{ patient.p_email_address or '' }}" /></div>
+    <div class="field-group wide"><label for="address">Primary address</label><input id="address" name="address" value="{{ patient.address.address_street if patient.address else '' }}" /></div>
+    <div class="field-group"><label for="suburb">Suburb</label><input id="suburb" name="suburb" value="{{ patient.address.address_suburb if patient.address else '' }}" /></div>
+    <div class="field-group"><label for="state">State</label><input id="state" name="state" value="{{ patient.address.address_state if patient.address else '' }}" /></div>
+    <div class="field-group"><label for="postcode">Postcode</label><input id="postcode" name="postcode" value="{{ patient.address.address_postcode if patient.address else '' }}" /></div>
+    <div class="field-group"><label for="patient_status">Status</label><select id="patient_status" name="patient_status"><option {% if patient.patient_status == 'Active' %}selected{% endif %}>Active</option><option {% if patient.patient_status == 'Inactive' %}selected{% endif %}>Inactive</option><option {% if patient.patient_status == 'Transferred' %}selected{% endif %}>Transferred</option></select></div>
+    <div class="field-group wide submit-row"><button class="btn btn-primary" type="submit">Save changes</button></div>
+  </form>
+  {% else %}
   <div class="detail-grid">
     <div class="detail-item"><span>Patient ID</span><strong>MRN-{{ patient.patient_id }}</strong></div>
     <div class="detail-item"><span>Title</span><strong>{{ patient.p_title }}</strong></div>
@@ -43,36 +64,20 @@
     <div class="detail-item"><span>Status</span><strong>{{ patient.patient_status }}</strong></div>
     <div class="detail-item"><span>Insurance</span><strong>{{ patient.medical.private_insurance if patient.medical and patient.medical.private_insurance else 'Medicare' }}</strong></div>
   </div>
+  {% endif %}
   {% if message %}<div class="banner banner-risk">{{ message }}</div>{% endif %}
-  <div id="edit-patient-overlay" class="note-overlay" {% if not message %}hidden{% endif %}>
-    <form class="note-dialog form-grid" method="post">
-      <div class="field-group"><label for="title">Title</label><input id="title" name="title" value="{{ patient.p_title }}" required /></div>
-      <div class="field-group"><label for="first_name">First name</label><input id="first_name" name="first_name" value="{{ patient.p_first_name }}" required /></div>
-      <div class="field-group"><label for="last_name">Last name</label><input id="last_name" name="last_name" value="{{ patient.p_last_name }}" required /></div>
-      <div class="field-group"><label for="dob">Date of birth</label><input id="dob" name="dob" type="date" value="{{ patient.p_date_of_birth }}" required /></div>
-      <div class="field-group"><label for="sex">Sex</label><input id="sex" name="sex" value="{{ patient.p_assigned_sex }}" required /></div>
-      <div class="field-group"><label for="mobile">Mobile</label><input id="mobile" name="mobile" value="{{ patient.p_mobile }}" required /></div>
-      <div class="field-group"><label for="email">Email</label><input id="email" name="email" type="email" value="{{ patient.p_email_address or '' }}" /></div>
-      <div class="field-group wide"><label for="address">Primary address</label><input id="address" name="address" value="{{ patient.address.address_street if patient.address else '' }}" /></div>
-      <div class="field-group"><label for="suburb">Suburb</label><input id="suburb" name="suburb" value="{{ patient.address.address_suburb if patient.address else '' }}" /></div>
-      <div class="field-group"><label for="state">State</label><input id="state" name="state" value="{{ patient.address.address_state if patient.address else '' }}" /></div>
-      <div class="field-group"><label for="postcode">Postcode</label><input id="postcode" name="postcode" value="{{ patient.address.address_postcode if patient.address else '' }}" /></div>
-      <div class="field-group"><label for="patient_status">Status</label><select id="patient_status" name="patient_status"><option {% if patient.patient_status == 'Active' %}selected{% endif %}>Active</option><option {% if patient.patient_status == 'Inactive' %}selected{% endif %}>Inactive</option><option {% if patient.patient_status == 'Transferred' %}selected{% endif %}>Transferred</option></select></div>
-      <div class="note-dialog-actions">
-        <button class="btn btn-secondary" type="button" onclick="document.getElementById('edit-patient-overlay').hidden = true">Cancel</button>
-        <button class="btn btn-primary" type="submit">Save changes</button>
-      </div>
-    </form>
-  </div>
 </section>
 
 {% if profile_message %}<div class="banner banner-ok">{{ profile_message }}</div>{% endif %}
 
 <section class="panel">
-  <div class="panel-header">
-    <div><span class="eyebrow">Patient flow</span><h2>Admissions</h2></div>
-    <button class="btn btn-icon" type="button" aria-label="Add admission" onclick="document.getElementById('admission-overlay').hidden = false">+</button>
-  </div>
+  <div class="panel-header"><div><span class="eyebrow">Patient flow</span><h2>Admissions</h2></div></div>
+  <dl class="admission-status-key">
+    <div><dt>Pending</dt><dd>Scheduled for a future date; not yet happened.</dd></div>
+    <div><dt>Active</dt><dd>Currently in hospital, including a long-term stay.</dd></div>
+    <div><dt>Cancelled</dt><dd>The patient cancelled the appointment.</dd></div>
+    <div><dt>Completed</dt><dd>The patient attended and has left the hospital.</dd></div>
+  </dl>
   <div class="admission-list">
     {% for admission in admissions %}
     <div class="admission-row">
@@ -96,19 +101,14 @@
     <div class="empty-state">No admissions recorded</div>
     {% endfor %}
   </div>
-  <div id="admission-overlay" class="note-overlay" hidden>
-    <form class="note-dialog form-grid" method="post">
-      <input type="hidden" name="profile_action" value="admission" />
-      <div class="field-group"><label for="admission_date">Admission date</label><input id="admission_date" name="admission_date" type="date" value="{{ today }}" required /></div>
-      <div class="field-group"><label for="admission_time">Start time</label><input id="admission_time" name="admission_time" type="time" step="900" value="09:00" required /></div>
-      <div class="field-group"><label for="duration_minutes">Duration in minutes</label><input id="duration_minutes" name="duration_minutes" type="number" min="15" step="15" value="60" required /></div>
-      <div class="field-group"><label for="admission_status">Status</label><select id="admission_status" name="admission_status"><option>Pending</option><option>Active</option></select></div>
-      <div class="note-dialog-actions">
-        <button class="btn btn-secondary" type="button" onclick="document.getElementById('admission-overlay').hidden = true">Cancel</button>
-        <button class="btn btn-primary" type="submit">Create admission</button>
-      </div>
-    </form>
-  </div>
+  <form class="form-grid profile-form" method="post">
+    <input type="hidden" name="profile_action" value="admission" />
+    <div class="field-group"><label for="admission_date">Admission date</label><input id="admission_date" name="admission_date" type="date" value="{{ today }}" required /></div>
+    <div class="field-group"><label for="admission_time">Start time</label><input id="admission_time" name="admission_time" type="time" step="900" value="09:00" required /></div>
+    <div class="field-group"><label for="duration_minutes">Duration in minutes</label><input id="duration_minutes" name="duration_minutes" type="number" min="15" step="15" value="60" required /></div>
+    <div class="field-group"><label for="admission_status">Status</label><select id="admission_status" name="admission_status"><option>Pending</option><option>Active</option></select></div>
+    <div class="field-group wide submit-row"><button class="btn btn-primary" type="submit">Create admission</button></div>
+  </form>
 </section>
 
 <section class="panel">
@@ -139,12 +139,12 @@
 <section class="panel">
   <div class="panel-header">
     <div><span class="eyebrow">People to contact</span><h2>Patient contacts</h2></div>
-    <button class="btn btn-icon" type="button" aria-label="Add new contact" onclick="document.getElementById('new-contact-overlay').hidden = false">+</button>
+    <button class="btn btn-secondary" type="button" onclick="document.getElementById('new-contact-form').hidden = false">Add new contact</button>
   </div>
   {% for contact in patient.contacts|default([], true) %}
   <div class="contact-tile">
     <div class="contact-tile-actions">
-      <button class="btn btn-small" type="button" onclick="document.getElementById('edit-contact-overlay-{{ contact.contact_id }}').hidden = false">Edit</button>
+      <button class="btn btn-small" type="button" onclick="document.getElementById('edit-contact-{{ contact.contact_id }}').hidden = false; this.closest('.contact-tile').querySelector('.contact-view').hidden = true">Edit</button>
       <form method="post"><input type="hidden" name="profile_action" value="delete_contact" /><input type="hidden" name="contact_id" value="{{ contact.contact_id }}" /><button class="btn btn-danger btn-small" type="submit">Delete</button></form>
     </div>
     <div class="detail-grid contact-view">
@@ -156,40 +156,30 @@
       <div class="detail-item"><span>Email</span><strong>{{ contact.contact_email or 'Not provided' }}</strong></div>
       <div class="detail-item"><span>Address</span><strong>{{ contact.contact_address }}</strong></div>
     </div>
-    <div id="edit-contact-overlay-{{ contact.contact_id }}" class="note-overlay" hidden>
-      <form class="note-dialog form-grid" method="post">
-        <input type="hidden" name="profile_action" value="edit_contact" /><input type="hidden" name="contact_id" value="{{ contact.contact_id }}" />
-        <div class="field-group"><label for="contact_first_name_{{ contact.contact_id }}">First name</label><input id="contact_first_name_{{ contact.contact_id }}" name="contact_first_name" value="{{ contact.contact_first_name }}" required /></div>
-        <div class="field-group"><label for="contact_last_name_{{ contact.contact_id }}">Last name</label><input id="contact_last_name_{{ contact.contact_id }}" name="contact_last_name" value="{{ contact.contact_last_name }}" required /></div>
-        <div class="field-group"><label for="contact_relationship_{{ contact.contact_id }}">Relationship</label><input id="contact_relationship_{{ contact.contact_id }}" name="contact_relationship" value="{{ contact.contact_relationship }}" required /></div>
-        <div class="field-group"><label for="contact_date_of_birth_{{ contact.contact_id }}">Date of birth</label><input id="contact_date_of_birth_{{ contact.contact_id }}" name="contact_date_of_birth" type="date" value="{{ contact.contact_date_of_birth }}" required /></div>
-        <div class="field-group"><label for="contact_mobile_{{ contact.contact_id }}">Mobile</label><input id="contact_mobile_{{ contact.contact_id }}" name="contact_mobile" value="{{ contact.contact_mobile }}" required /></div>
-        <div class="field-group"><label for="contact_email_{{ contact.contact_id }}">Email</label><input id="contact_email_{{ contact.contact_id }}" name="contact_email" type="email" value="{{ contact.contact_email or '' }}" /></div>
-        <div class="field-group wide"><label for="contact_address_{{ contact.contact_id }}">Address</label><input id="contact_address_{{ contact.contact_id }}" name="contact_address" value="{{ contact.contact_address }}" /></div>
-        <div class="note-dialog-actions">
-          <button class="btn btn-secondary" type="button" onclick="document.getElementById('edit-contact-overlay-{{ contact.contact_id }}').hidden = true">Cancel</button>
-          <button class="btn btn-primary" type="submit">Save contact</button>
-        </div>
-      </form>
-    </div>
-  </div>
-  {% else %}<div class="detail-grid"><div class="detail-item"><span>Contacts</span><strong>No contacts recorded</strong></div></div>{% endfor %}
-  <div id="new-contact-overlay" class="note-overlay" hidden>
-    <form class="note-dialog form-grid" method="post">
-      <input type="hidden" name="profile_action" value="contact" />
-      <div class="field-group"><label for="new_contact_first_name">First name</label><input id="new_contact_first_name" name="contact_first_name" required /></div>
-      <div class="field-group"><label for="new_contact_last_name">Last name</label><input id="new_contact_last_name" name="contact_last_name" required /></div>
-      <div class="field-group"><label for="new_contact_relationship">Relationship</label><input id="new_contact_relationship" name="contact_relationship" required /></div>
-      <div class="field-group"><label for="new_contact_date_of_birth">Date of birth</label><input id="new_contact_date_of_birth" name="contact_date_of_birth" type="date" required /></div>
-      <div class="field-group"><label for="new_contact_mobile">Mobile</label><input id="new_contact_mobile" name="contact_mobile" required /></div>
-      <div class="field-group"><label for="new_contact_email">Email</label><input id="new_contact_email" name="contact_email" type="email" /></div>
-      <div class="field-group wide"><label for="new_contact_address">Address</label><input id="new_contact_address" name="contact_address" /></div>
-      <div class="note-dialog-actions">
-        <button class="btn btn-secondary" type="button" onclick="document.getElementById('new-contact-overlay').hidden = true">Cancel</button>
-        <button class="btn btn-primary" type="submit">Add patient contact</button>
-      </div>
+    <form id="edit-contact-{{ contact.contact_id }}" class="form-grid profile-form contact-form" method="post" hidden>
+      <input type="hidden" name="profile_action" value="edit_contact" /><input type="hidden" name="contact_id" value="{{ contact.contact_id }}" />
+      <div class="field-group"><label for="contact_first_name_{{ contact.contact_id }}">First name</label><input id="contact_first_name_{{ contact.contact_id }}" name="contact_first_name" value="{{ contact.contact_first_name }}" required /></div>
+      <div class="field-group"><label for="contact_last_name_{{ contact.contact_id }}">Last name</label><input id="contact_last_name_{{ contact.contact_id }}" name="contact_last_name" value="{{ contact.contact_last_name }}" required /></div>
+      <div class="field-group"><label for="contact_relationship_{{ contact.contact_id }}">Relationship</label><input id="contact_relationship_{{ contact.contact_id }}" name="contact_relationship" value="{{ contact.contact_relationship }}" required /></div>
+      <div class="field-group"><label for="contact_date_of_birth_{{ contact.contact_id }}">Date of birth</label><input id="contact_date_of_birth_{{ contact.contact_id }}" name="contact_date_of_birth" type="date" value="{{ contact.contact_date_of_birth }}" required /></div>
+      <div class="field-group"><label for="contact_mobile_{{ contact.contact_id }}">Mobile</label><input id="contact_mobile_{{ contact.contact_id }}" name="contact_mobile" value="{{ contact.contact_mobile }}" required /></div>
+      <div class="field-group"><label for="contact_email_{{ contact.contact_id }}">Email</label><input id="contact_email_{{ contact.contact_id }}" name="contact_email" type="email" value="{{ contact.contact_email or '' }}" /></div>
+      <div class="field-group wide"><label for="contact_address_{{ contact.contact_id }}">Address</label><input id="contact_address_{{ contact.contact_id }}" name="contact_address" value="{{ contact.contact_address }}" /></div>
+      <div class="field-group wide submit-row"><button class="btn btn-primary" type="submit">Save contact</button></div>
     </form>
   </div>
+  {% else %}<div class="detail-grid"><div class="detail-item"><span>Contacts</span><strong>No contacts recorded</strong></div></div>{% endfor %}
+  <form id="new-contact-form" class="form-grid profile-form" method="post" hidden>
+    <input type="hidden" name="profile_action" value="contact" />
+    <div class="field-group"><label for="new_contact_first_name">First name</label><input id="new_contact_first_name" name="contact_first_name" required /></div>
+    <div class="field-group"><label for="new_contact_last_name">Last name</label><input id="new_contact_last_name" name="contact_last_name" required /></div>
+    <div class="field-group"><label for="new_contact_relationship">Relationship</label><input id="new_contact_relationship" name="contact_relationship" required /></div>
+    <div class="field-group"><label for="new_contact_date_of_birth">Date of birth</label><input id="new_contact_date_of_birth" name="contact_date_of_birth" type="date" required /></div>
+    <div class="field-group"><label for="new_contact_mobile">Mobile</label><input id="new_contact_mobile" name="contact_mobile" required /></div>
+    <div class="field-group"><label for="new_contact_email">Email</label><input id="new_contact_email" name="contact_email" type="email" /></div>
+    <div class="field-group wide"><label for="new_contact_address">Address</label><input id="new_contact_address" name="contact_address" /></div>
+    <div class="field-group wide submit-row"><button class="btn btn-primary" type="submit">Add patient contact</button></div>
+  </form>
 </section>
 
 </div>
