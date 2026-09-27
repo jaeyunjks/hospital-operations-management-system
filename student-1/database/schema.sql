@@ -216,6 +216,7 @@ CREATE TABLE admissions (
     patient_id INTEGER NOT NULL,
 
     admission_date TEXT,
+    admission_end TEXT,
     discharge_date TEXT,
 
     admission_status TEXT NOT NULL DEFAULT 'Pending'

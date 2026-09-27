@@ -1,3 +1,7 @@
+import sqlite3
+from pathlib import Path
+from datetime import date, timedelta
+
 import pytest
 
 from database import app as database_service
@@ -83,3 +87,81 @@ def test_contact_crud_delete_is_permanent(database_client):
     assert deleted.status_code == 200
     assert deleted.get_json() == {"deleted": True, "id": contact_id}
     assert database_client.get(f"/api/patient-contacts/{contact_id}").status_code == 400
+
+
+def test_admission_crud_enforces_quarter_hour_intervals_and_statuses(database_client):
+    future_date = (date.today() + timedelta(days=7)).isoformat()
+    valid = database_client.post(
+        "/api/admissions",
+        json={
+            "patient_id": 1,
+            "admission_date": f"{future_date}T13:00",
+            "admission_end": f"{future_date}T13:15",
+            "admission_status": "Pending",
+        },
+    )
+
+    assert valid.status_code == 201
+
+    invalid_interval = database_client.post(
+        "/api/admissions",
+        json={
+            "patient_id": 1,
+            "admission_date": f"{future_date}T13:00",
+            "admission_end": f"{future_date}T13:10",
+            "admission_status": "Pending",
+        },
+    )
+    assert invalid_interval.status_code == 400
+
+    invalid_timezone = database_client.post(
+        "/api/admissions",
+        json={
+            "patient_id": 1,
+            "admission_date": f"{future_date}T13:00+00:00",
+            "admission_end": f"{future_date}T13:15+00:00",
+            "admission_status": "Pending",
+        },
+    )
+    assert invalid_timezone.status_code == 400
+
+    invalid_status = database_client.post(
+        "/api/admissions",
+        json={
+            "patient_id": 1,
+            "admission_date": f"{future_date}T13:00",
+            "admission_end": f"{future_date}T14:00",
+            "admission_status": "Active",
+        },
+    )
+    assert invalid_status.status_code == 400
+
+    completed = database_client.post(
+        "/api/admissions",
+        json={
+            "patient_id": 1,
+            "admission_date": f"{(date.today() - timedelta(days=1)).isoformat()}T13:00",
+            "admission_end": f"{(date.today() - timedelta(days=1)).isoformat()}T14:00",
+            "admission_status": "Completed",
+        },
+    )
+    assert completed.status_code == 201
+    assert completed.get_json()["discharge_date"]
+
+
+def test_existing_database_migrates_admission_end(tmp_path, monkeypatch):
+    database_path = tmp_path / "legacy.db"
+    database_directory = Path(database_service.__file__).resolve().parent
+    schema = (database_directory / "schema.sql").read_text().replace("    admission_end TEXT,\n", "")
+    connection = sqlite3.connect(database_path)
+    connection.executescript(schema)
+    connection.executescript((database_directory / "seed_data.sql").read_text())
+    connection.close()
+    monkeypatch.setattr(database_module, "DB_PATH", database_path)
+
+    database_service.ensure_database_ready()
+
+    connection = sqlite3.connect(database_path)
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(admissions)")}
+    connection.close()
+    assert "admission_end" in columns

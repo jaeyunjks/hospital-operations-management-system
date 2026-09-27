@@ -287,6 +287,25 @@ a:focus-visible {
   margin: 0 auto;
 }
 
+.patient-record-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+  align-items: start;
+  gap: var(--space-8);
+}
+
+.patient-record-main {
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
+}
+
+.patient-summary-sidebar {
+  position: sticky;
+  top: var(--space-8);
+  min-width: 0;
+}
+
 .page-header {
   display: flex;
   flex-direction: column;
@@ -785,9 +804,10 @@ tbody tr:hover {
 }
 
 .ai-summary-box {
-  padding: 20px;
+  padding: 16px;
   background: var(--surface-ai);
   border-top: var(--border-hair);
+  overflow-wrap: anywhere;
 }
 
 .summary-actions {
@@ -800,6 +820,29 @@ tbody tr:hover {
 .admission-list,
 .note-list {
   border-top: var(--border-hair);
+}
+
+.admission-status-key {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 20px;
+  margin: 0;
+  padding: 0 20px 16px;
+}
+
+.admission-status-key div {
+  min-width: 0;
+}
+
+.admission-status-key dt {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.admission-status-key dd {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--size-ui-sm);
 }
 
 .admission-row {
@@ -899,6 +942,14 @@ tbody tr:hover {
 }
 
 @media (max-width: 960px) {
+  .patient-record-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .patient-summary-sidebar {
+    position: static;
+  }
+
   .metrics-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

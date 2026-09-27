@@ -3,11 +3,12 @@
 import os
 import csv
 import io
-from datetime import date
+from datetime import date, datetime, time, timedelta
+from html import escape
 from pathlib import Path
 
 import requests
-from flask import Flask, redirect, render_template, request, url_for, send_file
+from flask import Flask, make_response, redirect, render_template, request, url_for, send_file
 
 app = Flask(
     __name__,
@@ -82,8 +83,8 @@ def _api_delete(path):
         return False
 
 
-def generate_summary(patient):
-    source = generate_ai_summary(patient)
+def generate_summary(patient, admissions=None):
+    source = generate_ai_summary(patient, admissions)
     payload, succeeded = _api_post("/api/ai/summary", {"text": source})
     result = payload.get("data", payload) if isinstance(payload, dict) else {}
     if succeeded and result.get("summary"):
@@ -183,21 +184,72 @@ def build_census_metrics(snapshot):
     admissions = snapshot["admissions"]
 
     active_patients = sum(1 for patient in patients if patient["patient_status"] == "Active")
-    pending_discharge = sum(1 for row in admissions if row["admission_status"] == "Pending")
-    admissions_today = sum(1 for row in admissions if row["admission_status"] in {"Active", "Pending"})
+    today = date.today().isoformat()
+    upcoming_admissions = sum(
+        1 for row in admissions
+        if row["admission_status"] == "Pending"
+        and str(row.get("admission_date") or "") > datetime.now().isoformat(timespec="minutes")
+    )
+    admissions_today = sum(
+        1 for row in admissions
+        if str(row.get("admission_date") or "")[:10] == today
+        and row["admission_status"] in {"Active", "Pending", "Completed"}
+    )
     duplicate_review = max(1, len([p for p in patients if p["patient_status"] in {"Inactive", "Transferred"}]))
 
     return [
-        {"label": "Admissions today", "value": str(admissions_today), "delta": "+2 vs prior", "tone": "ok", "href": "/?admission_status=Active"},
-        {"label": "Pending discharge", "value": str(pending_discharge), "delta": "Needs review", "tone": "warn", "href": "/?admission_status=Pending"},
+        {"label": "Admissions today", "value": str(admissions_today), "delta": "Scheduled today", "tone": "ok", "href": f"/?admission_date={today}"},
+        {"label": "Upcoming admissions", "value": str(upcoming_admissions), "delta": "Scheduled for later", "tone": "warn", "href": "/?admission_status=Pending"},
         {"label": "Active patients", "value": str(active_patients), "delta": "+14 wk", "tone": "ok", "href": "/search?status=Active"},
         {"label": "Duplicate review", "value": str(duplicate_review), "delta": "3 flagged", "tone": "risk", "href": "/search?status=Inactive"},
     ]
 
 
-def generate_ai_summary(patient):
+def generate_ai_summary(patient, admissions=None):
     notes = " ".join(note.get("note_text", "") for note in patient.get("admin_notes", []))
-    return notes or "No clinical notes have been recorded for this patient."
+    patient_admissions = admissions if admissions is not None else patient.get("admissions", [])
+    admission_lines = [
+        "Admission on {start}; scheduled end {end}; discharged {discharge}; status {status}.".format(
+            start=row.get("admission_date") or "date not set",
+            end=row.get("admission_end") or "not set",
+            discharge=row.get("discharge_date") or "not recorded",
+            status=row.get("admission_status") or "not set",
+        )
+        for row in patient_admissions
+    ]
+    return (
+        "Patient administration notes: "
+        f"{notes or 'No notes recorded.'}\n"
+        "Admissions: "
+        f"{' '.join(admission_lines) if admission_lines else 'No admissions recorded.'}"
+    )
+
+
+def admission_interval(form):
+    try:
+        admission_date = date.fromisoformat(form.get("admission_date", ""))
+        admission_time = time.fromisoformat(form.get("admission_time", ""))
+        duration_minutes = int(form.get("duration_minutes", ""))
+    except (TypeError, ValueError):
+        raise ValueError("Enter a valid admission date, time, and duration.") from None
+
+    if admission_time.tzinfo is not None or admission_time.minute % 15 or admission_time.second or admission_time.microsecond:
+        raise ValueError("Admission times must use 15-minute blocks.")
+    if duration_minutes < 15 or duration_minutes % 15:
+        raise ValueError("Duration must be at least 15 minutes and use 15-minute blocks.")
+
+    start = datetime.combine(admission_date, admission_time)
+    end = start + timedelta(minutes=duration_minutes)
+    return start.isoformat(timespec="minutes"), end.isoformat(timespec="minutes")
+
+
+def validate_admission_status(status, start):
+    if status not in {"Pending", "Active", "Cancelled", "Completed"}:
+        raise ValueError("Select a valid admission status.")
+    if status == "Pending" and start <= datetime.now():
+        raise ValueError("Pending admissions must be scheduled for a future date and time.")
+    if status in {"Active", "Completed"} and start > datetime.now():
+        raise ValueError("Active or completed admissions must have started.")
 
 
 def export_csv(snapshot):
@@ -240,7 +292,12 @@ def build_search_results(search_text, status_filter, snapshot):
 def census_page():
     snapshot = get_seed_snapshot()
     admission_status = request.args.get("admission_status")
-    admissions = [row for row in snapshot["admissions"] if not admission_status or row.get("admission_status") == admission_status]
+    admission_date = request.args.get("admission_date")
+    admissions = [
+        row for row in snapshot["admissions"]
+        if (not admission_status or row.get("admission_status") == admission_status)
+        and (not admission_date or str(row.get("admission_date") or "")[:10] == admission_date)
+    ]
     return render_template(
         "census.html",
         active_page="census",
@@ -388,27 +445,43 @@ def patient_record(patient_id):
     summary_message = None
     profile_message = None
     summary_override = None
+    admissions = [row for row in snapshot["admissions"] if row.get("patient_id") == patient_id]
     action = request.form.get("profile_action")
     if request.method == "POST" and request.form.get("summary_action") == "apply":
         summary_text = request.form.get("summary", "").strip() or generate_summary(patient)
         _, saved = _api_post(f"/api/patients/{patient_id}/admin-notes", {"note_text": summary_text})
         summary_message = "Summary applied as an administrative note." if saved else "The summary could not be applied. Check that the backend is running and try again."
     elif request.method == "POST" and request.form.get("summary_action") == "refresh":
-        patient = find_patient_record(patient_id, get_live_snapshot()) or patient
-        summary_override = generate_summary(patient)
+        live_snapshot = get_live_snapshot()
+        patient = find_patient_record(patient_id, live_snapshot) or patient
+        admissions = [row for row in live_snapshot["admissions"] if row.get("patient_id") == patient_id]
+        summary_override = generate_summary(patient, admissions)
+        if request.headers.get("HX-Request") == "true":
+            return make_response(escape(summary_override), 200, {"Content-Type": "text/html; charset=utf-8"})
     elif request.method == "POST" and action == "admission":
-        _, created = _api_post("/api/admissions", {
-            "patient_id": patient_id,
-            "admission_date": request.form.get("admission_date") or date.today().isoformat(),
-            "admission_status": request.form.get("admission_status", "Pending"),
-        })
-        profile_message = "Admission created." if created else "The admission could not be created. Check that the backend is running and try again."
+        try:
+            admission_start, admission_end = admission_interval(request.form)
+            status = request.form.get("admission_status", "Pending")
+            validate_admission_status(status, datetime.fromisoformat(admission_start))
+            _, created = _api_post("/api/admissions", {
+                "patient_id": patient_id,
+                "admission_date": admission_start,
+                "admission_end": admission_end,
+                "admission_status": status,
+            })
+            profile_message = "Admission created." if created else "The admission could not be created. Check that the backend is running and try again."
+        except ValueError as exc:
+            profile_message = str(exc)
     elif request.method == "POST" and action == "update_admission":
         admission_id = request.form.get("admission_id")
-        updated_admission = _api_update(f"/api/admissions/{admission_id}", {
-            "admission_status": request.form.get("admission_status", "Pending"),
-        })
-        profile_message = "Admission status updated." if updated_admission else "The admission could not be updated. Check that the backend is running and try again."
+        status = request.form.get("admission_status", "Pending")
+        admission = next((row for row in admissions if str(row.get("admission_id")) == admission_id), None)
+        try:
+            validate_admission_status(status, datetime.fromisoformat(admission["admission_date"]))
+            updated_admission = _api_update(f"/api/admissions/{admission_id}", {"admission_status": status})
+            profile_message = "Admission status updated." if updated_admission else "The admission could not be updated. Check that the backend is running and try again."
+        except (ValueError, TypeError, KeyError):
+            profile_message = "The selected status does not match the scheduled admission time."
     elif request.method == "POST" and action == "delete_admission":
         admission_id = request.form.get("admission_id")
         deleted_admission = _api_delete(f"/api/admissions/{admission_id}")
@@ -476,8 +549,9 @@ def patient_record(patient_id):
     if profile_message:
         snapshot = get_live_snapshot()
         patient = find_patient_record(patient_id, snapshot) or patient
+        admissions = [row for row in snapshot["admissions"] if row.get("patient_id") == patient_id]
 
-    patient_summary = summary_override or generate_ai_summary(patient)
+    patient_summary = summary_override or generate_ai_summary(patient, admissions)
     return render_template(
         "patient.html",
         active_page="patient",
@@ -490,12 +564,8 @@ def patient_record(patient_id):
         message=message,
         summary_message=summary_message,
         profile_message=profile_message,
-        today=date.today().isoformat(),
-        admissions=sorted(
-            [row for row in snapshot["admissions"] if row.get("patient_id") == patient_id],
-            key=lambda row: row.get("admission_date") or "",
-            reverse=True,
-        ),
+        today=(date.today() + timedelta(days=1)).isoformat(),
+        admissions=sorted(admissions, key=lambda row: row.get("admission_date") or "", reverse=True),
         identity=current_identity(),
     )
 

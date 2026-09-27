@@ -18,21 +18,9 @@ except ImportError:  # pragma: no cover - supports local execution
     from services import ollama_client
 
 SYSTEM_PROMPT = (
-    "You are a hospital administrative assistant. You will receive a string of text containing patient administration notes."
-    "Your task is to generate a concise summary of the notes, highlighting key information such as common dates for appointments, patient concerns, family history, and any other relevant details for reception and administrative staff."
-    "Your responses should follow these guidelines:"
-    "- Under 100 words."
-    "- Use clear and simple language."
-    "- Avoid medical jargon."
-    "- Focus on actionable information for reception and administrative staff."
-
-    # "You are a helpful assistant that summarizes patient administration notes. "
-    # "You will receive a string of text containing patient administration notes. "
-    # "Your task is to generate a concise summary of the notes, highlighting key information such as "
-    # "common dates for appointments, patient concerns, family history, and any other relevant details for "
-    # "reception and administrative staff. "
-    # "The summary should be clear, accurate, and easy to understand."
-
+    "Summarise the supplied patient administration notes and admissions in under 100 words. "
+    "Use clear, simple language and include only information provided. "
+    "Do not add advice, assumptions, or formatting."
 )
 
 # Deterministic fallback used when the model is unavailable or the input is sparse.

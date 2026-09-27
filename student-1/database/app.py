@@ -33,6 +33,11 @@ def ensure_database_ready():
             "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('patients', 'admissions')"
         ).fetchall()
         if len(table_names) >= 2:
+            admission_columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(admissions)").fetchall()
+            }
+            if "admission_end" not in admission_columns:
+                conn.execute("ALTER TABLE admissions ADD COLUMN admission_end TEXT")
             conn.execute(
                 "UPDATE admissions SET admission_date = ? "
                 "WHERE admission_date IS NULL OR lower(trim(admission_date)) IN (?, ?)",
@@ -225,6 +230,7 @@ RESOURCES = {
             "admission_id",
             "patient_id",
             "admission_date",
+            "admission_end",
             "discharge_date",
             "admission_status",
         ],
@@ -304,7 +310,53 @@ def normalize_admission_payload(resource_name, payload):
     admission_date = payload.get("admission_date")
     if not admission_date or str(admission_date).strip().lower() in {"datetime('now')", 'datetime("now")'}:
         payload["admission_date"] = date.today().isoformat()
+    validate_admission_interval(payload)
+    if "admission_status" in payload:
+        validate_admission_status(payload)
+        if payload["admission_status"] == "Completed" and not payload.get("discharge_date"):
+            payload["discharge_date"] = datetime.now().isoformat(timespec="minutes")
     return payload
+
+
+def validate_admission_interval(payload):
+    if not payload.get("admission_end"):
+        return
+
+    try:
+        start = datetime.fromisoformat(str(payload.get("admission_date", "")))
+        end = datetime.fromisoformat(str(payload["admission_end"]))
+    except ValueError:
+        raise DataError("Admission start and end must be valid date and time values", status=400) from None
+
+    if start.tzinfo is not None or end.tzinfo is not None:
+        raise DataError("Admission times must use the local time format", status=400)
+    duration_seconds = (end - start).total_seconds()
+    if (
+        start.minute % 15
+        or start.second
+        or start.microsecond
+        or duration_seconds < 900
+        or duration_seconds % 900
+    ):
+        raise DataError("Admission times must use 15-minute blocks with a minimum duration of 15 minutes", status=400)
+
+
+def validate_admission_status(payload):
+    status = payload.get("admission_status")
+    if status not in {"Pending", "Active", "Cancelled", "Completed"}:
+        raise DataError("Select a valid admission status", status=400)
+
+    try:
+        start = datetime.fromisoformat(str(payload.get("admission_date", "")))
+    except ValueError:
+        raise DataError("Admission start must be a valid date and time value", status=400) from None
+
+    if start.tzinfo is not None:
+        raise DataError("Admission start must use the local time format", status=400)
+    if status == "Pending" and start <= datetime.now():
+        raise DataError("Pending admissions must be scheduled for a future date and time", status=400)
+    if status in {"Active", "Completed"} and start > datetime.now():
+        raise DataError("Active or completed admissions must have started", status=400)
 
 @app.get("/health")
 @app.get("/api/health")
@@ -381,9 +433,16 @@ def show_resource(resource_name, record_id):
 @app.route("/api/<resource_name>/<int:record_id>", methods=["PUT", "PATCH"])
 def update_resource(resource_name, record_id):
     resource = get_resource_config(resource_name)
-    fetch_or_404(resource_name, record_id)
+    existing = fetch_or_404(resource_name, record_id)
 
     payload = request.get_json(silent=True) or {}
+    if resource_name == "admissions":
+        updated_admission = {**existing, **payload}
+        validate_admission_interval(updated_admission)
+        if "admission_status" in payload:
+            validate_admission_status(updated_admission)
+            if payload["admission_status"] == "Completed" and not payload.get("discharge_date"):
+                payload["discharge_date"] = datetime.now().isoformat(timespec="minutes")
     cleaned = validate_payload(resource, payload, mode="update")
 
     if resource["pk"] in cleaned:
