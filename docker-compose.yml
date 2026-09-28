@@ -219,6 +219,11 @@ services:
       MCP_ENABLED: "${STUDENT3_MCP_ENABLED:-true}"
       MCP_SERVER_URL: "${STUDENT3_MCP_SERVER_URL:-http://host.docker.internal:8000/mcp}"
       MCP_TIMEOUT: "${STUDENT3_MCP_TIMEOUT:-15}"
+      # Shared RAG server also runs on the host; start it in Docker mode
+      # (HOMS_RAG_HOST=0.0.0.0 HOMS_RAG_ALLOW_DOCKER_HOST=true).
+      RAG_ENABLED: "${STUDENT3_RAG_ENABLED:-true}"
+      RAG_SERVER_URL: "${STUDENT3_RAG_SERVER_URL:-http://host.docker.internal:8100}"
+      RAG_TIMEOUT: "${STUDENT3_RAG_TIMEOUT:-100}"
       FLASK_DEBUG: 0
     extra_hosts:
       - "host.docker.internal:host-gateway"
