@@ -4,10 +4,11 @@
 #
 # Scoped to student-3/** so it never runs against another student's work.
 # Stages: syntax check and unit tests -> build all three images -> verify
-# database seeding and backend enrichment -> verify MCP is retained but
-# disabled in the backend and frontend -> tear down. Ollama and AI endpoints
-# are excluded. The shared MCP server is never started in CI: MCP_ENABLED is
-# false, so the MCP routes and dashboard panel must report "disabled".
+# database seeding and backend enrichment -> verify MCP and RAG are retained
+# but disabled in the backend and frontend -> tear down. Ollama and AI
+# endpoints are excluded. The shared MCP and RAG servers are never started in
+# CI: MCP_ENABLED and RAG_ENABLED are false, so their routes and dashboard
+# panels must report "disabled".
 # ==========================================================================
 name: student-3
 
@@ -20,6 +21,7 @@ on:
 
 env:
   MCP_ENABLED: 'false'
+  RAG_ENABLED: 'false'
 
 jobs:
   test:
@@ -105,7 +107,7 @@ jobs:
         run: |
           docker run -d --name s3-be --network homs-s3-ci -p 127.0.0.1:5300:5300 \
             -e DATABASE_SERVICE_URL=http://s3-db:6300 \
-            -e MCP_ENABLED="$MCP_ENABLED" student-3-backend
+            -e MCP_ENABLED="$MCP_ENABLED" -e RAG_ENABLED="$RAG_ENABLED" student-3-backend
 
       - name: Wait for backend health
         run: |
@@ -155,6 +157,26 @@ jobs:
           print('MCP integration is present and disabled for CI')
           PY
 
+      - name: Verify RAG is retained but disabled in the backend
+        run: |
+          curl -fsS --connect-timeout 2 --max-time 10 http://localhost:5300/api/rag/status -o /tmp/s3-rag-status.json
+          code=$(curl -sS --connect-timeout 2 --max-time 10 -o /tmp/s3-rag-ask.json -w '%{http_code}' \
+            -X POST http://localhost:5300/api/rag/ask -H 'Content-Type: application/json' \
+            -d '{"question":"Who can write off an expired batch?"}')
+          echo "POST /api/rag/ask -> HTTP $code"
+          test "$code" = 503
+          python - <<'PY'
+          import json
+          status = json.load(open('/tmp/s3-rag-status.json'))
+          ask = json.load(open('/tmp/s3-rag-ask.json'))
+          print('RAG status:', status)
+          print('RAG ask:', ask)
+          assert status['enabled'] is False and status['reachable'] is False, 'RAG must be disabled in CI'
+          assert status['feature'] == 'student-3', 'RAG integration was removed'
+          assert ask['outcome'] == 'disabled' and ask['ok'] is False, 'Disabled RAG question was not refused'
+          print('RAG integration is present and disabled for CI')
+          PY
+
       - name: Start the frontend connected to the backend
         run: |
           docker run -d --name s3-fe --network homs-s3-ci -p 127.0.0.1:3300:3300 \
@@ -172,7 +194,7 @@ jobs:
           echo "Frontend did not start in time"
           exit 1
 
-      - name: Verify the dashboard MCP panel reports MCP disabled
+      - name: Verify the dashboard MCP and RAG panels report them disabled
         # Sign in as a seeded pharmacist, then use the same HTMX routes as the UI.
         run: |
           jar=/tmp/s3-cookies.txt
@@ -186,6 +208,13 @@ jobs:
           grep -q 'MCP disabled' /tmp/s3-mcp-badge.html
           grep -q 'MCP mode is disabled' /tmp/s3-mcp-panel.html
           echo "Frontend MCP panel is present and reports MCP disabled"
+          curl -fsS --max-time 30 -b "$jar" http://localhost:3300/rag/status -o /tmp/s3-rag-badge.html
+          curl -fsS --max-time 30 -b "$jar" -X POST http://localhost:3300/rag/ask \
+            -d question='Who can write off an expired batch?' -o /tmp/s3-rag-panel.html
+          grep -q 'Ask the pharmacy assistant' /tmp/s3-dashboard.html
+          grep -q 'RAG disabled' /tmp/s3-rag-badge.html
+          grep -q 'RAG mode is disabled' /tmp/s3-rag-panel.html
+          echo "Frontend RAG panel is present and reports RAG disabled"
 
       - name: Container logs on failure
         if: failure()
