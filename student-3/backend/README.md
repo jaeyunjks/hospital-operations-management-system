@@ -43,6 +43,7 @@ backend/
 │   ├── ai_client.py           # Bounded Ollama JSON client and prompt loader
 │   ├── expiry_advisory.py     # Expiry calculations and fallbacks
 │   ├── mcp_client.py          # Bounded client for the shared MCP server
+│   ├── rag_client.py          # Bounded client for the shared RAG server
 │   ├── reorder_recommendation.py # Reorder calculations and fallbacks
 │   └── scheduled_agent.py     # Plan → Act → Observe → Adapt worker
 ├── prompts/                   # Immutable versioned prompts
@@ -86,6 +87,9 @@ Compose waits for database health, uses `http://student-3-database:6300` on `hom
 | `MCP_ENABLED` | `false` | No | Exactly `true` enables calls to the shared MCP server; CI leaves it off. |
 | `MCP_SERVER_URL` | `http://127.0.0.1:8000/mcp` | No | Shared MCP endpoint; Compose uses `http://host.docker.internal:8000/mcp`. |
 | `MCP_TIMEOUT` | `15` seconds | No | Bound per MCP operation; invalid input reverts to 15. |
+| `RAG_ENABLED` | `false` | No | Exactly `true` enables questions to the shared RAG server; CI leaves it off. |
+| `RAG_SERVER_URL` | `http://127.0.0.1:8100` | No | Shared RAG server; Compose uses `http://host.docker.internal:8100`. |
+| `RAG_TIMEOUT` | `100` seconds | No | Bound per question; kept below the frontend's 120-second wait. |
 | `AGENT_ENABLED` | `true` | No | Starts background draft-proposal cycles. |
 | `AGENT_INTERVAL_SECONDS` | `300` | No | Delay between cycles; invalid/low values become 300. |
 | `AGENT_MAX_PROPOSALS` | `3` | No | Maximum created per cycle. |
@@ -104,6 +108,8 @@ Manager-changing routes require `X-HOMS-Role: Pharmacy Manager`.
 | POST | `/api/ai/expiry-advisory` | Read-only AI/fallback expiry advice. |
 | GET | `/api/mcp/status` | MCP flag, server URL, allowlist and (when enabled) discovered tools. |
 | POST | `/api/mcp/call` | Forward one allowlisted tool call to the shared MCP server. |
+| GET | `/api/rag/status` | RAG flag, server URL, readiness and indexed pharmacy documents. |
+| POST | `/api/rag/ask` | Ask the shared RAG server a pharmacy question (`{"question": ...}`). |
 | POST | `/api/ai/suggest-reorder` | Read-only AI/fallback reorder advice. |
 | POST | `/api/ai/suggest-reorder/create-drafts` | Create manager-selected pending drafts. |
 | GET | `/api/staff`, `/api/staff/{id}` | Demo identity data. |
@@ -225,13 +231,39 @@ To run it locally, start the MCP server from the repository root
 (`python3 ai-services/mcp-server/server.py`), then start this backend with
 `MCP_ENABLED=true`.
 
+## Shared RAG access
+
+`POST /api/rag/ask` accepts only `{"question": "..."}` (non-blank, at most 500
+characters, whitespace normalised) and sends it to the shared RAG server's
+`/query` with `feature: student-3`, so only pharmacy and shared documents are
+searched. `services/rag_client.py` uses the standard library only.
+
+The response is validated against the RAG contract before it is returned:
+status and confidence must match, an answer must cite at least one source and
+a refusal none, and every citation must come from `student-3/` or `shared/`.
+Only display fields are forwarded. Each question is logged as
+`[RAG] ask outcome=... confidence=... citations=... duration_ms=...`.
+
+| Outcome | HTTP | Meaning |
+|---|---|---|
+| `answered` | 200 | Grounded answer with `confidence` (high/medium/low) and `citations`. |
+| `insufficient_context` | 200 | The knowledge base does not cover the question; `reason` explains why. |
+| `disabled` | 503 | `RAG_ENABLED` is not `true` (the CI setting). |
+| `unavailable` / `rag_error` | 502 | Server unreachable, contract violation, or a server-side error code. |
+| `timeout` | 504 | No answer within `RAG_TIMEOUT`. |
+
+To run it locally, start Ollama and the RAG server from the repository root
+(`python3 ai-services/rag-server/ingest.py` once, then
+`python3 ai-services/rag-server/server.py`), and start this backend with
+`RAG_ENABLED=true`.
+
 ## Running the tests
 
 ```bash
 cd student-3/backend && python3 -m unittest discover -s tests -v
 ```
 
-Tests mock every database-service call, never using port 6300. They cover CRUD validation, FEFO, receipt/write-off, AI source/fallback behaviour, dashboard bulk reads, agent duplicate/adaptation behaviour, and MCP access (disabled flag, tool allowlist, in-process MCP round trip, 502/504 mapping). The current suite passes **33 tests**; MCP round-trip tests are skipped if the `mcp` SDK is not installed.
+Tests mock every database-service call, never using port 6300. They cover CRUD validation, FEFO, receipt/write-off, AI source/fallback behaviour, dashboard bulk reads, agent duplicate/adaptation behaviour, and MCP access (disabled flag, tool allowlist, in-process MCP round trip, 502/504 mapping). RAG access tests cover the disabled flag, request validation, contract checks and failure mapping. The current suite passes **43 tests**; MCP round-trip tests are skipped if the `mcp` SDK is not installed.
 
 ## Troubleshooting
 
@@ -241,6 +273,7 @@ Tests mock every database-service call, never using port 6300. They cover CRUD v
 | Advisory is slow | Set a numeric `OLLAMA_TIMEOUT`; fallback returns after timeout. |
 | `Pharmacy Manager role required` | Include `X-HOMS-Role: Pharmacy Manager`. |
 | MCP call returns 503 | Set `MCP_ENABLED=true`. |
+| RAG question returns 503 / 502 | Set `RAG_ENABLED=true`; start `ai-services/rag-server/server.py` (Docker mode for Compose). |
 | MCP call returns 502 | Start `ai-services/mcp-server/server.py`; from Docker, run it in Docker mode (see its README). |
 | Agent logs fallback | Start Ollama if AI judgement is needed; rule proposals still run. |
 
