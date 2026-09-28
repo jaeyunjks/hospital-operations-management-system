@@ -275,7 +275,7 @@ def dashboard():
                           "recent_movements": [], "agent": None}, str(exc)
     return render_template("dashboard.html", title="Pharmacy Inventory Dashboard",
                            identity=current_identity(), is_manager=is_manager(),
-                           error=error, **summary)
+                           error=error, rag_examples=RAG_EXAMPLE_QUESTIONS, **summary)
 
 
 @app.get("/medicines")
@@ -411,6 +411,33 @@ def mcp_call():
         return render_template("partials/mcp_result.html", call=call)
     except api_client.BackendError as exc:
         return render_template("partials/mcp_result_error.html", tool=tool, error=str(exc))
+
+
+RAG_EXAMPLE_QUESTIONS = (
+    "Who can write off an expired batch?",
+    "How is the suggested reorder quantity calculated?",
+    "Can the scheduled agent approve purchase orders?",
+)
+
+
+@app.get("/rag/status")
+def rag_status_badge():
+    try:
+        return render_template("partials/rag_status.html", status=api_client.rag_status(), error=None)
+    except api_client.BackendError as exc:
+        return render_template("partials/rag_status.html", status=None, error=str(exc))
+
+
+@app.post("/rag/ask")
+def rag_ask():
+    """Render a grounded answer, or an insufficient-context refusal, for either role."""
+    question = " ".join(request.form.get("question", "").split())
+    if not question:
+        return render_template("partials/rag_result_error.html", error="Enter a question first")
+    try:
+        return render_template("partials/rag_result.html", result=api_client.rag_ask(question))
+    except api_client.BackendError as exc:
+        return render_template("partials/rag_result_error.html", error=str(exc))
 
 
 @app.get("/movements")

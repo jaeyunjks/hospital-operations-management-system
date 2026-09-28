@@ -161,3 +161,17 @@ def mcp_call(tool, arguments):
     unreachable MCP raises :class:`BackendError` with the backend's message.
     """
     return _request("/api/mcp/call", "POST", {"tool": tool, "arguments": arguments}, timeout=30)
+
+
+def rag_status():
+    """Ask the backend whether shared RAG access is enabled and ready."""
+    return _request("/api/rag/status", timeout=15)
+
+
+def rag_ask(question):
+    """Ask the pharmacy knowledge base through the backend, never RAG directly.
+
+    Answers and insufficient-context refusals are normal results; disabled or
+    unreachable RAG raises :class:`BackendError` with the backend's message.
+    """
+    return _request("/api/rag/ask", "POST", {"question": question}, timeout=BACKEND_API_TIMEOUT)
