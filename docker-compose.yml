@@ -211,7 +211,8 @@ services:
       AGENT_INTERVAL_SECONDS: ${AGENT_INTERVAL_SECONDS:-300}
       AGENT_MAX_PROPOSALS: ${AGENT_MAX_PROPOSALS:-3}
       AGENT_BUDGET_CAP: ${AGENT_BUDGET_CAP:-500.00}
-      OLLAMA_URL: http://ollama:11434
+      # AI-Mode is the host's non-containerised Ollama, like MCP and RAG below.
+      OLLAMA_URL: "${STUDENT3_OLLAMA_URL:-http://host.docker.internal:11434}"
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
       OLLAMA_TIMEOUT: 90
       # Shared MCP server runs on the host, outside Compose; start it in Docker mode
