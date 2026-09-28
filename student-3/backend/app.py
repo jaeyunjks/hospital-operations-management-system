@@ -11,7 +11,7 @@ import urllib.request
 
 from flask import Flask, g, jsonify, request
 
-from services import mcp_client
+from services import mcp_client, rag_client
 from services.ai_client import health_check
 from services.expiry_advisory import advisory as expiry_advisory
 from services.reorder_recommendation import advisory as reorder_advisory, candidates_for as reorder_candidates
@@ -399,6 +399,34 @@ def mcp_call():
         return fail("arguments are too large", 400)
     result = mcp_client.call_tool(tool, arguments)
     return jsonify(result.to_dict()), MCP_STATUS_CODES[result.outcome]
+
+
+RAG_STATUS_CODES = {"answered": 200, "insufficient_context": 200, "disabled": 503,
+                    "unavailable": 502, "rag_error": 502, "timeout": 504}
+
+
+@app.get("/api/rag/status")
+def rag_status():
+    """Report whether RAG mode is enabled and which pharmacy documents are indexed."""
+    return jsonify(rag_client.status())
+
+
+@app.post("/api/rag/ask")
+def rag_ask():
+    """Ask the shared local RAG server a question about pharmacy operations."""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return fail("Request body must be a JSON object", 400)
+    if set(payload) - {"question"}:
+        return fail("Only the 'question' field is accepted", 400)
+    question = payload.get("question")
+    if not isinstance(question, str) or not question.strip():
+        return fail("question is required", 400)
+    question = " ".join(question.split())
+    if len(question) > rag_client.MAX_QUESTION_LENGTH:
+        return fail(f"question must be at most {rag_client.MAX_QUESTION_LENGTH} characters", 400)
+    result = rag_client.ask(question)
+    return jsonify(result.to_dict()), RAG_STATUS_CODES[result.outcome]
 
 
 @app.get("/api/staff")

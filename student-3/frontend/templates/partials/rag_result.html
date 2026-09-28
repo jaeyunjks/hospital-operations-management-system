@@ -1,0 +1,45 @@
+{% set retrieval = result.retrieval or {} %}
+{% set confidence_badge = {'high': 'badge-success', 'medium': 'badge-info', 'low': 'badge-warning'} %}
+<article class="rag-result">
+  <div class="mcp-result__head">
+    <p class="rag-question"><strong>Q:</strong> {{ result.question }}</p>
+    <div>
+      {% if result.outcome == 'answered' %}
+        <span class="badge {{ confidence_badge.get(result.confidence, 'badge-neutral') }}">{{ result.confidence|capitalize }} confidence</span>
+      {% else %}
+        <span class="badge badge-neutral">Insufficient context</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if result.outcome == 'answered' %}
+    <p class="rag-answer">{{ result.answer }}</p>
+    <h3 class="mcp-subtitle">Sources</h3>
+    <ol class="rag-citations">
+      {% for citation in result.citations %}
+        <li>
+          <p><span class="mcp-code">[{{ citation.id }}]</span> <strong>{{ citation.title }}</strong> › {{ citation.section }}
+            <span class="table__muted">· {{ citation.source }} · similarity {{ '%.2f'|format(citation.score) }}</span></p>
+          {% if citation.snippet %}<blockquote>{{ citation.snippet }}</blockquote>{% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <div class="alert alert--warning" role="status">
+      <div>
+        <p class="alert__title">Not enough information in the pharmacy knowledge base</p>
+        <p class="alert__body">{{ result.answer }}</p>
+        <p class="alert__body">
+          {% if result.reason == 'no_relevant_context' %}No knowledge base section was relevant enough{% if retrieval.top_score is number and retrieval.threshold is number %} (best match {{ '%.2f'|format(retrieval.top_score) }}, below the {{ '%.2f'|format(retrieval.threshold) }} threshold){% endif %}, so the model was not asked to answer.
+          {% elif result.reason == 'model_declined' %}The retrieved sections did not contain the answer.
+          {% elif result.reason == 'uncited_answer' %}The draft answer did not cite a source, so it was withheld.
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+  <p class="table__muted rag-meta">
+    {% if retrieval.considered is number %}Retrieval: {{ retrieval.relevant }}/{{ retrieval.considered }} sections relevant{% if retrieval.top_score is number and retrieval.threshold is number %} · best match {{ '%.2f'|format(retrieval.top_score) }} (threshold {{ '%.2f'|format(retrieval.threshold) }}){% endif %} · {% endif %}{{ result.duration_ms }} ms{% if result.models %} · {{ result.models.embedding }} + {{ result.models.generation }}{% endif %}
+  </p>
+</article>

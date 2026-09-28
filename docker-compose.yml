@@ -211,7 +211,8 @@ services:
       AGENT_INTERVAL_SECONDS: ${AGENT_INTERVAL_SECONDS:-300}
       AGENT_MAX_PROPOSALS: ${AGENT_MAX_PROPOSALS:-3}
       AGENT_BUDGET_CAP: ${AGENT_BUDGET_CAP:-500.00}
-      OLLAMA_URL: http://ollama:11434
+      # AI-Mode is the host's non-containerised Ollama, like MCP and RAG below.
+      OLLAMA_URL: "${STUDENT3_OLLAMA_URL:-http://host.docker.internal:11434}"
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
       OLLAMA_TIMEOUT: 90
       # Shared MCP server runs on the host, outside Compose; start it in Docker mode
@@ -219,6 +220,11 @@ services:
       MCP_ENABLED: "${STUDENT3_MCP_ENABLED:-true}"
       MCP_SERVER_URL: "${STUDENT3_MCP_SERVER_URL:-http://host.docker.internal:8000/mcp}"
       MCP_TIMEOUT: "${STUDENT3_MCP_TIMEOUT:-15}"
+      # Shared RAG server also runs on the host; start it in Docker mode
+      # (HOMS_RAG_HOST=0.0.0.0 HOMS_RAG_ALLOW_DOCKER_HOST=true).
+      RAG_ENABLED: "${STUDENT3_RAG_ENABLED:-true}"
+      RAG_SERVER_URL: "${STUDENT3_RAG_SERVER_URL:-http://host.docker.internal:8100}"
+      RAG_TIMEOUT: "${STUDENT3_RAG_TIMEOUT:-100}"
       FLASK_DEBUG: 0
     extra_hosts:
       - "host.docker.internal:host-gateway"

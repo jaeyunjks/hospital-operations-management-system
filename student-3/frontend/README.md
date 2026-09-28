@@ -88,7 +88,7 @@ Compose waits for backend health and uses `http://student-3-backend:5300` on `ho
 | Route | What it does |
 |---|---|
 | `/demo` | Select simulated role and staff identity. |
-| `/` | Live inventory dashboard: stock/expiry counts, movements, agent strip, shared MCP tools panel. |
+| `/` | Live inventory dashboard: stock/expiry counts, movements, agent strip, shared MCP tools panel, pharmacy assistant (RAG). |
 | `/medicines` | Filter/view medicines; manager maintenance, issue/receive, CSV export. |
 | `/batches` | Filter batches, view expiry, request advice, manager write-off, export. |
 | `/movements` | Filter and export append-only stock history. |
@@ -96,7 +96,7 @@ Compose waits for backend health and uses `http://student-3-backend:5300` on `ho
 | `/purchase-orders` | Filter/export orders, view detail, advice, human review, agent panel. |
 | `/health` | Frontend health response. |
 
-HTMX routes such as `/medicines/table`, `/batches/table`, `/purchase-orders/table`, form/detail routes, advisory panel routes, and `/mcp/status` / `/mcp/call` render partial templates for their associated pages.
+HTMX routes such as `/medicines/table`, `/batches/table`, `/purchase-orders/table`, form/detail routes, advisory panel routes, `/mcp/status` / `/mcp/call` and `/rag/status` / `/rag/ask` render partial templates for their associated pages.
 
 ## Demo roles and access
 
@@ -118,6 +118,7 @@ Browser-facing routes above return HTML. `api_client.py` is the only API client 
 | GET, POST, PUT | `/api/purchase-orders` and order detail/action paths | Approval workflow. |
 | POST | `/api/ai/expiry-advisory`, `/api/ai/suggest-reorder` | Read-only advice. |
 | GET, POST | `/api/mcp/status`, `/api/mcp/call` | Dashboard shared MCP tools panel. |
+| GET, POST | `/api/rag/status`, `/api/rag/ask` | Dashboard pharmacy assistant panel. |
 
 For example, an issued-medicine form causes this backend JSON request:
 
@@ -155,13 +156,31 @@ demonstration roles may use the panel because the tools are read-only. When
 MCP is disabled or unreachable the panel shows the backend's error and states
 that no inventory data changed.
 
+## Pharmacy assistant panel (RAG)
+
+The dashboard's **Ask the pharmacy assistant** panel sends a typed question,
+or one of three example questions, to the backend (`/api/rag/ask`), which asks
+the shared local RAG server; the frontend never contacts RAG directly. Its
+status badge loads after the page.
+
+- An answer shows a confidence badge (high, medium or low), the answer text,
+  and each source as `[S1] title › section` with the file, similarity score
+  and quoted snippet.
+- An insufficient-context result is shown as its own state, explaining that
+  the knowledge base does not cover the question (for example, the best match
+  fell below the relevance threshold) and that no answer was generated.
+- Disabled or unreachable RAG shows the backend's error and states that no
+  inventory data changed.
+
+The shared loading indicator shows elapsed time while the local model works.
+
 ## Running the tests
 
 ```bash
 cd student-3/frontend && python3 -m unittest discover -s tests -v
 ```
 
-Tests mock `api_client`, so they never use a live backend on port 5300. They cover rendering routes, dashboard data, manager gates, agent panel output, MCP panel rendering and argument forwarding, and timeout/connection-error display. The current suite passes **16 tests**.
+Tests mock `api_client`, so they never use a live backend on port 5300. They cover rendering routes, dashboard data, manager gates, agent panel output, MCP panel rendering and argument forwarding, RAG answer/refusal/error rendering, and timeout/connection-error display. The current suite passes **25 tests**.
 
 ## Troubleshooting
 

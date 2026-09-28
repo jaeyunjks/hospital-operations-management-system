@@ -1,0 +1,171 @@
+# Student 3 - Docker Compose integration validation
+# 2026-09-28T07:17:38Z
+
+## Running containers (docker compose ps)
+SERVICE              STATUS                        PORTS
+homs-homepage        Up About a minute (healthy)   3000->80/tcp
+student-2-backend    Up 59 seconds (healthy)       5200->5200/tcp
+student-2-database   Up About a minute (healthy)   6200->6200/tcp
+student-2-frontend   Up 54 seconds (healthy)       3200->3200/tcp
+student5-backend     Up 59 seconds (healthy)       5500->5500/tcp
+student5-database    Up About a minute (healthy)   6500->6500/tcp
+student5-frontend    Up 54 seconds (healthy)       3500->3500/tcp
+student-3-backend    Up 54 seconds (healthy)       5300->5300/tcp
+student-3-database   Up About a minute (healthy)   6300->6300/tcp
+student-3-frontend   Up 44 seconds (healthy)       3300->3300/tcp
+student-4-backend    Up 54 seconds (healthy)       5400->5400/tcp
+student-4-database   Up About a minute (healthy)   6400->6400/tcp
+student-4-frontend   Up 44 seconds (healthy)       3400->3400/tcp
+student-1-backend    Up About a minute             5100->5100/tcp
+student-1-database   Up About a minute (healthy)   6100->6100/tcp
+student-1-frontend   Up About a minute (healthy)   3100->3100/tcp
+
+## Student 3 backend container configuration (MCP/RAG/AI-Mode point at the host)
+MCP_ENABLED=true
+MCP_SERVER_URL=http://host.docker.internal:8000/mcp
+MCP_TIMEOUT=15
+OLLAMA_URL=http://host.docker.internal:11434
+RAG_ENABLED=true
+RAG_SERVER_URL=http://host.docker.internal:8100
+RAG_TIMEOUT=100
+
+## Release 0 still works: GET /health and GET /api/medicines (first record)
+{"service":"student-3-backend","status":"ok"}
+
+{'name': 'Paracetamol 500mg', 'available_quantity': 20, 'is_low_stock': True, 'supplier_name': 'MedSupply Australia'} | total: 132
+
+## AI-Mode reaches host Ollama: GET /api/ai/health
+{
+  "model": "llama3.2:3b",
+  "model_available": true,
+  "ollama_url": "http://host.docker.internal:11434",
+  "probe": {
+    "data": {
+      "ok": true
+    },
+    "duration_seconds": 0.21659429199999636,
+    "error": null,
+    "eval_count": 6,
+    "eval_duration_ns": 117495000,
+    "model": "llama3.2:3b",
+    "ok": true,
+    "outcome": "ok",
+    "prompt_name": "smoke",
+    "prompt_version": "v1",
+    "retried": false,
+    "tokens_per_second": 51.06600280863015
+  },
+  "reachable": true,
+  "round_trip_seconds": 0.217
+}
+
+## MCP: GET /api/mcp/status
+{
+  "allowed_tools": [
+    "homs_pharmacy_stock_alerts",
+    "homs_echo"
+  ],
+  "enabled": true,
+  "reachable": true,
+  "server_url": "http://host.docker.internal:8000/mcp",
+  "tools": [
+    "homs_echo",
+    "homs_pharmacy_stock_alerts"
+  ]
+}
+
+## MCP: POST /api/mcp/call homs_pharmacy_stock_alerts {alert_type: expiring_soon}
+{"arguments":{"alert_type":"expiring_soon"},"duration_ms":38,"ok":true,"outcome":"ok","result":{"data":{"alert_type":"expiring_soon","counts":{"active_medicines":132,"expired_batches":22,"expiring_within_30_days":28,"expiring_within_7_days":8,"low_stock":26,"pending_approvals":16},"expiring_soon":[{"batch_number":"PHM-26034","days_until_expiry":0,"expiry_date":"2026-09-28","medicine_name":"Morphine 10mg/mL (034)","quantity_remaining":230},{"batch_number":"PHM-26035","days_until_expiry":1,"expiry_date":"2026-09-29","medicine_name":"Normal Saline Flush 10mL (035)","quantity_remaining":50},{"batch_number":"PHM-26036","days_until_expiry":2,"expiry_date":"2026-09-30","medicine_name":"Oseltamivir 75mg (036)","quantity_remaining":80},{"batch_number":"PHM-26037","days_until_expiry":3,"expiry_date":"2026-10-01","medicine_name":"Metoprolol 25mg (037)","quantity_remaining":110},{"batch_number":"PHM
+
+## RAG: GET /api/rag/status
+{
+  "documents": [
+    {
+      "source": "student-3/ai-advisories-and-agent.md",
+      "title": "Pharmacy AI Advisories and Scheduled Agent"
+    },
+    {
+      "source": "student-3/expiry-and-write-off.md",
+      "title": "Batch Expiry and Write-Off"
+    },
+    {
+      "source": "student-3/inventory-and-low-stock.md",
+      "title": "Pharmacy Inventory and Low Stock"
+    },
+    {
+      "source": "student-3/issuing-and-receiving-stock.md",
+      "title": "Issuing and Receiving Stock"
+    },
+    {
+      "source": "student-3/reorder-and-purchase-orders.md",
+      "title": "Reordering and Purchase Orders"
+    }
+  ],
+  "enabled": true,
+  "feature": "student-3",
+  "reachable": true,
+  "ready": true,
+  "server_url": "http://host.docker.internal:8100"
+}
+
+## RAG: POST /api/rag/ask (answerable)
+{
+  "answer": "The suggested reorder quantity is calculated by subtracting the following from the coverage target: \n\n1. Usable stock (stock expiring within the supplier's lead time is treated as unusable)\n2. Any quantity already on open orders\n\nThe coverage target is the larger of the reorder level and the daily usage rate multiplied by (lead time + 7 days). [S1]",
+  "citations": [
+    {
+      "id": "S1",
+      "score": 0.843,
+      "section": "Suggested reorder quantity",
+      "snippet": "The backend, not the AI model, calculates the suggested quantity: 1. The daily usage rate is the stock issued in the last 30 days divided by 30. 2. Stock expiring within the supplier's lead time is treated as unusable. 3. The coverage target is the larger of the reorder level an\u2026",
+      "source": "student-3/reorder-and-purchase-orders.md",
+      "title": "Reordering and Purchase Orders"
+    }
+  ],
+  "confidence": "high",
+  "duration_ms": 1898,
+  "models": {
+    "embedding": "nomic-embed-text",
+    "generation": "llama3.2:3b"
+  },
+  "ok": true,
+  "outcome": "answered",
+  "question": "How is the suggested reorder quantity calculated?",
+  "retrieval": {
+    "considered": 4,
+    "relevant": 4,
+    "threshold": 0.62,
+    "top_score": 0.843
+  }
+}
+
+## RAG: POST /api/rag/ask (not covered -> insufficient context)
+{
+  "answer": "The knowledge base does not contain enough relevant information to answer this question, so no answer was generated.",
+  "citations": [],
+  "confidence": "none",
+  "duration_ms": 29,
+  "models": {
+    "embedding": "nomic-embed-text",
+    "generation": "llama3.2:3b"
+  },
+  "ok": true,
+  "outcome": "insufficient_context",
+  "question": "What is the recommended paracetamol dose for a child?",
+  "reason": "no_relevant_context",
+  "retrieval": {
+    "considered": 4,
+    "relevant": 0,
+    "threshold": 0.62,
+    "top_score": 0.5982
+  }
+}
+
+## Backend container log lines for MCP and RAG calls
+[MCP] list_tools tool=- outcome=ok duration_ms=305 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=78 server=http://host.docker.internal:8000/mcp
+[RAG] ask outcome=answered confidence=high citations=1 duration_ms=4249 server=http://host.docker.internal:8100
+[RAG] ask outcome=insufficient_context confidence=none citations=0 duration_ms=36 server=http://host.docker.internal:8100
+[MCP] list_tools tool=- outcome=ok duration_ms=27 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=38 server=http://host.docker.internal:8000/mcp
+[RAG] ask outcome=answered confidence=high citations=1 duration_ms=1898 server=http://host.docker.internal:8100
+[RAG] ask outcome=insufficient_context confidence=none citations=0 duration_ms=29 server=http://host.docker.internal:8100
