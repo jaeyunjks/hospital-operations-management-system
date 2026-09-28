@@ -216,3 +216,40 @@ html { scrollbar-gutter: stable; }
 #rag-loading:not(.htmx-request) {
   display: none;
 }
+
+/* Let long example questions, status badges and server URLs wrap on narrow screens. */
+.rag-examples .btn {
+  height: auto;
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+#mcp-status,
+#rag-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+#mcp-status .badge,
+#rag-status .badge {
+  white-space: normal;
+}
+
+#mcp-status .table__muted,
+#rag-status .table__muted {
+  overflow-wrap: anywhere;
+}
+
+.mcp-forms .toolbar__group {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.mcp-forms .btn {
+  height: auto;
+  white-space: normal;
+}
