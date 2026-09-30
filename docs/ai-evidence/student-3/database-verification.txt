@@ -1,0 +1,72 @@
+# Student 3 - database operations evidence (Release 1)
+# 2026-09-30T13:56:18Z
+
+## Database service container (Docker Compose)
+SERVICE              STATUS                PORTS
+student-3-database   Up 2 days (healthy)   6300->6300/tcp
+
+## Database service reads over HTTP (the backend's only path to SQLite)
+$ curl localhost:6300/health
+{"status":"healthy"}
+
+$ curl localhost:6300/medicines  -> 140 records; first: {"category": "Analgesic", "medicine_id": 1, "name": "Paracetamol 500mg", "reorder_level": 200}
+$ curl localhost:6300/suppliers  -> 14 records; first: {"contact_email": "orders@medsupply.example.com", "lead_time_days": 5, "name": "MedSupply Australia", "phone": "02-9000-1001"}
+$ curl localhost:6300/batches  -> 236 records; first: {"batch_id": 36, "batch_number": "PHM-26036", "expiry_date": "2026-09-30", "medicine_id": 36}
+$ curl localhost:6300/purchase_orders  -> 88 records; first: {"ai_generated": 1, "ai_reasoning": "Actual usage is 1.90 units/day, so the calculated quantity should cover supplier lead time.  Source: AI-reviewed.", "approved_by": "Pharmacy Manager", "created_at": "2026-09-06T07:13:11+00:00"}
+$ curl localhost:6300/stock_movements  -> 712 records; first: {"batch_id": 100, "created_at": "2026-07-08 20:38:34", "medicine_id": 100, "movement_id": 660}
+$ curl localhost:6300/staff  -> 12 records; first: {"created_at": "2026-09-05 13:20:34", "name": "Amara Okafor", "notes": "Pharmacy technician.", "role": "staff"}
+
+## Read-only structure, data and relationship verification
+# Copy of the live volume: docker cp s3-database:/data/pharmacy.db, then:
+$ python3 student-3/database/verify_db.py --path <copy of /data/pharmacy.db>
+
+Database structure
+  [PASS] table 'staff' exists
+  [PASS] 'staff' primary key is staff_id
+  [PASS] table 'suppliers' exists
+  [PASS] 'suppliers' primary key is supplier_id
+  [PASS] table 'medicines' exists
+  [PASS] 'medicines' primary key is medicine_id
+  [PASS] table 'batches' exists
+  [PASS] 'batches' primary key is batch_id
+  [PASS] table 'purchase_orders' exists
+  [PASS] 'purchase_orders' primary key is po_id
+  [PASS] table 'stock_movements' exists
+  [PASS] 'stock_movements' primary key is movement_id
+  [PASS] medicines.supplier_id references suppliers(supplier_id)
+  [PASS] batches.medicine_id references medicines(medicine_id)
+  [PASS] purchase_orders.medicine_id references medicines(medicine_id)
+  [PASS] purchase_orders.supplier_id references suppliers(supplier_id)
+  [PASS] stock_movements.medicine_id references medicines(medicine_id)
+  [PASS] stock_movements.batch_id references batches(batch_id)
+
+Data population
+  [PASS] 'staff' holds at least 10 records (found 12)
+  [PASS] 'suppliers' holds at least 10 records (found 14)
+  [PASS] 'medicines' holds at least 10 records (found 140)
+  [PASS] 'batches' holds at least 10 records (found 280)
+  [PASS] 'purchase_orders' holds at least 10 records (found 88)
+  [PASS] 'stock_movements' holds at least 10 records (found 712)
+  [PASS] at least 2 staff records have role 'manager' (found 2)
+  [PASS] at least 10 staff records have role 'staff' (found 10)
+
+Relationship integrity
+  [PASS] no foreign-key violations (found 0)
+  [PASS] no medicines.supplier_id references a missing suppliers record (found 0)
+  [PASS] no batches.medicine_id references a missing medicines record (found 0)
+  [PASS] no purchase_orders.medicine_id references a missing medicines record (found 0)
+  [PASS] no purchase_orders.supplier_id references a missing suppliers record (found 0)
+  [PASS] no stock_movements.medicine_id references a missing medicines record (found 0)
+  [PASS] no stock_movements.batch_id references a missing batches record (found 0)
+  [PASS] no duplicate batch numbers for the same medicine (found 0)
+  [PASS] stock movements reference batches for the same medicine (found 0)
+
+Queryability
+  [PASS] medicines.supplier_id resolves to suppliers records (found 140)
+  [PASS] batches.medicine_id resolves to medicines records (found 280)
+  [PASS] purchase_orders.medicine_id resolves to medicines records (found 88)
+  [PASS] purchase_orders.supplier_id resolves to suppliers records (found 88)
+  [PASS] stock_movements.medicine_id resolves to medicines records (found 712)
+  [PASS] stock_movements.batch_id resolves to batches records (found 712)
+
+41/41 checks passed.
