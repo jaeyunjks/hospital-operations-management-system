@@ -5,8 +5,8 @@
 | Student | Tirth Patel (GitHub `tirth676`) |
 | Feature | Pharmacy & Medication Inventory Management (`student-3/`) |
 | Feature branch | `pharmacy-inventory-management`, merged into `develop` |
-| Release 1 period | 23 September – 30 September 2026 |
-| Release 1 commits | Listed below by requirement (plus one Release 0 carry-over); merged into `develop` on 24, 28 and 30 September |
+| Release 1 period | 23 September – 1 October 2026 |
+| Release 1 commits | Listed below by requirement (plus one Release 0 carry-over); merged into `develop` on 24, 28 and 30 September and 1 October |
 
 Commit links: `https://github.com/jaeyunjks/hospital-operations-management-system/commit/<id>`.
 
@@ -75,7 +75,7 @@ Commit links: `https://github.com/jaeyunjks/hospital-operations-management-syste
 ## Integration and validation activities
 
 - Merged `develop` into the feature branch before each integration and merged the feature
-  branch into `develop` on 24, 28 and 30 September, each time after CI passed.
+  branch into `develop` on 24, 28 and 30 September and 1 October, each time after CI passed.
 - Validated the full Compose deployment (15 feature containers plus the shared home page,
   with Ollama outside Compose): the Student 3 backend container reached the host MCP server,
   RAG server and Ollama.
