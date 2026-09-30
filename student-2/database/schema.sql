@@ -209,7 +209,9 @@ CREATE TABLE ai_summaries (
     -- What the AI produced
     summary_text              TEXT NOT NULL,      -- the actual generated summary/guidance
     model_used                 TEXT,               -- e.g. 'llama3.1:8b'
-    source_reference           TEXT,               -- which policy doc it drew from (used from Release 1 onward, NULL in R0)
+    source_reference           TEXT,               -- backend bookkeeping about the row (currently the requester stamp); NULL in R0
+    source_documents           TEXT NOT NULL DEFAULT '[]'  -- JSON list of the policy document names a summary drew from; '[]' when none (every R0 row)
+                                  CHECK (json_valid(source_documents)),
     summary_scope              TEXT NOT NULL DEFAULT 'clinical' 
                                     CHECK (summary_scope IN ('clinical', 'consultation', 'care_tasks')), 
 

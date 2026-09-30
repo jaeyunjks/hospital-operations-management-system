@@ -8,6 +8,8 @@ Behaviour:
   * On a normal run it creates the schema from schema.sql ONLY when the database
     is missing or has no tables yet. A fresh table creation is immediately
     followed by loading seed_data.sql.
+  * On an existing database it adds any later-release columns that are missing
+    (e.g. ai_summaries.source_documents) without touching existing rows.
   * Seed data is never applied to a database that already has tables/rows -
     only right after this script builds the schema from empty.
   * Passing --reset (or calling init_db(reset=True)) is the ONLY way to destroy
@@ -67,6 +69,24 @@ def _load_seed(conn):
     conn.executescript(_read_sql(SEED_FILE))
 
 
+# Columns added to a table after its first release. schema.sql already has them,
+# so this only matters for a database file created before they existed.
+# (table, column, definition as it appears in schema.sql)
+_ADDED_COLUMNS = [
+    ("ai_summaries", "source_documents",
+     "TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(source_documents))"),
+]
+
+
+def _add_missing_columns(conn):
+    """Add any _ADDED_COLUMNS an older database lacks. Adds only; never drops or rewrites."""
+    for table, column, definition in _ADDED_COLUMNS:
+        existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if existing and column not in existing:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+            print(f"[init_db] added missing column {table}.{column}")
+
+
 def _drop_all(conn):
     """Drop every table this service owns (used only by --reset)."""
     for table in TABLES:
@@ -115,7 +135,10 @@ def init_db(reset=False):
             print(f"[init_db] created schema and loaded seed data at {db_path}")
         else:
             # Something is already here. Never seed over an existing population;
-            # never drop without --reset. Leave it untouched.
+            # never drop without --reset. The one exception: columns added in
+            # later releases are appended (data-preserving) if missing.
+            _add_missing_columns(conn)
+            conn.commit()
             print(
                 f"[init_db] database already initialised at {db_path} "
                 f"({len(present)}/{len(TABLES)} tables present); leaving as-is"

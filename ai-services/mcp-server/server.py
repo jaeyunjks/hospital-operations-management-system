@@ -28,7 +28,7 @@ from mcp.types import (
 )
 
 from tools.system import MAX_MESSAGE_LENGTH, TOOL_NAME, homs_echo, validation_error
-from tools import pharmacy_stock, ward_occupancy
+from tools import care_tasks, pharmacy_stock, ward_occupancy
 
 SERVER_NAME = "HOMS Shared MCP Server"
 SERVER_VERSION = "0.1.0"
@@ -271,6 +271,29 @@ HOMS_PHARMACY_STOCK_TOOL = Tool(
 )
 
 
+HOMS_OPEN_CARE_TASKS_TOOL = Tool(
+    name=care_tasks.TOOL_NAME,
+    title="HOMS Open Care Tasks",
+    description=(
+        "Read the pending and acknowledged nurse care tasks for one admission from "
+        "Student 2's published backend API: task id, description, status and due "
+        "time only. Read-only; does not create, acknowledge, complete or cancel tasks."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "admission_id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Required. Positive whole-number admission id.",
+            }
+        },
+        "additionalProperties": False,
+    },
+    output_schema=care_tasks.OUTPUT_SCHEMA,
+)
+
+
 async def list_tools(
     ctx: ServerRequestContext,
     params: PaginatedRequestParams | None,
@@ -278,7 +301,12 @@ async def list_tools(
     """Advertise the connectivity and controlled cross-service read tools."""
 
     return ListToolsResult(
-        tools=[HOMS_ECHO_TOOL, HOMS_WARD_OCCUPANCY_TOOL, HOMS_PHARMACY_STOCK_TOOL]
+        tools=[
+            HOMS_ECHO_TOOL,
+            HOMS_WARD_OCCUPANCY_TOOL,
+            HOMS_PHARMACY_STOCK_TOOL,
+            HOMS_OPEN_CARE_TASKS_TOOL,
+        ]
     )
 
 
@@ -338,6 +366,25 @@ async def call_tool(
                 arguments.get("alert_type"),
                 api_url=config.student3_api_url,
                 timeout=config.student3_api_timeout,
+            )
+        )
+
+    if params.name == care_tasks.TOOL_NAME:
+        arguments = params.arguments or {}
+        unexpected = sorted(set(arguments) - {"admission_id"})
+        if unexpected:
+            return _result(
+                care_tasks.tool_error(
+                    "invalid_input",
+                    "Only the 'admission_id' argument is accepted.",
+                    {"reason": "unexpected_fields", "fields": unexpected},
+                )
+            )
+        return _result(
+            await care_tasks.homs_open_care_tasks(
+                arguments.get("admission_id"),
+                api_url=care_tasks.API_URL,
+                timeout=care_tasks.API_TIMEOUT,
             )
         )
 

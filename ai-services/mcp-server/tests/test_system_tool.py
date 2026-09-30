@@ -46,6 +46,7 @@ def test_registers_echo_ward_occupancy_and_pharmacy_stock():
         "homs_echo",
         "homs_ward_occupancy_status",
         "homs_pharmacy_stock_alerts",
+        "homs_open_care_tasks",
     ]
     assert listing.tools[0].input_schema["required"] == ["message"]
     assert listing.tools[0].input_schema["properties"]["message"]["maxLength"] == 200

@@ -11,13 +11,15 @@ All of that lives in the backend container. Only that backend talks to this
 API; it is never exposed to anyone else directly.
 
 Validation here is limited to: the request body is a JSON object, required
-columns are present on POST, and unknown columns are rejected. Anything
-stricter is the backend's job.
+columns are present on POST, unknown columns are rejected, and columns stored
+as JSON text (source_documents) receive a list of strings. Anything stricter
+is the backend's job.
 
 On startup it calls init_db() so the database file and tables exist before the
 first request is served. Listens on port 6200.
 """
 
+import json
 import os
 import sqlite3
 
@@ -82,10 +84,13 @@ TABLES = {
         "pk": "summary_id",
         "columns": [
             "admission_id", "patient_id",
-            "summary_text", "model_used", "source_reference", "summary_scope",
+            "summary_text", "model_used", "source_reference", "source_documents",
+            "summary_scope",
             "generated_at", "reviewed_by_staff_id", "review_status",
         ],
         "required": ["admission_id", "patient_id", "summary_text"],
+        # Stored as JSON text, but the API takes and returns a real list.
+        "json_lists": ["source_documents"],
     },
 }
 
@@ -101,8 +106,12 @@ def get_conn():
     return conn
 
 
-def row_to_dict(row):
-    return {key: row[key] for key in row.keys()}
+def row_to_dict(row, spec):
+    out = {key: row[key] for key in row.keys()}
+    for col in spec.get("json_lists", []):
+        if col in out:
+            out[col] = json.loads(out[col] or "[]")
+    return out
 
 
 # ------------------------------------------------------------
@@ -133,6 +142,20 @@ def check_columns(spec, data, require_all):
     return None
 
 
+def encode_json_lists(spec, data):
+    """
+    For each JSON-list column in the body, require a list of strings and swap
+    it in `data` for its JSON text. Returns an error string, or None if fine.
+    """
+    for col in spec.get("json_lists", []):
+        if col in data:
+            value = data[col]
+            if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+                return f"{col} must be a list of strings"
+            data[col] = json.dumps(value)
+    return None
+
+
 # ------------------------------------------------------------
 # CRUD route factory
 # One set of five endpoints is registered per table.
@@ -144,7 +167,7 @@ def register_routes(table, spec):
         conn = get_conn()
         try:
             rows = conn.execute(f"SELECT * FROM {table} ORDER BY {pk}").fetchall()
-            return jsonify([row_to_dict(r) for r in rows])
+            return jsonify([row_to_dict(r, spec) for r in rows])
         finally:
             conn.close()
 
@@ -156,7 +179,7 @@ def register_routes(table, spec):
             ).fetchone()
             if row is None:
                 return jsonify({"error": "not found"}), 404
-            return jsonify(row_to_dict(row))
+            return jsonify(row_to_dict(row, spec))
         finally:
             conn.close()
 
@@ -164,7 +187,7 @@ def register_routes(table, spec):
         data, err = get_json_object()
         if err:
             return err
-        problem = check_columns(spec, data, require_all=True)
+        problem = check_columns(spec, data, require_all=True) or encode_json_lists(spec, data)
         if problem:
             return jsonify({"error": problem}), 400
 
@@ -181,7 +204,7 @@ def register_routes(table, spec):
             row = conn.execute(
                 f"SELECT * FROM {table} WHERE {pk} = ?", (new_id,)
             ).fetchone()
-            return jsonify(row_to_dict(row)), 201
+            return jsonify(row_to_dict(row, spec)), 201
         except sqlite3.IntegrityError as exc:
             # e.g. bad FK, failed CHECK constraint - report, don't interpret.
             return jsonify({"error": f"integrity error: {exc}"}), 400
@@ -192,7 +215,7 @@ def register_routes(table, spec):
         data, err = get_json_object()
         if err:
             return err
-        problem = check_columns(spec, data, require_all=False)
+        problem = check_columns(spec, data, require_all=False) or encode_json_lists(spec, data)
         if problem:
             return jsonify({"error": problem}), 400
         if not data:
@@ -211,7 +234,7 @@ def register_routes(table, spec):
             row = conn.execute(
                 f"SELECT * FROM {table} WHERE {pk} = ?", (row_id,)
             ).fetchone()
-            return jsonify(row_to_dict(row))
+            return jsonify(row_to_dict(row, spec))
         except sqlite3.IntegrityError as exc:
             return jsonify({"error": f"integrity error: {exc}"}), 400
         finally:

@@ -31,6 +31,8 @@ BLUEPRINTS = [
     ("care_tasks",       "care_tasks_bp",       "/api/care-tasks"),
     ("surgery_requests", "surgery_requests_bp", "/api/surgery-requests"),
     ("ai_summary",       "ai_summary_bp",       "/api/ai"),
+    ("mcp_routes",       "mcp_bp",              "/api/mcp"),
+    ("rag_routes",       "rag_bp",              "/api/rag"),
 ]
 
 
