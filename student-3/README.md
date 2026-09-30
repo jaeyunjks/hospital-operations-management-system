@@ -58,6 +58,12 @@ agentic loop's RAG validation mode (`ai-services/agentic-loop/rag_loop.py`).
 Prerequisites: Docker Desktop, Python 3.12+, Ollama with `llama3.2:3b` and
 `nomic-embed-text` (`llama3.1:8b` for the agentic loop).
 
+Install the shared servers' dependencies once (repository root):
+
+```bash
+python3 -m pip install -r ai-services/mcp-server/requirements.txt -r ai-services/rag-server/requirements.txt
+```
+
 Start the shared servers on the host (repository root, one terminal each):
 
 ```bash
@@ -95,6 +101,8 @@ MCP and RAG are present but disabled in both the backend and the dashboard.
 ## Evidence
 
 - Docker integration: [`docs/ai-evidence/student-3/docker-integration-validation.txt`](../docs/ai-evidence/student-3/docker-integration-validation.txt)
+  (captured with `STUDENT3_MCP_ENABLED=true STUDENT3_RAG_ENABLED=true`, the demo switches)
+- Database operations: [`docs/ai-evidence/student-3/database-verification.txt`](../docs/ai-evidence/student-3/database-verification.txt)
 - Agentic loop runs (MCP and RAG modes): [`docs/agent-logs/student-3/`](../docs/agent-logs/student-3/)
 - RAG server terminal validation: [`docs/ai-evidence/rag-server/terminal-validation.txt`](../docs/ai-evidence/rag-server/terminal-validation.txt)
 
