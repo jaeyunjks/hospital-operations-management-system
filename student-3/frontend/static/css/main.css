@@ -253,3 +253,7 @@ html { scrollbar-gutter: stable; }
   height: auto;
   white-space: normal;
 }
+
+.mcp-forms .mcp-message {
+  min-width: 16rem;
+}

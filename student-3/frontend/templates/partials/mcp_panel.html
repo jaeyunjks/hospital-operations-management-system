@@ -22,7 +22,7 @@
     <form class="toolbar__group" hx-post="/mcp/call" hx-target="#mcp-result" hx-swap="innerHTML" hx-indicator="#mcp-loading" hx-disabled-elt="find button">
       <input type="hidden" name="tool" value="homs_echo">
       <label class="mcp-field">Message
-        <input class="input" name="message" value="pharmacy connectivity check" maxlength="200" required>
+        <input class="input mcp-message" name="message" value="pharmacy connectivity check" maxlength="200" required>
       </label>
       <button class="btn btn-secondary" type="submit">Test connectivity</button>
     </form>

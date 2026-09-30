@@ -74,7 +74,8 @@ class MCPPanelTests(unittest.TestCase):
             html = self.client.post('/mcp/call', data={'tool': 'homs_echo', 'message': 'hi',
                                                        'alert_type': 'all'}).get_data(as_text=True)
         call.assert_called_once_with('homs_echo', {'message': 'hi'})
-        self.assertIn('echoed: <strong>hi</strong>', html)
+        self.assertIn('Connection OK', html)
+        self.assertIn('returned your message unchanged in 3 ms: <strong>hi</strong>', html)
 
     def test_tool_error_is_shown_as_structured_error(self):
         response = {"ok": False, "outcome": "tool_error", "tool": "homs_pharmacy_stock_alerts",
