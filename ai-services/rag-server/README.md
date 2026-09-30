@@ -242,8 +242,13 @@ rules.
 | Folder | Owner | Status |
 |---|---|---|
 | `knowledge/shared/` | Group | HOMS overview: features, architecture, ports, AI services |
-| `knowledge/student-3/` | Student 3 | 5 pharmacy documents (inventory, issuing/receiving, expiry/write-off, reordering/POs, AI/agent) |
-| `knowledge/student-1/`, `-2/`, `-4/`, `-5/` | Each student | Awaiting documents — see each folder's README |
+| `knowledge/student-3/` | Student 3 | 6 pharmacy documents (overview, inventory and low stock, issuing/receiving, expiry/write-off, reordering/POs, AI/agent) |
+| `knowledge/student-5/` | Student 5 | 4 staff and shift documents (availability, roles and decision-support boundaries, shift planning and coverage, eligibility and assignments) |
+| `knowledge/student-1/`, `-2/`, `-4/` | Each student | Awaiting documents — see each folder's README |
+
+Documents describe rules and workflows, not live data: questions about current
+stock levels, bed counts or rosters are refused, and those figures come from
+each feature's own pages and MCP tools.
 
 ## Limitations
 

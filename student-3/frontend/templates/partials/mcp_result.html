@@ -35,7 +35,12 @@
     {% endif %}
     <p class="table__muted">Source: {{ data.source }}</p>
   {% elif call.tool == 'homs_echo' and data %}
-    <p>The shared MCP server echoed: <strong>{{ data.message }}</strong></p>
+    <div class="alert alert--success" role="status">
+      <div>
+        <p class="alert__title">Connection OK</p>
+        <p class="alert__body">The pharmacy backend reached the shared MCP server, which returned your message unchanged in {{ call.duration_ms }} ms: <strong>{{ data.message }}</strong></p>
+      </div>
+    </div>
   {% endif %}
 
   <details class="mcp-raw">
