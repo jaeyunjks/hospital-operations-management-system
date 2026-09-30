@@ -1,5 +1,8 @@
 # Student 3 - Docker Compose integration validation
 # 2026-09-28T07:17:38Z
+# Captured with MCP and RAG enabled for the demo (MCP_ENABLED=true / RAG_ENABLED=true below).
+# Compose now defaults both to false so CI never uses them; enable them with
+# STUDENT3_MCP_ENABLED=true STUDENT3_RAG_ENABLED=true docker compose up.
 
 ## Running containers (docker compose ps)
 SERVICE              STATUS                        PORTS

@@ -6,7 +6,7 @@
 | Feature | Pharmacy & Medication Inventory Management (`student-3/`) |
 | Feature branch | `pharmacy-inventory-management`, merged into `develop` |
 | Release 1 period | 23 September – 30 September 2026 |
-| Release 1 commits | 22 listed below plus this log, one Release 0 carry-over commit, and 2 merges into `develop` |
+| Release 1 commits | Listed below by requirement (plus one Release 0 carry-over); merged into `develop` on 24, 28 and 30 September |
 
 Commit links: `https://github.com/jaeyunjks/hospital-operations-management-system/commit/<id>`.
 
@@ -70,13 +70,17 @@ Commit links: `https://github.com/jaeyunjks/hospital-operations-management-syste
 | 24 Sep | [`dfedbd2`](https://github.com/jaeyunjks/hospital-operations-management-system/commit/dfedbd2) | RAG server terminal validation |
 | 24 Sep | [`8fd7d40`](https://github.com/jaeyunjks/hospital-operations-management-system/commit/8fd7d40) | Agentic loop in MCP and RAG modes (local) |
 | 28 Sep | [`b03eae9`](https://github.com/jaeyunjks/hospital-operations-management-system/commit/b03eae9) | Docker Compose integration validation and loop reruns against the Compose deployment |
+| 30 Sep | [`219022d`](https://github.com/jaeyunjks/hospital-operations-management-system/commit/219022d) | Database operations: `verify_db.py` on the live Compose data (41/41) and database-service reads |
 
 ## Integration and validation activities
 
 - Merged `develop` into the feature branch before each integration and merged the feature
-  branch into `develop` on 24 and 28 September once CI passed.
-- Validated the full Compose deployment (all 16 feature containers, Ollama outside Compose):
-  the Student 3 backend container reached the host MCP server, RAG server and Ollama.
+  branch into `develop` on 24, 28 and 30 September, each time after CI passed.
+- Validated the full Compose deployment (15 feature containers plus the shared home page,
+  with Ollama outside Compose): the Student 3 backend container reached the host MCP server,
+  RAG server and Ollama.
+- Verified the Student 3 database (structure, data and relationships: 41/41 checks) on a copy
+  of the live Compose volume, and recorded reads through the database service.
 - Ran the shared agentic loop for Student 3 in MCP mode (grounded) and RAG mode (all checks
   passed, including an ADAPT retry of a failed question).
 - CI runs: [student-3.yml](https://github.com/jaeyunjks/hospital-operations-management-system/actions/workflows/student-3.yml),
@@ -85,6 +89,7 @@ Commit links: `https://github.com/jaeyunjks/hospital-operations-management-syste
 | Evidence | Location |
 |---|---|
 | Docker integration | `docs/ai-evidence/student-3/docker-integration-validation.txt` |
+| Database operations | `docs/ai-evidence/student-3/database-verification.txt` |
 | RAG terminal validation | `docs/ai-evidence/rag-server/terminal-validation.txt` |
 | Agentic loop outputs | `docs/agent-logs/student-3/*-grounded-loop.*`, `*-rag-validation.*` |
 

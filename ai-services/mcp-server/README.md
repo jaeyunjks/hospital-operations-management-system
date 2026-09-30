@@ -124,7 +124,8 @@ are rejected before HTTP access.
 
 The only upstream operation is `GET /api/wards/occupancy`, optionally with
 `?ward=...`. Student 4 remains authoritative; MCP does not import its services
-or access port 6400/SQLite. Student 5 integration is not implemented.
+or access port 6400/SQLite. Student 5's workforce overview and shift planner
+call this tool through the Student 5 backend (`student-5/backend/services/mcp_client.py`).
 
 Success uses the same `schema_version`, `ok`, `tool`, `data`, `error` envelope:
 
