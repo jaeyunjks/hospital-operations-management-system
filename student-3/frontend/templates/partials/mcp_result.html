@@ -20,6 +20,8 @@
     <div class="alert alert--warning"><div><p class="alert__title">{{ envelope.error.code if envelope.error else 'tool_error' }}</p><p class="alert__body">{{ envelope.error.message if envelope.error else 'The tool did not return a structured error.' }}</p></div></div>
   {% elif call.tool == 'homs_pharmacy_stock_alerts' and data %}
     {% set expiring_7 = (data.expiring_soon or [])|selectattr('days_until_expiry', 'le', 7)|list %}
+    {% set expiring_later = (data.expiring_soon or [])|selectattr('days_until_expiry', 'gt', 7)|list %}
+    {% set expiry_default = (call.arguments or {}).get('alert_type') == 'expiring_soon' and data.expiring_soon is not none %}
     {% set tiles = [
       ('active', 'Active medicines', 'active_medicines', '/mcp/details/active-medicines'),
       ('low', 'Low stock', 'low_stock', None),
@@ -37,7 +39,7 @@
         </button>
       {% endfor %}
     </div>
-    <p class="table__muted" data-mcp-hint>Click a figure to see its details.</p>
+    <p class="table__muted" data-mcp-hint{% if expiry_default %} hidden{% endif %}>Click a figure to see its details.</p>
 
     {% macro not_requested() %}<p class="table__muted">Not included in this request. Choose "All alerts" and get the stock alerts again.</p>{% endmacro %}
     {% macro expiring_table(rows, empty) %}
@@ -71,6 +73,16 @@
         <p class="table__muted">Live data from the pharmacy inventory via MCP.</p>
       {% endif %}
     </div>
+    {% if expiry_default %}
+      {# "Expiring soon" opens on the most urgent batches first, then the rest of the 30-day window. #}
+      <div class="mcp-detail" id="mcp-panel-default" data-mcp-panel="default" data-mcp-default>
+        <h4 class="mcp-subtitle">Expiring within 7 days <span class="table__muted">({{ expiring_7|length }} of {{ data.counts.expiring_within_7_days }} shown)</span></h4>
+        {{ expiring_table(expiring_7, 'No non-empty batches expire within 7 days.') }}
+        <h4 class="mcp-subtitle">Expiring in 8–30 days <span class="table__muted">({{ expiring_later|length }} of {{ data.counts.expiring_within_30_days - data.counts.expiring_within_7_days }} shown)</span></h4>
+        {{ expiring_table(expiring_later, 'No other non-empty batches expire within 30 days.') }}
+        <p class="table__muted">Live data from the pharmacy inventory via MCP. Click a figure above to see only that list.</p>
+      </div>
+    {% endif %}
     {% for key in ('active', 'expired', 'pending') %}
       <div class="mcp-detail" id="mcp-panel-{{ key }}" data-mcp-panel="{{ key }}" hidden><p class="table__muted">Loading…</p></div>
     {% endfor %}

@@ -40,10 +40,12 @@
     result.querySelectorAll('[data-mcp-tile]').forEach((other) => {
       other.setAttribute('aria-pressed', String(opening && other === tile));
     });
+    // Closing a figure returns to the result's default view (if it has one) or the hint.
+    const hasDefault = Boolean(result.querySelector('[data-mcp-default]'));
     result.querySelectorAll('[data-mcp-panel]').forEach((panel) => {
-      panel.hidden = !(opening && panel.dataset.mcpPanel === tile.dataset.mcpTile);
+      panel.hidden = opening ? panel.dataset.mcpPanel !== tile.dataset.mcpTile : !panel.hasAttribute('data-mcp-default');
     });
     const hint = result.querySelector('[data-mcp-hint]');
-    if (hint) hint.hidden = opening;
+    if (hint) hint.hidden = opening || hasDefault;
   });
 </script>

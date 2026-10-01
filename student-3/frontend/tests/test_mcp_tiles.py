@@ -77,6 +77,29 @@ class StockAlertTileTests(unittest.TestCase):
         self.assertNotIn('Not included in this request', panel(html, 'exp30'))
 
 
+    def test_expiring_soon_opens_on_7_day_then_8_to_30_day_lists(self):
+        result = self.alerts_with_two_expiring_batches()
+        result['arguments'] = {'alert_type': 'expiring_soon'}
+        result['result']['data']['alert_type'] = 'expiring_soon'
+        result['result']['data']['low_stock'] = None
+        html = self.render(result)
+        default = panel(html, 'default')
+        self.assertNotIn(' hidden', default[:160])
+        self.assertIn('data-mcp-default', default)
+        seven, later = default.index('Expiring within 7 days'), default.index('Expiring in 8–30 days')
+        self.assertLess(seven, later)
+        self.assertIn('PHM-26026', default[seven:later])
+        self.assertNotIn('PHM-26999', default[seven:later])
+        self.assertIn('PHM-26999', default[later:])
+        self.assertNotIn('PHM-26026', default[later:])
+        self.assertIn('(1 of 21 shown)', default)  # 28 within 30 days minus 7 within 7 days
+        self.assertRegex(html, r'<p class="table__muted" data-mcp-hint hidden>')
+
+    def test_other_alert_types_have_no_default_view(self):
+        html = self.render(STOCK_ALERTS)
+        self.assertNotIn('data-mcp-default', html)
+        self.assertRegex(html, r'<p class="table__muted" data-mcp-hint>')
+
 class TileDetailRouteTests(unittest.TestCase):
     def setUp(self):
         self.client = app.app.test_client()

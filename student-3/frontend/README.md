@@ -151,6 +151,8 @@ the dashboard.
   batches expiring within 30 or 7 days come from the MCP result; active
   medicines, expired batches and pending approvals load their first 10 rows
   from the backend via `/mcp/details/<kind>` and link to the full page.
+  With the "Expiring soon" alert type the result opens on batches expiring
+  within 7 days, then those expiring in 8–30 days, without a click.
 - **Test connectivity** calls `homs_echo` with the entered message.
 
 `/mcp/call` forwards only the form fields each tool accepts (`alert_type` or
@@ -183,7 +185,7 @@ The shared loading indicator shows elapsed time while the local model works.
 cd student-3/frontend && python3 -m unittest discover -s tests -v
 ```
 
-Tests mock `api_client`, so they never use a live backend on port 5300. They cover rendering routes, dashboard data, manager gates, agent panel output, MCP panel rendering and argument forwarding, RAG answer/refusal/error rendering, and timeout/connection-error display. The current suite passes **33 tests**.
+Tests mock `api_client`, so they never use a live backend on port 5300. They cover rendering routes, dashboard data, manager gates, agent panel output, MCP panel rendering and argument forwarding, RAG answer/refusal/error rendering, and timeout/connection-error display. The current suite passes **35 tests**.
 
 ## Troubleshooting
 
