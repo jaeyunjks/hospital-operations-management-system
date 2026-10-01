@@ -152,10 +152,22 @@ services:
       OLLAMA_TIMEOUT: 30
       AUTH_ENABLED: 0
       FLASK_DEBUG: 0
+      # Shared MCP and RAG servers run on the host, outside Compose, in Docker
+      # mode (HOMS_MCP_HOST / HOMS_RAG_HOST=0.0.0.0 with *_ALLOW_DOCKER_HOST=true).
+      # Off by default so the stack starts without them; enable with
+      # STUDENT4_MCP_ENABLED=true STUDENT4_RAG_ENABLED=true docker compose up.
+      MCP_ENABLED: "${STUDENT4_MCP_ENABLED:-false}"
+      MCP_SERVER_URL: "${STUDENT4_MCP_SERVER_URL:-http://host.docker.internal:8000/mcp}"
+      MCP_TIMEOUT: "${STUDENT4_MCP_TIMEOUT:-15}"
+      RAG_ENABLED: "${STUDENT4_RAG_ENABLED:-false}"
+      RAG_SERVER_URL: "${STUDENT4_RAG_SERVER_URL:-http://host.docker.internal:8100}"
+      RAG_TIMEOUT: "${STUDENT4_RAG_TIMEOUT:-100}"
     ports: ["5400:5400"]
     depends_on:
       student-4-database:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks: [homs-net]
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:5400/health')\""]

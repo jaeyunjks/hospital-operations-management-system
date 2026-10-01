@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% set page = 'shared-ai' %}
+{% block title %}Shared MCP and RAG{% endblock %}
+{% block heading %}Shared MCP and RAG{% endblock %}
+{% block description %}
+  Both panels go through the Room &amp; Bed API, never straight from this page to a shared server.
+  MCP returns live bed data; RAG answers from the room and bed knowledge base and cites its sources.
+{% endblock %}
+
+{% block content %}
+
+<section class="panel">
+  <div class="row row--between">
+    <h2 class="panel__title">Shared MCP tools</h2>
+    <span class="state state--{{ 'Available' if mcp.enabled else 'OutofService' }}">
+      {{ 'MCP enabled' if mcp.enabled else 'MCP disabled' }}
+    </span>
+  </div>
+  <p class="u-muted">
+    Runs one registered, read-only tool on the shared MCP server through this feature's backend.
+    Allowed here: {{ mcp.allowed_tools | join(', ') }}. These tools never change bed data.
+  </p>
+
+  <form class="form-row" hx-post="/shared-ai/ward-occupancy" hx-target="#mcp-result"
+        hx-indicator="#loading-indicator">
+    <label class="field">
+      <span class="field__label">Ward</span>
+      <input class="field__input" type="text" name="ward" placeholder="Emergency (blank = all wards)">
+    </label>
+    <button class="btn btn--primary" type="submit">Get ward occupancy via MCP</button>
+  </form>
+
+  <div id="mcp-result">{% include 'partials/mcp_result.html' %}</div>
+</section>
+
+<section class="panel">
+  <div class="row row--between">
+    <h2 class="panel__title">Ask about room and bed rules</h2>
+    <span class="state state--{{ 'Available' if rag.enabled else 'OutofService' }}">
+      {{ 'RAG enabled' if rag.enabled else 'RAG disabled' }}
+    </span>
+  </div>
+  <p class="u-muted">
+    Answers come only from the room and bed knowledge base on the shared RAG server and always
+    list their sources. Questions it cannot support are refused rather than guessed. It describes
+    rules, not live numbers: for current bed counts use the MCP panel above.
+  </p>
+
+  <form class="form-row" hx-post="/shared-ai/ask" hx-target="#rag-result"
+        hx-indicator="#loading-indicator">
+    <label class="field field--wide">
+      <span class="field__label">Question</span>
+      <input class="field__input" type="text" name="question" maxlength="500"
+             placeholder="For example: Can the same bed hold two bookings at the same time?">
+    </label>
+    <button class="btn btn--primary" type="submit">Ask</button>
+  </form>
+
+  {% if rag.documents %}
+    <p class="u-muted u-label">Indexed documents:
+      {{ rag.documents | map(attribute='title') | join(' · ') }}</p>
+  {% endif %}
+
+  <div id="rag-result">{% include 'partials/rag_answer.html' %}</div>
+</section>
+
+{% endblock %}

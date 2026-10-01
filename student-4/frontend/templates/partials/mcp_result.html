@@ -1,0 +1,42 @@
+{% if error %}
+  <div class="alert alert--error">
+    <strong>MCP tool call failed ({{ tool or 'homs_ward_occupancy_status' }})</strong>
+    <div>{{ error }} No bed data was changed.</div>
+  </div>
+{% elif result %}
+  <div class="alert alert--ok">
+    <strong>{{ result.tool }}</strong>
+    <span class="u-muted">· {{ result.duration_ms }} ms</span>
+  </div>
+  {% set data = result.result.data %}
+  {% if data %}
+    <table class="table">
+      <thead>
+        <tr><th>Ward</th><th>Total</th><th>Occupied</th><th>Available</th>
+            <th>Reserved</th><th>Maintenance</th><th>Occupancy</th></tr>
+      </thead>
+      <tbody>
+        {% for ward in data.wards %}
+          <tr>
+            <td>{{ ward.ward }}</td><td class="u-mono">{{ ward.total_beds }}</td>
+            <td class="u-mono">{{ ward.occupied }}</td><td class="u-mono">{{ ward.available }}</td>
+            <td class="u-mono">{{ ward.reserved }}</td><td class="u-mono">{{ ward.maintenance }}</td>
+            <td class="u-mono">{{ ward.occupancy_pct }}%</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td><strong>All wards</strong></td>
+          <td class="u-mono">{{ data.totals.total_beds }}</td>
+          <td class="u-mono">{{ data.totals.occupied }}</td>
+          <td class="u-mono">{{ data.totals.available }}</td>
+          <td class="u-mono">{{ data.totals.reserved }}</td>
+          <td class="u-mono">{{ data.totals.maintenance }}</td>
+          <td class="u-mono">{{ data.totals.occupancy_pct }}%</td>
+        </tr>
+      </tfoot>
+    </table>
+    <p class="u-muted u-label">Source: {{ data.source }} · current recorded snapshot, not a forecast</p>
+  {% endif %}
+{% endif %}
