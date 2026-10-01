@@ -276,3 +276,52 @@ html { scrollbar-gutter: stable; }
   margin-inline: auto;
   padding-top: var(--space-8);
 }
+
+/* Current page in the header menu: highlighted like a selected stock-alert tile. */
+.app-header .nav-link[aria-current="page"] {
+  color: var(--color-text-primary);
+  font-weight: 600;
+  background: var(--color-surface-muted);
+  border-bottom-color: transparent;
+  box-shadow: inset 0 -3px 0 var(--color-text-primary);
+}
+
+/* "Change demo role" is an action, so it reads as a button. */
+.app-header__role-button {
+  border-color: var(--color-border-control);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.app-header__role-button:hover {
+  border-color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+/* Brand: the shared HOMS logo, set apart from the page menu by a divider and spacing. */
+.app-header__brand {
+  align-items: center;
+  gap: var(--space-2);
+  margin-right: var(--space-5);
+  padding-right: var(--space-5);
+  border-right: 1px solid var(--color-border-strong);
+  color: var(--color-text-primary);
+}
+
+.app-header__brand-logo {
+  display: block;
+  width: var(--space-9);
+  height: var(--space-9);
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.app-header__brand:hover .app-header__brand-logo {
+  transform: scale(1.06);
+  transition: transform var(--dur) var(--ease);
+}
+
+/* Numeric column headings line up with their right-aligned numbers. */
+.table thead th.table__num {
+  text-align: right;
+}

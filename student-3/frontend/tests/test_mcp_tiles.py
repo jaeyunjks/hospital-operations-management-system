@@ -241,3 +241,61 @@ class OrderAlertTileTests(unittest.TestCase):
                      'value="overdue"', 'data-rag-example="Who can approve a purchase order?"',
                      'data-rag-example="When is a purchase order overdue?"'):
             self.assertIn(text, html)
+
+
+class _TableShapes(__import__('html.parser').parser.HTMLParser):
+    """Collect, per table, which header and body columns are numeric."""
+
+    def __init__(self):
+        super().__init__()
+        self.tables, self.row = [], None
+
+    def handle_starttag(self, tag, attrs):
+        numeric = 'table__num' in (dict(attrs).get('class') or '')
+        if tag == 'table':
+            self.tables.append({'head': [], 'rows': []})
+        elif tag == 'tr' and self.tables:
+            self.row = []
+        elif tag == 'th' and self.tables:
+            self.tables[-1]['head'].append(numeric)
+        elif tag == 'td' and self.row is not None:
+            self.row.append(numeric)
+
+    def handle_endtag(self, tag):
+        if tag == 'tr' and self.row:
+            self.tables[-1]['rows'].append(self.row)
+            self.row = None
+
+
+class NumericColumnAlignmentTests(unittest.TestCase):
+    """Numbers are right-aligned, so their headers must be too."""
+
+    def setUp(self):
+        self.client = app.app.test_client()
+        with self.client.session_transaction() as session:
+            session['demo_identity'] = {'role': 'Pharmacist', 'staff_id': 3, 'name': 'Demo pharmacist'}
+
+    def assert_aligned(self, html):
+        parser = _TableShapes()
+        parser.feed(html)
+        self.assertTrue(parser.tables)
+        for table in parser.tables:
+            for row in table['rows']:
+                if len(row) == len(table['head']):
+                    self.assertEqual(row, table['head'])
+
+    def test_numeric_header_rule_outranks_the_table_default(self):
+        # components.css sets ".table thead th { text-align: left }", which beats a bare ".table__num".
+        css = (Path(__file__).resolve().parents[1] / "static" / "css" / "main.css").read_text()
+        self.assertRegex(css, r"\.table thead th\.table__num\s*\{\s*text-align: right;")
+
+    def test_mcp_result_tables(self):
+        for tool, result in (('homs_pharmacy_stock_alerts', STOCK_ALERTS), ('homs_pharmacy_order_alerts', ORDER_ALERTS)):
+            with self.subTest(tool=tool), patch.object(api_client, 'mcp_call', return_value=result):
+                self.assert_aligned(self.client.post('/mcp/call', data={'tool': tool, 'alert_type': 'all'}).get_data(as_text=True))
+
+    def test_backend_detail_tables(self):
+        payload = {"batches": [{"medicine_name": "Ceftriaxone 1g", "batch_number": "PHM-1", "expiry_date": "2026-09-20",
+                                "days_until_expiry": -11, "quantity_remaining": 45}], "pagination": {"total_items": 1}}
+        with patch.object(api_client, 'list_batches', return_value=payload):
+            self.assert_aligned(self.client.get('/mcp/details/expired-batches').get_data(as_text=True))

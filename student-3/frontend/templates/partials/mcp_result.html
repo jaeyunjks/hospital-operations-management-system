@@ -49,14 +49,14 @@
 
     {% macro not_requested() %}<p class="table__muted">Not included in this request. Choose "All alerts" and get the stock alerts again.</p>{% endmacro %}
     {% macro expiring_table(rows, empty) %}
-      <div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Medicine</th><th>Batch</th><th>Expiry date</th><th>Quantity remaining</th><th>Days remaining</th></tr></thead><tbody>
+      <div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Medicine</th><th>Batch</th><th>Expiry date</th><th class="table__num">Quantity remaining</th><th class="table__num">Days remaining</th></tr></thead><tbody>
         {% for row in rows %}<tr{% if row.days_until_expiry <= 7 %} class="table-row--urgent"{% endif %}><td class="table__name">{{ row.medicine_name }}</td><td>{{ row.batch_number }}</td><td>{{ row.expiry_date }}</td><td class="table__num">{{ row.quantity_remaining }}</td><td class="table__num">{{ row.days_until_expiry }}</td></tr>
         {% else %}<tr><td colspan="5">{{ empty }}</td></tr>{% endfor %}
       </tbody></table></div>
     {% endmacro %}
     {% macro low_stock_table() %}
       <h4 class="mcp-subtitle">Low stock <span class="table__muted">({{ data.low_stock|length }} of {{ data.counts.low_stock }} shown)</span></h4>
-      <div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Medicine</th><th>Stock quantity</th><th>Reorder level</th><th>Supplier</th></tr></thead><tbody>
+      <div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Medicine</th><th class="table__num">Stock quantity</th><th class="table__num">Reorder level</th><th>Supplier</th></tr></thead><tbody>
         {% for row in data.low_stock %}<tr><td class="table__name">{{ row.name }}</td><td class="table__num">{{ row.stock_quantity }}</td><td class="table__num">{{ row.reorder_level }}</td><td>{{ row.supplier_name or '—' }}</td></tr>
         {% else %}<tr><td colspan="4">No medicines are at or below their reorder level.</td></tr>{% endfor %}
       </tbody></table></div>
@@ -127,8 +127,8 @@
     {% macro order_table(title, rows, total, empty, overdue=False) %}
       <h4 class="mcp-subtitle">{{ title }} <span class="table__muted">({{ rows|length }} of {{ total }} shown)</span></h4>
       <div class="table-wrap"><table class="table table--zebra"><thead><tr>
-        <th>PO</th><th>Medicine</th><th>Supplier</th><th>Quantity</th><th>Value</th><th>Origin</th>
-        {% if overdue %}<th>Status</th><th>Expected</th><th>Days overdue</th>{% else %}<th>Created</th>{% endif %}
+        <th>PO</th><th>Medicine</th><th>Supplier</th><th class="table__num">Quantity</th><th class="table__num">Value</th><th>Origin</th>
+        {% if overdue %}<th>Status</th><th>Expected</th><th class="table__num">Days overdue</th>{% else %}<th>Created</th>{% endif %}
       </tr></thead><tbody>
         {% for row in rows %}<tr{% if overdue %} class="table-row--urgent"{% endif %}><td>#{{ row.po_id }}</td><td class="table__name">{{ row.medicine_name }}</td><td>{{ row.supplier_name or '—' }}</td>
           <td class="table__num">{{ row.quantity_ordered }}</td><td class="table__num">${{ '%.2f'|format(row.total_value) }}</td><td>{{ 'AI-suggested' if row.ai_generated else 'Manual' }}</td>
