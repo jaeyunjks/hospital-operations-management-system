@@ -72,12 +72,6 @@
 
 <section class="panel">
   <div class="panel-header"><div><span class="eyebrow">Patient flow</span><h2>Admissions</h2></div></div>
-  <dl class="admission-status-key">
-    <div><dt>Pending</dt><dd>Scheduled for a future date; not yet happened.</dd></div>
-    <div><dt>Active</dt><dd>Currently in hospital, including a long-term stay.</dd></div>
-    <div><dt>Cancelled</dt><dd>The patient cancelled the appointment.</dd></div>
-    <div><dt>Completed</dt><dd>The patient attended and has left the hospital.</dd></div>
-  </dl>
   <div class="admission-list">
     {% for admission in admissions %}
     <div class="admission-row">
