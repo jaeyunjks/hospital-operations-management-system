@@ -359,6 +359,17 @@ services:
     ports:
       - "6100:6100"
     command: python -m database.app
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6100/health', timeout=3)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
 
   student-1-backend:
     build:
@@ -384,11 +395,23 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - student-1-database
+      student-1-database:
+        condition: service_healthy
     ports:
       - "5100:5100"
     networks: [homs-net]
     command: python -m backend.app
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5100/health', timeout=3)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
 
   student-1-frontend:
     networks: [homs-net]
@@ -404,10 +427,22 @@ services:
       RAG_API_TIMEOUT: "${STUDENT1_RAG_API_TIMEOUT:-105}"
       FLASK_DEBUG: 0
     depends_on:
-      - student-1-backend
+      student-1-backend:
+        condition: service_healthy
     ports:
       - "3100:3100"
     command: python app.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3100/', timeout=3)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
 
 networks:
   homs-net:

@@ -1,5 +1,7 @@
 import sqlite3
 
+import pytest
+
 from backend.app import create_app
 from backend.auth import ROLE_MANAGER, ROLE_RECEPTIONIST, identity_from_request
 from backend.routes import patients as patient_routes
@@ -33,6 +35,31 @@ def test_backend_identity_endpoint_returns_manager_identity():
         "user_id": None,
         "name": "System Administrator",
     }
+
+
+@pytest.mark.parametrize("path", ["/health", "/api/health"])
+def test_backend_health_endpoints_return_ok(path):
+    response = create_app().test_client().get(path)
+
+    assert response.status_code == 200
+    assert response.get_json()["data"] == {
+        "status": "ok",
+        "service": "student-1-backend",
+    }
+
+
+def test_database_health_endpoint_returns_ok(tmp_path, monkeypatch):
+    import database.app as database_app
+
+    database_path = tmp_path / "patients.db"
+    connection = build(database_path)
+    connection.close()
+    monkeypatch.setattr(database_app.database, "DB_PATH", database_path)
+
+    response = database_app.app.test_client().get("/health")
+
+    assert response.status_code == 200
+    assert response.get_json()["status"] == "ok"
 
 
 def test_backend_medical_information_update_proxy(monkeypatch):
