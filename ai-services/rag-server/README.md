@@ -242,8 +242,8 @@ rules.
 | Folder | Owner | Status |
 |---|---|---|
 | `knowledge/shared/` | Group | HOMS overview: features, architecture, ports, AI services |
+| `knowledge/student-1/` | Student 1 | Intake and record data, admission scheduling, identity review, emergency workflow, AI summary boundaries |
 | `knowledge/student-3/` | Student 3 | 5 pharmacy documents (inventory, issuing/receiving, expiry/write-off, reordering/POs, AI/agent) |
-| `knowledge/student-1/` | Student 1 | Admission scheduling and identity reconciliation |
 | `knowledge/student-2/`, `-4/`, `-5/` | Each student | Awaiting documents — see each folder's README |
 
 ## Limitations

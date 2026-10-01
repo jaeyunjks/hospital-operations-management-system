@@ -135,7 +135,7 @@ def _validated_response(body: Any, question: str) -> dict[str, Any]:
 			or not re.fullmatch(r"S[1-4]", identifier)
 			or identifier in identifiers
 			or not _nonblank(source)
-			or not (source.startswith("student-1/") or source.startswith("shared/"))
+			or not (source.startswith(f"{FEATURE}/") or source.startswith("shared/"))
 			or not _nonblank(citation.get("title"))
 			or not _nonblank(citation.get("section"))
 			or not _score(citation.get("score"))
