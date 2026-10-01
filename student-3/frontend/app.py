@@ -413,6 +413,56 @@ def mcp_call():
         return render_template("partials/mcp_result_error.html", tool=tool, error=str(exc))
 
 
+def _active_medicine_details():
+    payload = api_client.list_medicines(status="active", category="all", stock_status="all", search="",
+                                        expiring_within="", page="1", page_size="10")
+    rows = [(m["name"], m["category"], m["available_quantity"], m["reorder_level"], m.get("supplier_name") or "—")
+            for m in payload["medicines"]]
+    return ("Active medicines", [("Medicine", False), ("Category", False), ("Available", True),
+                                 ("Reorder level", True), ("Supplier", False)],
+            rows, payload["pagination"]["total_items"], "/medicines")
+
+
+def _expired_batch_details():
+    payload = api_client.list_batches(expiry_status="expired", search="", include_empty="false", page="1", page_size="10")
+    rows = [(b["medicine_name"], b["batch_number"], b["expiry_date"], -b["days_until_expiry"], b["quantity_remaining"])
+            for b in payload["batches"]]
+    return ("Expired batches", [("Medicine", False), ("Batch", False), ("Expiry date", False),
+                                ("Days expired", True), ("Quantity remaining", True)],
+            rows, payload["pagination"]["total_items"], "/batches?expiry_status=expired")
+
+
+def _pending_approval_details():
+    payload = api_client.list_purchase_orders(status="pending_approval", page="1", page_size="10")
+    rows = [(o["medicine_name"], o["supplier_name"], o["quantity_ordered"], f"${o['total_value']:.2f}",
+             "AI-suggested" if o.get("ai_generated") else "Manual", (o.get("created_at") or "")[:10])
+            for o in payload["purchase_orders"]]
+    return ("Pending approvals", [("Medicine", False), ("Supplier", False), ("Quantity", True), ("Value", True),
+                                  ("Origin", False), ("Created", False)],
+            rows, payload["pagination"]["total_items"], "/purchase-orders?status=pending_approval")
+
+
+# Stock-alert tiles whose rows are not part of the MCP result load them from the backend.
+MCP_DETAIL_LOADERS = {
+    "active-medicines": _active_medicine_details,
+    "expired-batches": _expired_batch_details,
+    "pending-approvals": _pending_approval_details,
+}
+
+
+@app.get("/mcp/details/<kind>")
+def mcp_tile_details(kind):
+    loader = MCP_DETAIL_LOADERS.get(kind)
+    if loader is None:
+        return render_template("partials/mcp_tile_details.html", error="Unknown details"), 404
+    try:
+        title, columns, rows, total, view_all = loader()
+    except api_client.BackendError as exc:
+        return render_template("partials/mcp_tile_details.html", error=str(exc))
+    return render_template("partials/mcp_tile_details.html", error=None, title=title, columns=columns,
+                           rows=rows, total=total, view_all=view_all)
+
+
 RAG_EXAMPLE_QUESTIONS = (
     "Who can write off an expired batch?",
     "How is the suggested reorder quantity calculated?",

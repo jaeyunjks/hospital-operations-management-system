@@ -30,3 +30,20 @@
   <p id="mcp-loading" class="htmx-indicator table__muted" role="status">Calling the shared MCP server…</p>
   <div id="mcp-result" aria-live="polite"></div>
 </div>
+<script>
+  // Stock alert tiles act as tabs: show only the clicked figure's details; click again to close.
+  document.addEventListener('click', (event) => {
+    const tile = event.target.closest('[data-mcp-tile]');
+    if (!tile) return;
+    const result = tile.closest('.mcp-result');
+    const opening = tile.getAttribute('aria-pressed') !== 'true';
+    result.querySelectorAll('[data-mcp-tile]').forEach((other) => {
+      other.setAttribute('aria-pressed', String(opening && other === tile));
+    });
+    result.querySelectorAll('[data-mcp-panel]').forEach((panel) => {
+      panel.hidden = !(opening && panel.dataset.mcpPanel === tile.dataset.mcpTile);
+    });
+    const hint = result.querySelector('[data-mcp-hint]');
+    if (hint) hint.hidden = opening;
+  });
+</script>
