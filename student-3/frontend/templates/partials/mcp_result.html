@@ -21,7 +21,9 @@
   {% elif call.tool == 'homs_pharmacy_stock_alerts' and data %}
     {% set expiring_7 = (data.expiring_soon or [])|selectattr('days_until_expiry', 'le', 7)|list %}
     {% set expiring_later = (data.expiring_soon or [])|selectattr('days_until_expiry', 'gt', 7)|list %}
-    {% set expiry_default = (call.arguments or {}).get('alert_type') == 'expiring_soon' and data.expiring_soon is not none %}
+    {% set alert_type = (call.arguments or {}).get('alert_type') %}
+    {% set expiry_default = alert_type == 'expiring_soon' and data.expiring_soon is not none %}
+    {% set low_default = alert_type == 'low_stock' and data.low_stock is not none %}
     {% set tiles = [
       ('active', 'Active medicines', 'active_medicines', '/mcp/details/active-medicines'),
       ('low', 'Low stock', 'low_stock', None),
@@ -39,7 +41,7 @@
         </button>
       {% endfor %}
     </div>
-    <p class="table__muted" data-mcp-hint{% if expiry_default %} hidden{% endif %}>Click a figure to see its details.</p>
+    <p class="table__muted" data-mcp-hint{% if expiry_default or low_default %} hidden{% endif %}>Click a figure to see its details.</p>
 
     {% macro not_requested() %}<p class="table__muted">Not included in this request. Choose "All alerts" and get the stock alerts again.</p>{% endmacro %}
     {% macro expiring_table(rows, empty) %}
@@ -48,14 +50,17 @@
         {% else %}<tr><td colspan="5">{{ empty }}</td></tr>{% endfor %}
       </tbody></table></div>
     {% endmacro %}
+    {% macro low_stock_table() %}
+      <h4 class="mcp-subtitle">Low stock <span class="table__muted">({{ data.low_stock|length }} of {{ data.counts.low_stock }} shown)</span></h4>
+      <div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Medicine</th><th>Stock quantity</th><th>Reorder level</th><th>Supplier</th></tr></thead><tbody>
+        {% for row in data.low_stock %}<tr><td class="table__name">{{ row.name }}</td><td class="table__num">{{ row.stock_quantity }}</td><td class="table__num">{{ row.reorder_level }}</td><td>{{ row.supplier_name or '—' }}</td></tr>
+        {% else %}<tr><td colspan="4">No medicines are at or below their reorder level.</td></tr>{% endfor %}
+      </tbody></table></div>
+    {% endmacro %}
 
     <div class="mcp-detail" id="mcp-panel-low" data-mcp-panel="low" hidden>
       {% if data.low_stock is none %}{{ not_requested() }}{% else %}
-        <h4 class="mcp-subtitle">Low stock <span class="table__muted">({{ data.low_stock|length }} of {{ data.counts.low_stock }} shown)</span></h4>
-        <div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Medicine</th><th>Stock quantity</th><th>Reorder level</th><th>Supplier</th></tr></thead><tbody>
-          {% for row in data.low_stock %}<tr><td class="table__name">{{ row.name }}</td><td class="table__num">{{ row.stock_quantity }}</td><td class="table__num">{{ row.reorder_level }}</td><td>{{ row.supplier_name or '—' }}</td></tr>
-          {% else %}<tr><td colspan="4">No medicines are at or below their reorder level.</td></tr>{% endfor %}
-        </tbody></table></div>
+        {{ low_stock_table() }}
         <p class="table__muted">Live data from the pharmacy inventory via MCP.</p>
       {% endif %}
     </div>
@@ -80,6 +85,12 @@
         {{ expiring_table(expiring_7, 'No non-empty batches expire within 7 days.') }}
         <h4 class="mcp-subtitle">Expiring in 8–30 days <span class="table__muted">({{ expiring_later|length }} of {{ data.counts.expiring_within_30_days - data.counts.expiring_within_7_days }} shown)</span></h4>
         {{ expiring_table(expiring_later, 'No other non-empty batches expire within 30 days.') }}
+        <p class="table__muted">Live data from the pharmacy inventory via MCP. Click a figure above to see only that list.</p>
+      </div>
+    {% elif low_default %}
+      {# "Low stock" opens on the low-stock list, largest shortfall first. #}
+      <div class="mcp-detail" id="mcp-panel-default" data-mcp-panel="default" data-mcp-default>
+        {{ low_stock_table() }}
         <p class="table__muted">Live data from the pharmacy inventory via MCP. Click a figure above to see only that list.</p>
       </div>
     {% endif %}

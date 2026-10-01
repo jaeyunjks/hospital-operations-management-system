@@ -95,6 +95,20 @@ class StockAlertTileTests(unittest.TestCase):
         self.assertIn('(1 of 21 shown)', default)  # 28 within 30 days minus 7 within 7 days
         self.assertRegex(html, r'<p class="table__muted" data-mcp-hint hidden>')
 
+    def test_low_stock_opens_on_the_low_stock_list(self):
+        result = copy.deepcopy(STOCK_ALERTS)
+        result['arguments'] = {'alert_type': 'low_stock'}
+        result['result']['data']['alert_type'] = 'low_stock'
+        result['result']['data']['expiring_soon'] = None
+        html = self.render(result)
+        default = panel(html, 'default')
+        self.assertNotIn(' hidden', default[:160])
+        self.assertIn('Low stock', default)
+        self.assertIn('(1 of 26 shown)', default)
+        self.assertIn('Paracetamol 500mg', default)
+        self.assertNotIn('Expiring', default)
+        self.assertRegex(html, r'<p class="table__muted" data-mcp-hint hidden>')
+
     def test_other_alert_types_have_no_default_view(self):
         html = self.render(STOCK_ALERTS)
         self.assertNotIn('data-mcp-default', html)

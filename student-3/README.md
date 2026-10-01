@@ -89,7 +89,7 @@ which is the CI configuration. To run without Docker, see each service's README.
 
 | What | Command (repository root) | Expected |
 |---|---|---|
-| Unit tests | `python3 -m pytest -q student-3/database/tests`, then `backend/tests`, then `frontend/tests` (each separately) | 4, 43 and 35 passing |
+| Unit tests | `python3 -m pytest -q student-3/database/tests`, then `backend/tests`, then `frontend/tests` (each separately) | 4, 43 and 36 passing |
 | MCP in the UI | "Get stock alerts via MCP"; "Test connectivity" | "Valid tool result" with counts and tables; "Connection OK" |
 | RAG in the UI | Ask "Who can write off an expired batch?" | Answer with a confidence badge and a cited source |
 | Insufficient context | Ask "What is the capital of France?" | "Not enough information…"; no answer, no sources |
