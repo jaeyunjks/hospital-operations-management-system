@@ -118,6 +118,45 @@ def occupancy_summary():
 
 
 # ---------------------------------------------------------------------
+# Shared MCP and RAG — frontend -> backend/API -> shared local server
+# ---------------------------------------------------------------------
+@app.get("/shared-ai")
+def shared_ai():
+    """Status page for both shared servers. Never calls them directly."""
+    mcp, mcp_error = api("GET", "/api/mcp/status")
+    rag, rag_error = api("GET", "/api/rag/status")
+    return render_template(
+        "shared_ai.html",
+        mcp=mcp or {"enabled": False, "allowed_tools": [], "tools": []},
+        rag=rag or {"enabled": False, "documents": []},
+        error=mcp_error or rag_error,
+    )
+
+
+@app.post("/shared-ai/ward-occupancy")
+def shared_ai_ward_occupancy():
+    """Run the one MCP tool this feature exposes, through the backend."""
+    ward = (request.form.get("ward") or "").strip()
+    arguments = {"ward": ward} if ward else {}
+    result, error = api("POST", "/api/mcp/call", json={
+        "tool": "homs_ward_occupancy_status", "arguments": arguments,
+    })
+    return render_template("partials/mcp_result.html", result=result, error=error,
+                           tool="homs_ward_occupancy_status")
+
+
+@app.post("/shared-ai/ask")
+def shared_ai_ask():
+    """Ask the shared RAG server one room and bed question, through the backend."""
+    question = (request.form.get("question") or "").strip()
+    if not question:
+        return render_template("partials/rag_answer.html", answer=None,
+                               error="Type a question first.")
+    answer, error = api("POST", "/api/rag/ask", json={"question": question})
+    return render_template("partials/rag_answer.html", answer=answer, error=error)
+
+
+# ---------------------------------------------------------------------
 # Rooms — CRUD
 # ---------------------------------------------------------------------
 @app.get("/rooms")

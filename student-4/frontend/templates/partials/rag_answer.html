@@ -1,0 +1,32 @@
+{% if error %}
+  <div class="alert alert--error">
+    <strong>The assistant could not answer</strong>
+    <div>{{ error }}</div>
+  </div>
+{% elif answer %}
+  {% if answer.outcome == 'insufficient_context' %}
+    <div class="alert alert--warn">
+      <strong>Not enough supporting information</strong>
+      <div>{{ answer.answer }}</div>
+      <div class="u-muted u-label">Reason: {{ answer.reason or 'no relevant context' }}</div>
+    </div>
+  {% else %}
+    <div class="alert alert--ok">
+      <div class="row row--between">
+        <strong>Answer</strong>
+        <span class="state state--Available">confidence: {{ answer.confidence }}</span>
+      </div>
+      <p>{{ answer.answer }}</p>
+    </div>
+    <ul class="citations">
+      {% for citation in answer.citations %}
+        <li>
+          <span class="u-mono">[{{ citation.id }}]</span>
+          {{ citation.title }} › {{ citation.section }}
+          <span class="u-muted u-label">{{ citation.source }} · score {{ citation.score }}</span>
+          {% if citation.snippet %}<div class="u-muted">{{ citation.snippet }}</div>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+{% endif %}

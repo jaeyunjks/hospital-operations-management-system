@@ -1,2 +1,4 @@
 Flask==3.0.3
 requests==2.32.3
+# Shared MCP access (lazily imported; the backend starts without it).
+mcp==2.2.0

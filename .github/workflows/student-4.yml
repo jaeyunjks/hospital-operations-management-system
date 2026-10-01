@@ -62,8 +62,9 @@ jobs:
         run: |
           docker network create homs-ci
           docker run -d --name s4-db --network homs-ci student-4-database
-          docker run -d --name s4-be --network homs-ci \
-            -e DATABASE_URL=http://s4-db:6400 student-4-backend
+          docker run -d --name s4-be --network homs-ci -p 5400:5400 \
+            -e DATABASE_URL=http://s4-db:6400 \
+            -e MCP_ENABLED=false -e RAG_ENABLED=false student-4-backend
           docker run -d --name s4-fe --network homs-ci -p 3400:3400 \
             -e BACKEND_URL=http://s4-be:5400 student-4-frontend
 
@@ -94,6 +95,48 @@ jobs:
             -w 'shared main.css HTTP %{http_code}\n'
           curl -sf http://localhost:3400/shared/css/variables.css -o /dev/null \
             -w 'shared variables.css HTTP %{http_code}\n'
+
+      - name: Verify MCP and RAG are retained but disabled in CI
+        # The shared MCP and RAG servers are never started in CI, so both must
+        # report disabled and refuse calls instead of reaching for a server.
+        run: |
+          set -e
+          python - <<'PY'
+          import json, urllib.error, urllib.request
+
+          def call(path, payload=None):
+              data = json.dumps(payload).encode() if payload is not None else None
+              request = urllib.request.Request(
+                  "http://localhost:5400" + path, data=data, method="POST" if data else "GET",
+                  headers={"Content-Type": "application/json"} if data else {})
+              try:
+                  with urllib.request.urlopen(request, timeout=10) as response:
+                      return response.status, json.load(response)
+              except urllib.error.HTTPError as exc:
+                  return exc.code, json.load(exc)
+
+          _, mcp = call("/api/mcp/status")
+          mcp = mcp["data"]
+          print("MCP status:", mcp)
+          assert mcp["enabled"] is False and mcp["reachable"] is False, "MCP must be disabled in CI"
+          assert mcp["tools"] == [], "Disabled MCP must not discover tools"
+          assert "homs_ward_occupancy_status" in mcp["allowed_tools"], "MCP integration was removed"
+
+          status, body = call("/api/mcp/call", {"tool": "homs_ward_occupancy_status"})
+          print("MCP call:", status, body)
+          assert status == 503 and body["success"] is False, "Disabled MCP call was not refused"
+
+          _, rag = call("/api/rag/status")
+          rag = rag["data"]
+          print("RAG status:", rag)
+          assert rag["enabled"] is False and rag["feature"] == "student-4", "RAG must be disabled in CI"
+
+          status, body = call("/api/rag/ask", {"question": "Who can release a bed?"})
+          print("RAG ask:", status, body)
+          assert status == 503 and body["success"] is False, "Disabled RAG question was not refused"
+
+          print("MCP and RAG integrations are present and disabled for CI")
+          PY
 
       - name: Container logs on failure
         if: failure()
