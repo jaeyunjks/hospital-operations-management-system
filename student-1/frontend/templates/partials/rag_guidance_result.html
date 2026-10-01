@@ -1,0 +1,41 @@
+{% if error_kind %}
+<div class="rag-guidance-error" role="alert">
+  {% if error_kind == 'validation' %}
+  <strong>Check the question.</strong> Enter a non-blank question of 500 characters or fewer.
+  {% elif error_kind == 'unauthorized' %}
+  <strong>Guidance not permitted.</strong> This feature is available to receptionists and system administrators.
+  {% elif error_kind == 'timeout' %}
+  <strong>Request timed out.</strong> Try the question again.
+  {% elif error_kind == 'unavailable' %}
+  <strong>Guidance unavailable.</strong> The RAG service may be disabled or temporarily offline. No alternative answer was generated.
+  {% else %}
+  <strong>Response could not be verified.</strong> No answer is shown.
+  {% endif %}
+</div>
+{% elif result.status == 'insufficient_context' %}
+<div class="rag-guidance-insufficient" role="status">
+  <strong>Insufficient documented context</strong>
+  <p class="rag-guidance-note">The indexed workflow documents do not support an answer, so none was generated.</p>
+</div>
+{% else %}
+{% set confidence_tone = {'high': 'ok', 'medium': 'warn', 'low': 'neutral'}[result.confidence] %}
+<article class="rag-guidance-answer">
+  <div class="rag-guidance-answer__header">
+    <strong>Documentation answer</strong>
+    <span class="status-pill {{ confidence_tone }}">{{ result.confidence|title }} confidence</span>
+  </div>
+  <p class="rag-guidance-answer__text">{{ result.answer }}</p>
+  <ol class="rag-guidance-citations" aria-label="Answer citations">
+    {% for citation in result.citations %}
+    <li class="rag-guidance-citation">
+      <div class="rag-guidance-citation__heading">
+        <span class="mono-data">[{{ citation.id }}]</span>
+        <strong>{{ citation.title }}</strong>
+      </div>
+      <p class="rag-guidance-citation__section">{{ citation.section }} - {{ citation.source }}</p>
+      <p class="rag-guidance-citation__snippet">{{ citation.snippet }}</p>
+    </li>
+    {% endfor %}
+  </ol>
+</article>
+{% endif %}

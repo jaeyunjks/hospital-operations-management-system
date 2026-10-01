@@ -126,6 +126,51 @@ def test_census_has_collapsed_lazy_load_ward_occupancy_tile(client, monkeypatch)
     api_get.assert_not_called()
 
 
+def test_rag_guidance_panel_is_available_in_all_requested_views(client):
+    census = client.get("/")
+    patient = client.get("/patient/1")
+    reconciliation = client.get("/duplicate-review/merge")
+
+    for response in (census, patient, reconciliation):
+        assert response.status_code == 200
+        assert b'id="rag-guidance-question"' in response.data
+        assert b'hx-post="/partials/rag-guidance"' in response.data
+    assert census.data.index(b"Admissions queue") < census.data.index(b"Workflow guidance")
+    assert patient.data.index(b"AI summary") < patient.data.index(b"Workflow guidance")
+    assert b"Reconcile Patient Profiles" in reconciliation.data
+
+
+def test_rag_guidance_partial_proxies_question_and_role(client, monkeypatch):
+    result = {
+        "status": "answered",
+        "answer": "Admission times use 15-minute blocks [S1].",
+        "confidence": "medium",
+        "citations": [{
+            "id": "S1", "title": "Admission workflow",
+            "section": "Scheduling", "source": "student-1/admissions.md",
+            "snippet": "Start times use 15-minute blocks.",
+        }],
+    }
+    post = Mock(return_value=api_response({"success": True, "data": result}))
+    monkeypatch.setattr(frontend_app.requests, "post", post)
+
+    response = client.post(
+        "/partials/rag-guidance",
+        data={"question": "  How are admissions scheduled?  "},
+        headers={"X-HOMS-Role": "Receptionist"},
+    )
+
+    assert response.status_code == 200
+    assert b"15-minute blocks" in response.data
+    assert b"Admission workflow" in response.data
+    post.assert_called_once_with(
+        "http://localhost:5100/api/rag/ask",
+        json={"question": "How are admissions scheduled?"},
+        headers={"X-HOMS-Role": "Receptionist"},
+        timeout=105.0,
+    )
+
+
 def test_ward_occupancy_partial_shows_loaded_snapshot(client, monkeypatch):
     snapshot = {
         "ok": True,
@@ -254,6 +299,10 @@ def test_merge_comparison_marks_conflicts_and_default_values(client, monkeypatch
     assert response.status_code == 200
     assert b"Source \xc2\xb7 retained profile" in response.data
     assert b"Duplicate \xc2\xb7 merged into Source" in response.data
+    assert b'class="merge-identity-heading"' in response.data
+    assert b'class="merge-identity-meta"' in response.data
+    assert b"MRN-2</span>" in response.data
+    assert b">Open Duplicate profile</a>" in response.data
     assert b"merge-conflict" in response.data
     assert "†".encode() in response.data
     assert b'<select name="source_id"' not in response.data

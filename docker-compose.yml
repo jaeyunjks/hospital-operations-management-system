@@ -376,6 +376,9 @@ services:
       MCP_ENABLED: "${STUDENT1_MCP_ENABLED:-false}"
       MCP_SERVER_URL: "${STUDENT1_MCP_SERVER_URL:-http://host.docker.internal:8000/mcp}"
       MCP_TIMEOUT: "${STUDENT1_MCP_TIMEOUT:-15}"
+      RAG_ENABLED: "${STUDENT1_RAG_ENABLED:-false}"
+      RAG_SERVER_URL: "${STUDENT1_RAG_SERVER_URL:-http://host.docker.internal:8100}"
+      RAG_TIMEOUT: "${STUDENT1_RAG_TIMEOUT:-100}"
       AUTH_ENABLED: 0
       FLASK_DEBUG: 0
     extra_hosts:
@@ -398,6 +401,7 @@ services:
       HOST: 0.0.0.0
       PORT: 3100
       BACKEND_URL: http://student-1-backend:5100
+      RAG_API_TIMEOUT: "${STUDENT1_RAG_API_TIMEOUT:-105}"
       FLASK_DEBUG: 0
     depends_on:
       - student-1-backend

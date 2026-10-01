@@ -18,6 +18,7 @@ app = Flask(
 
 ROOT = Path(__file__).resolve().parent
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:5100")
+RAG_API_TIMEOUT = float(os.getenv("RAG_API_TIMEOUT", "105"))
 DATABASE_DIR = ROOT.parent / "database"
 SCHEMA_PATH = DATABASE_DIR / "schema.sql"
 SEED_PATH = DATABASE_DIR / "seed_data.sql"
@@ -368,6 +369,78 @@ def ward_occupancy_partial():
         ward_snapshot=ward_snapshot,
         error=error,
         initial=False,
+    )
+
+
+def _valid_rag_guidance_result(result):
+    if not isinstance(result, dict) or not isinstance(result.get("answer"), str):
+        return False
+    if result.get("status") == "insufficient_context":
+        return result.get("confidence") == "none" and result.get("citations") == []
+    if result.get("status") != "answered" or result.get("confidence") not in {"low", "medium", "high"}:
+        return False
+    citations = result.get("citations")
+    return isinstance(citations, list) and all(
+        isinstance(citation, dict)
+        and citation.get("id") in {"S1", "S2", "S3", "S4"}
+        and isinstance(citation.get("title"), str)
+        and isinstance(citation.get("section"), str)
+        and isinstance(citation.get("snippet"), str)
+        for citation in citations
+    )
+
+
+@app.post("/partials/rag-guidance")
+def rag_guidance_partial():
+    question = request.form.get("question", "")
+    if not question.strip() or len(question) > 500:
+        return render_template(
+            "partials/rag_guidance_result.html", result=None,
+            question=question, error_kind="validation",
+        )
+
+    question = question.strip()
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/api/rag/ask",
+            json={"question": question},
+            headers=_identity_headers(),
+            timeout=RAG_API_TIMEOUT,
+        )
+    except requests.Timeout:
+        error_kind = "timeout"
+    except requests.RequestException:
+        error_kind = "unavailable"
+    else:
+        error_kind = {
+            400: "validation",
+            403: "unauthorized",
+            502: "invalid",
+            504: "timeout",
+        }.get(response.status_code)
+        if response.status_code == 503:
+            error_kind = "unavailable"
+        elif response.status_code != 200 and error_kind is None:
+            error_kind = "invalid"
+
+        if error_kind is None:
+            try:
+                payload = response.json()
+            except ValueError:
+                error_kind = "invalid"
+            else:
+                result = _unwrap_data(payload)
+                if not _valid_rag_guidance_result(result):
+                    error_kind = "invalid"
+                else:
+                    return render_template(
+                        "partials/rag_guidance_result.html", result=result,
+                        question=question, error_kind=None,
+                    )
+
+    return render_template(
+        "partials/rag_guidance_result.html", result=None,
+        question=question, error_kind=error_kind,
     )
 
 

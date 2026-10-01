@@ -19,6 +19,8 @@ permissions:
 env:
   MCP_ENABLED: "false"
   STUDENT1_MCP_ENABLED: "false"
+  RAG_ENABLED: "false"
+  STUDENT1_RAG_ENABLED: "false"
 
 jobs:
   validate:

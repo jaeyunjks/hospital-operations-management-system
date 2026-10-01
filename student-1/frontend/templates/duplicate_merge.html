@@ -13,9 +13,30 @@
 {% for error in errors %}<div class="banner banner-risk" role="alert">{{ error }}</div>{% endfor %}
 
 {% if source and duplicate and pair_valid %}
+<div class="merge-guidance-layout">
 <div class="merge-profile-head">
-  <div class="merge-identity-column source-column"><span class="eyebrow">Source · retained profile</span><h2>{{ source.p_first_name }} {{ source.p_last_name }}</h2><span class="mono-data">MRN-{{ source.patient_id }}</span><a class="inline-link" href="{{ url_for('patient_record', patient_id=source.patient_id) }}" target="_blank" rel="noopener"> Open Source profile in new tab</a></div>
-  <div class="merge-identity-column duplicate-column"><span class="eyebrow">Duplicate · merged into Source</span><h2>{{ duplicate.p_first_name }} {{ duplicate.p_last_name }}</h2><span class="mono-data">MRN-{{ duplicate.patient_id }}</span><a class="inline-link" href="{{ url_for('patient_record', patient_id=duplicate.patient_id) }}" target="_blank" rel="noopener"> Open Duplicate profile in new tab</a></div>
+  <div class="merge-identity-column source-column">
+    <div class="merge-identity-heading">
+      <span class="eyebrow">Source · retained profile</span>
+      <h2>{{ source.p_first_name }} {{ source.p_last_name }}</h2>
+    </div>
+    <div class="merge-identity-meta">
+      <span class="mono-data">MRN-{{ source.patient_id }}</span>
+      <a class="inline-link" href="{{ url_for('patient_record', patient_id=source.patient_id) }}" target="_blank" rel="noopener">Open Source profile</a>
+    </div>
+  </div>
+  <div class="merge-identity-column duplicate-column">
+    <div class="merge-identity-heading">
+      <span class="eyebrow">Duplicate · merged into Source</span>
+      <h2>{{ duplicate.p_first_name }} {{ duplicate.p_last_name }}</h2>
+    </div>
+    <div class="merge-identity-meta">
+      <span class="mono-data">MRN-{{ duplicate.patient_id }}</span>
+      <a class="inline-link" href="{{ url_for('patient_record', patient_id=duplicate.patient_id) }}" target="_blank" rel="noopener">Open Duplicate profile</a>
+    </div>
+  </div>
+</div>
+{% include "partials/rag_guidance.html" %}
 </div>
 <div class="merge-legend"><span class="merge-legend-red">Red: differs, empty, or default</span><span class="merge-legend-green">Green: same information</span><span>† System-filled default or empty value</span></div>
 
@@ -128,5 +149,9 @@
     row.classList.toggle("merge-resolved", row.querySelector('input[type="checkbox"]:checked') !== null);
   }
 </script>
+{% else %}
+<div class="merge-guidance-layout merge-guidance-layout--empty">
+  {% include "partials/rag_guidance.html" %}
+</div>
 {% endif %}
 {% endblock %}

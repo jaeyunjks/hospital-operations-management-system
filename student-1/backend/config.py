@@ -28,6 +28,10 @@ MCP_ENABLED = os.getenv("MCP_ENABLED", "false").strip().lower() == "true"
 MCP_SERVER_URL = os.getenv("MCP_SERVER_URL", "http://127.0.0.1:8000/mcp").strip()
 MCP_TIMEOUT = float(os.getenv("MCP_TIMEOUT", "15"))
 
+RAG_ENABLED = os.getenv("RAG_ENABLED", "false").strip().lower() == "true"
+RAG_SERVER_URL = os.getenv("RAG_SERVER_URL", "http://127.0.0.1:8100").strip()
+RAG_TIMEOUT = float(os.getenv("RAG_TIMEOUT", "100"))
+
 # Domain Vocabulary
 PATIENT_STATUSES = ("Active", "Inactive", "Deceased", "Transferred")
 PATIENT_SEX = ("Male", "Female", "Alternate", "Unassigned")

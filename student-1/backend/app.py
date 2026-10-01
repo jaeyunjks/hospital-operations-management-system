@@ -21,6 +21,7 @@ try:
     from backend.routes.patients import patients_bp
     from backend.routes.admissions import admissions_bp
     from backend.routes.mcp_endpoints import bp as mcp_bp
+    from backend.routes.rag_endpoints import bp as rag_bp
 except ImportError:  # pragma: no cover - supports local execution
     import config
     from auth import AuthError, identity_from_request
@@ -29,6 +30,7 @@ except ImportError:  # pragma: no cover - supports local execution
     from routes.patients import patients_bp
     from routes.admissions import admissions_bp
     from routes.mcp_endpoints import bp as mcp_bp
+    from routes.rag_endpoints import bp as rag_bp
 
 SERVICE_NAME = "student-1-backend"
 FEATURE = "Patient & Admissions Management"
@@ -40,6 +42,7 @@ def create_app():
     app.register_blueprint(patients_bp)
     app.register_blueprint(admissions_bp)
     app.register_blueprint(mcp_bp)
+    app.register_blueprint(rag_bp)
 
     @app.route('/health', methods=['GET'])
     @app.route('/api/health', methods=['GET'])
@@ -82,6 +85,12 @@ def create_app():
                     "ward_occupancy": {
                         "method": "GET",
                         "path": "/api/mcp/ward-occupancy"
+                    }
+                },
+                "rag": {
+                    "ask": {
+                        "method": "POST",
+                        "path": "/api/rag/ask"
                     }
                 },
                 "patients": {
