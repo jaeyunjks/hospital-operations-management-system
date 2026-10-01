@@ -111,7 +111,22 @@ def test_empty_intake_shows_required_fields(client):
     assert response.data.count(b'class="required-star"') >= 8
 
 
-def test_census_shows_ward_snapshot_as_view_only_context(client, monkeypatch):
+def test_census_has_collapsed_lazy_load_ward_occupancy_tile(client, monkeypatch):
+    api_get = Mock()
+    monkeypatch.setattr(frontend_app, "_api_get", api_get)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert b'<details class="panel ward-occupancy-panel">' in response.data
+    assert b"<summary" in response.data
+    assert b' hx-get="/partials/ward-occupancy"' in response.data
+    assert b"Load occupancy" in response.data
+    assert b"Emergency identity review" not in response.data
+    api_get.assert_not_called()
+
+
+def test_ward_occupancy_partial_shows_loaded_snapshot(client, monkeypatch):
     snapshot = {
         "ok": True,
         "data": {
@@ -125,22 +140,19 @@ def test_census_shows_ward_snapshot_as_view_only_context(client, monkeypatch):
     api_get = Mock(return_value=snapshot)
     monkeypatch.setattr(frontend_app, "_api_get", api_get)
 
-    response = client.get("/")
+    response = client.get("/partials/ward-occupancy")
 
     assert response.status_code == 200
-    assert b"Ward occupancy" in response.data
     assert b"Emergency" in response.data
     assert b"62.5%" in response.data
-    assert b"View only" in response.data
     assert b"does not reserve or assign a bed" in response.data
-    assert b"Emergency identity review" not in response.data
     api_get.assert_called_once_with("/api/mcp/ward-occupancy", timeout=20)
 
 
-def test_census_handles_unavailable_ward_snapshot(client, monkeypatch):
+def test_ward_occupancy_partial_handles_unavailable_snapshot(client, monkeypatch):
     monkeypatch.setattr(frontend_app, "_api_get", Mock(return_value=None))
 
-    response = client.get("/")
+    response = client.get("/partials/ward-occupancy")
 
     assert response.status_code == 200
     assert b"Ward occupancy is unavailable" in response.data

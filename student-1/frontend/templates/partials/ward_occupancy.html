@@ -1,0 +1,53 @@
+{% if initial %}
+<div class="ward-occupancy-state">
+  <p class="muted">Load the current read-only ward occupancy snapshot when needed.</p>
+  <button class="btn btn-secondary" type="button"
+          hx-get="/partials/ward-occupancy"
+          hx-target="#census-ward-occupancy-panel" hx-swap="innerHTML"
+          hx-indicator="#ward-occupancy-loading" hx-disabled-elt="this"
+          aria-controls="census-ward-occupancy-panel">Load occupancy</button>
+</div>
+{% elif error %}
+<div class="ward-occupancy-state" role="alert">
+  <p class="muted">{{ error }}</p>
+  <button class="btn btn-secondary" type="button"
+          hx-get="/partials/ward-occupancy"
+          hx-target="#census-ward-occupancy-panel" hx-swap="innerHTML"
+          hx-indicator="#ward-occupancy-loading" hx-disabled-elt="this"
+          aria-controls="census-ward-occupancy-panel">Retry</button>
+</div>
+{% else %}
+{% set occupancy = ward_snapshot.data %}
+<div class="metrics-row" aria-label="Current hospital bed totals">
+  <div class="stat-block"><span class="stat-label">Total beds</span><span class="stat-value">{{ occupancy.totals.total_beds }}</span></div>
+  <div class="stat-block"><span class="stat-label">Occupied</span><span class="stat-value">{{ occupancy.totals.occupied }}</span></div>
+  <div class="stat-block"><span class="stat-label">Available</span><span class="stat-value">{{ occupancy.totals.available }}</span></div>
+  <div class="stat-block"><span class="stat-label">Occupancy</span><span class="stat-value">{{ occupancy.totals.occupancy_pct }}%</span></div>
+</div>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr><th>Ward</th><th>Total beds</th><th>Occupied</th><th>Available</th><th>Reserved</th><th>Maintenance</th><th>Occupancy</th></tr>
+    </thead>
+    <tbody>
+      {% for ward in occupancy.wards %}
+      <tr>
+        <td>{{ ward.ward }}</td><td>{{ ward.total_beds }}</td><td>{{ ward.occupied }}</td>
+        <td>{{ ward.available }}</td><td>{{ ward.reserved }}</td><td>{{ ward.maintenance }}</td>
+        <td>{{ ward.occupancy_pct }}%</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7">No ward occupancy data is currently available.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="muted">Current snapshot from Room &amp; Bed. This information does not reserve or assign a bed.</p>
+<div class="ward-occupancy-state">
+  <button class="btn btn-secondary" type="button"
+          hx-get="/partials/ward-occupancy"
+          hx-target="#census-ward-occupancy-panel" hx-swap="innerHTML"
+          hx-indicator="#ward-occupancy-loading" hx-disabled-elt="this"
+          aria-controls="census-ward-occupancy-panel">Refresh snapshot</button>
+</div>
+{% endif %}

@@ -339,7 +339,6 @@ def build_search_results(search_text, status_filter, snapshot, emergency_only=Fa
 @app.route("/")
 def census_page():
     snapshot = get_seed_snapshot()
-    ward_snapshot = _api_get("/api/mcp/ward-occupancy", timeout=20)
     admission_status = request.args.get("admission_status")
     admission_date = request.args.get("admission_date")
     admissions = [
@@ -354,10 +353,21 @@ def census_page():
         metrics=build_census_metrics(snapshot),
         admissions=admissions,
         patients=snapshot["patients"],
-        ward_snapshot=ward_snapshot,
         identity=current_identity(),
         page_title="Census",
         page_context="Reception / Census",
+    )
+
+
+@app.get("/partials/ward-occupancy")
+def ward_occupancy_partial():
+    ward_snapshot = _api_get("/api/mcp/ward-occupancy", timeout=20)
+    error = None if ward_snapshot and ward_snapshot.get("ok") else "Ward occupancy is unavailable."
+    return render_template(
+        "partials/ward_occupancy.html",
+        ward_snapshot=ward_snapshot,
+        error=error,
+        initial=False,
     )
 
 

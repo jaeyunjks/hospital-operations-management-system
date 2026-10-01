@@ -573,6 +573,31 @@ h3 {
   overflow-x: auto;
 }
 
+.ward-occupancy-panel > summary {
+  cursor: pointer;
+}
+
+.ward-occupancy-state {
+  padding: 12px 16px;
+}
+
+.ward-occupancy-state .muted {
+  margin: 0 0 12px;
+}
+
+.ward-occupancy-loading {
+  display: none;
+}
+
+.ward-occupancy-loading.htmx-request {
+  display: block;
+}
+
+.muted {
+  padding: 0 16px 12px;
+  color: var(--text-muted);
+}
+
 table {
   width: 100%;
   min-width: 720px;
