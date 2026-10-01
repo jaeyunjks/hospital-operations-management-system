@@ -111,6 +111,41 @@ def test_empty_intake_shows_required_fields(client):
     assert response.data.count(b'class="required-star"') >= 8
 
 
+def test_census_shows_ward_snapshot_as_view_only_context(client, monkeypatch):
+    snapshot = {
+        "ok": True,
+        "data": {
+            "totals": {"total_beds": 8, "occupied": 5, "available": 2,
+                       "occupancy_pct": 62.5},
+            "wards": [{"ward": "Emergency", "total_beds": 8, "occupied": 5,
+                       "available": 2, "reserved": 1, "maintenance": 0,
+                       "occupancy_pct": 62.5}],
+        },
+    }
+    api_get = Mock(return_value=snapshot)
+    monkeypatch.setattr(frontend_app, "_api_get", api_get)
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert b"Ward occupancy" in response.data
+    assert b"Emergency" in response.data
+    assert b"62.5%" in response.data
+    assert b"View only" in response.data
+    assert b"does not reserve or assign a bed" in response.data
+    assert b"Emergency identity review" not in response.data
+    api_get.assert_called_once_with("/api/mcp/ward-occupancy", timeout=20)
+
+
+def test_census_handles_unavailable_ward_snapshot(client, monkeypatch):
+    monkeypatch.setattr(frontend_app, "_api_get", Mock(return_value=None))
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert b"Ward occupancy is unavailable" in response.data
+
+
 def test_emergency_intake_redirects_for_nested_patient_response(client, monkeypatch):
     monkeypatch.setattr(
         frontend_app.requests,

@@ -68,9 +68,9 @@ MERGE_SELECT_OPTIONS = {
 }
 MERGE_DATE_FIELDS = {"p_date_of_birth", "medicare_expiry_date"}
 
-def _api_get(path, params=None):
+def _api_get(path, params=None, timeout=5):
     try:
-        response = requests.get(f"{BACKEND_URL}{path}", params=params or {}, headers=_identity_headers(), timeout=5)
+        response = requests.get(f"{BACKEND_URL}{path}", params=params or {}, headers=_identity_headers(), timeout=timeout)
         payload = response.json() if response.content else {}
         if response.status_code >= 400:
             return None
@@ -339,6 +339,7 @@ def build_search_results(search_text, status_filter, snapshot, emergency_only=Fa
 @app.route("/")
 def census_page():
     snapshot = get_seed_snapshot()
+    ward_snapshot = _api_get("/api/mcp/ward-occupancy", timeout=20)
     admission_status = request.args.get("admission_status")
     admission_date = request.args.get("admission_date")
     admissions = [
@@ -353,6 +354,7 @@ def census_page():
         metrics=build_census_metrics(snapshot),
         admissions=admissions,
         patients=snapshot["patients"],
+        ward_snapshot=ward_snapshot,
         identity=current_identity(),
         page_title="Census",
         page_context="Reception / Census",

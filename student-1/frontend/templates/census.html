@@ -29,11 +29,41 @@
 <section class="panel">
   <div class="panel-header">
     <div>
-      <span class="eyebrow">Identity management</span>
-      <h2>Emergency identity review</h2>
+      <span class="eyebrow">Shared MCP snapshot</span>
+      <h2>Ward occupancy</h2>
     </div>
-    <a class="btn btn-secondary" href="{{ url_for('duplicate_review_page') }}">Open Duplicate Review</a>
+    <span class="status-pill neutral">View only</span>
   </div>
+  {% if ward_snapshot and ward_snapshot.get('ok') and ward_snapshot.get('data') %}
+  {% set occupancy = ward_snapshot.data %}
+  <div class="metrics-row" aria-label="Current hospital bed totals">
+    <div class="stat-block"><span class="stat-label">Total beds</span><span class="stat-value">{{ occupancy.totals.total_beds }}</span></div>
+    <div class="stat-block"><span class="stat-label">Occupied</span><span class="stat-value">{{ occupancy.totals.occupied }}</span></div>
+    <div class="stat-block"><span class="stat-label">Available</span><span class="stat-value">{{ occupancy.totals.available }}</span></div>
+    <div class="stat-block"><span class="stat-label">Occupancy</span><span class="stat-value">{{ occupancy.totals.occupancy_pct }}%</span></div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Ward</th><th>Total beds</th><th>Occupied</th><th>Available</th><th>Reserved</th><th>Maintenance</th><th>Occupancy</th></tr>
+      </thead>
+      <tbody>
+        {% for ward in occupancy.wards %}
+        <tr>
+          <td>{{ ward.ward }}</td><td>{{ ward.total_beds }}</td><td>{{ ward.occupied }}</td>
+          <td>{{ ward.available }}</td><td>{{ ward.reserved }}</td><td>{{ ward.maintenance }}</td>
+          <td>{{ ward.occupancy_pct }}%</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">No ward occupancy data is currently available.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">Current snapshot from Room &amp; Bed. This information does not reserve or assign a bed.</p>
+  {% else %}
+  <p class="muted">Ward occupancy is unavailable. MCP may be disabled or the shared service may be offline.</p>
+  {% endif %}
 </section>
 
 <section class="panel panel-large">
