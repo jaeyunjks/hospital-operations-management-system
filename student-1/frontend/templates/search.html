@@ -31,6 +31,7 @@
         <option value="Inactive" {% if status_filter == 'Inactive' %}selected{% endif %}>Inactive</option>
         <option value="Transferred" {% if status_filter == 'Transferred' %}selected{% endif %}>Transferred</option>{% endif %}
       </select>
+      <label class="emergency-filter"><input type="checkbox" name="emergency_override" value="1" {% if emergency_only %}checked{% endif %}> Emergency override profiles</label>
       <button class="btn btn-primary" type="submit">Apply filters</button>
     </form>
   </div>
@@ -43,6 +44,7 @@
           <th>MRN</th>
           <th>DOB</th>
           <th>Status</th>
+          <th>Origin</th>
           <th>Address</th>
           <th>Action</th>
         </tr>
@@ -54,6 +56,7 @@
           <td class="mono-data">MRN-{{ patient.patient_id }}</td>
           <td class="mono-data">{{ patient.p_date_of_birth }}</td>
           <td><span class="status-pill {{ 'ok' if patient.patient_status == 'Active' else 'warn' if patient.patient_status == 'Transferred' else 'none' }}">{{ patient.patient_status }}</span></td>
+          <td>{{ 'Emergency override' if patient.emergency_override else 'Standard intake' }}</td>
           <td>{{ patient.address.address_suburb if patient.address else 'Unknown' }}</td>
           <td><a class="inline-link" href="/patient/{{ patient.patient_id }}">Open</a></td>
         </tr>

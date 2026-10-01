@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="page-header">
+  <div class="context-line">{{ page_context }}</div>
+  <div class="header-row">
+    <div><h1>{{ page_title }}</h1></div>
+    <div class="header-actions">
+      <a class="btn btn-secondary" href="{{ url_for('census_page') }}">Back to Census</a>
+    </div>
+  </div>
+</header>
+
+{% if message %}<div class="banner {{ 'banner-ok' if message == 'Review decision recorded.' else '' }}" role="status">{{ message }}</div>{% endif %}
+
+<section class="panel panel-large">
+  <div class="panel-header">
+    <div>
+      <span class="eyebrow">Requires a staff decision</span>
+      <h2>Emergency profiles awaiting review</h2>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Emergency profile</th><th>Date of birth</th><th>Possible match and decision</th></tr>
+      </thead>
+      <tbody>
+        {% for review in reviews %}
+        {% set patient = review.patient %}
+        <tr>
+          <td><a class="inline-link" href="{{ url_for('patient_record', patient_id=patient.patient_id) }}">{{ patient.p_first_name }} {{ patient.p_last_name }}</a> <span class="mono-data">MRN-{{ patient.patient_id }}</span></td>
+          <td class="mono-data">{{ patient.p_date_of_birth }}</td>
+          <td>
+            <form method="post" class="review-form">
+              <input type="hidden" name="patient_id" value="{{ patient.patient_id }}">
+              <select name="candidate_id" aria-label="Possible matching patient for {{ patient.p_first_name }} {{ patient.p_last_name }}">
+                <option value="">No matching record selected</option>
+                {% for match in review.candidates %}
+                {% set candidate = match.patient %}
+                <option value="{{ candidate.patient_id }}">{{ candidate.p_first_name }} {{ candidate.p_last_name }} · {{ candidate.p_date_of_birth }} · MRN-{{ candidate.patient_id }} (score {{ match.score }})</option>
+                {% endfor %}
+              </select>
+              <div class="header-actions">
+                <button class="btn btn-primary" type="submit" name="decision" value="Duplicate">Confirm duplicate</button>
+                <button class="btn btn-secondary" type="submit" name="decision" value="Not duplicate">Not a duplicate</button>
+              </div>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="3">No emergency profiles are awaiting identity review.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel panel-large">
+  <div class="panel-header">
+    <div>
+      <span class="eyebrow">Decision history</span>
+      <h2>Reviewed profiles</h2>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Emergency profile</th><th>Decision</th><th>Compared record</th><th>Reviewed by</th><th>Reviewed at</th></tr></thead>
+      <tbody>
+        {% for patient in reviewed %}
+        <tr>
+          <td>{{ patient.p_first_name }} {{ patient.p_last_name }} <span class="mono-data">MRN-{{ patient.patient_id }}</span></td>
+          <td>{{ patient.identity_review_status }}</td>
+          <td>{% if patient.identity_review_candidate_id %}MRN-{{ patient.identity_review_candidate_id }}{% else %}Not selected{% endif %}</td>
+          <td>{{ patient.identity_reviewed_by or 'Unknown' }}</td>
+          <td class="mono-data">{{ patient.identity_reviewed_at or '' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5">No decisions recorded.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

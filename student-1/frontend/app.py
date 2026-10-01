@@ -28,6 +28,46 @@ NAV_ITEMS = [
     {"id": "search", "label": "Search", "href": "/search"},
 ]
 
+MERGE_FIELD_GROUPS = {
+    "patient": [
+        ("p_title", "Title"), ("p_first_name", "First name"), ("p_last_name", "Last name"),
+        ("p_date_of_birth", "Date of birth"), ("p_assigned_sex", "Sex"), ("p_mobile", "Mobile"),
+        ("p_method_of_contact", "Preferred contact method"), ("p_middle_name", "Middle name"),
+        ("p_preferred_name", "Preferred name"), ("p_maiden_name", "Maiden name"),
+        ("p_previous_last_name", "Previous last name"), ("p_international_visitor", "International visitor"),
+        ("p_email_address", "Email"), ("p_landline", "Landline"), ("p_marital_status", "Marital status"),
+        ("p_first_nations_heritage", "First Nations heritage"), ("p_language_assistance", "Language assistance"),
+    ],
+    "address": [
+        ("address_street", "Street"), ("address_suburb", "Suburb"),
+        ("address_state", "State or territory"), ("address_postcode", "Postcode"),
+    ],
+    "medical": [
+        ("medicare_number", "Medicare number"), ("medicare_individual_reference_number", "Medicare IRN"),
+        ("medicare_expiry_date", "Medicare expiry"), ("private_insurance", "Private insurance"),
+        ("p_centrelink_number", "Centrelink number"),
+    ],
+}
+MERGE_BOOLEAN_FIELDS = {"p_international_visitor", "p_language_assistance", "private_insurance"}
+MERGE_REQUIRED_FIELDS = {
+    "p_title", "p_first_name", "p_last_name", "p_date_of_birth", "p_assigned_sex", "p_mobile",
+    "p_marital_status", "p_first_nations_heritage", "address_street", "address_suburb",
+    "address_state", "address_postcode", "medicare_number", "medicare_individual_reference_number",
+    "medicare_expiry_date",
+}
+MERGE_SELECT_OPTIONS = {
+    "p_title": ["Mr", "Mrs", "Ms", "Miss", "Dr", "Master", "Other"],
+    "p_assigned_sex": ["Male", "Female", "Alternate", "Unassigned"],
+    "p_method_of_contact": ["Post", "Email", "Text"],
+    "p_marital_status": ["Single", "Married", "De-Facto", "Widowed", "Separated", "Divorced"],
+    "p_first_nations_heritage": ["Unknown", "Aboriginal", "Torres Strait Islander", "Both", "Neither"],
+    "p_international_visitor": ["0", "1"],
+    "p_language_assistance": ["0", "1"],
+    "private_insurance": ["0", "1"],
+    "address_state": ["New South Wales", "Victoria", "Queensland", "Western Australia", "South Australia", "Tasmania", "Northern Territory", "Australian Capital Territory"],
+}
+MERGE_DATE_FIELDS = {"p_date_of_birth", "medicare_expiry_date"}
+
 def _api_get(path, params=None):
     try:
         response = requests.get(f"{BACKEND_URL}{path}", params=params or {}, headers=_identity_headers(), timeout=5)
@@ -54,7 +94,7 @@ def current_identity():
 
 def _api_update(path, payload):
     try:
-        response = requests.patch(f"{BACKEND_URL}{path}", json=payload, timeout=5)
+        response = requests.patch(f"{BACKEND_URL}{path}", json=payload, headers=_identity_headers(), timeout=5)
         return response.ok
     except requests.RequestException:
         return False
@@ -129,8 +169,9 @@ def _fallback_seed_snapshot():
     return {"patients": patient_details, "admissions": admissions}
 
 
-def get_live_snapshot():
-    patients = _api_get("/api/patients") or []
+def get_live_snapshot(include_inactive=False):
+    patient_params = {"includeInactive": "true"} if include_inactive else None
+    patients = _api_get("/api/patients", params=patient_params) or []
     admissions = _api_get("/api/admissions") or []
     addresses = _api_get("/api/patients/addresses") or []
     medical = _api_get("/api/patients/medical-information") or []
@@ -195,13 +236,16 @@ def build_census_metrics(snapshot):
         if str(row.get("admission_date") or "")[:10] == today
         and row["admission_status"] in {"Active", "Pending", "Completed"}
     )
-    duplicate_review = max(1, len([p for p in patients if p["patient_status"] in {"Inactive", "Transferred"}]))
+    duplicate_review = sum(
+        1 for patient in patients
+        if patient.get("emergency_override") and patient.get("identity_review_status") == "Pending"
+    )
 
     return [
         {"label": "Admissions today", "value": str(admissions_today), "delta": "Scheduled today", "tone": "ok", "href": f"/?admission_date={today}"},
         {"label": "Upcoming admissions", "value": str(upcoming_admissions), "delta": "Scheduled for later", "tone": "warn", "href": "/?admission_status=Pending"},
         {"label": "Active patients", "value": str(active_patients), "delta": "+14 wk", "tone": "ok", "href": "/search?status=Active"},
-        {"label": "Duplicate review", "value": str(duplicate_review), "delta": "3 flagged", "tone": "risk", "href": "/search?status=Inactive"},
+        {"label": "Duplicate review", "value": str(duplicate_review), "delta": "Awaiting decision", "tone": "risk", "href": "/duplicate-review"},
     ]
 
 
@@ -272,16 +316,20 @@ def find_patient_record(patient_id, snapshot):
     return None
 
 
-def build_search_results(search_text, status_filter, snapshot):
+def build_search_results(search_text, status_filter, snapshot, emergency_only=False):
     query = (search_text or "").strip().lower()
     patients = snapshot["patients"]
     results = []
 
     for patient in patients:
+        if patient.get("patient_status") == "Merged":
+            continue
         name = f"{patient['p_first_name']} {patient['p_last_name']}".lower()
         if query and query not in name and query not in str(patient.get("patient_id", "")):
             continue
         if status_filter and patient["patient_status"] != status_filter:
+            continue
+        if emergency_only and not patient.get("emergency_override"):
             continue
         results.append(patient)
 
@@ -353,6 +401,8 @@ def intake_page():
             "p_marital_status": request.form.get("marital_status", "").strip() or "Single",
             "p_first_nations_heritage": request.form.get("first_nations", "").strip() or "Unknown",
             "patient_status": "Active",
+            "emergency_override": 1 if emergency_override else 0,
+            "identity_review_status": "Pending" if emergency_override else "Not required",
             "created_at": "datetime('now')",
             "updated_at": "datetime('now')",
         }
@@ -416,9 +466,10 @@ def search_page():
     query = request.args.get("q", "")
     identity = current_identity()
     status_filter = request.args.get("status", "Active")
+    emergency_only = request.args.get("emergency_override") == "1"
     if status_filter != "Active" and identity.get("role") != "System Admin":
         status_filter = "Active"
-    results = build_search_results(query, status_filter, snapshot)
+    results = build_search_results(query, status_filter, snapshot, emergency_only)
     return render_template(
         "search.html",
         active_page="search",
@@ -426,6 +477,7 @@ def search_page():
         results=results,
         query=query,
         status_filter=status_filter,
+        emergency_only=emergency_only,
         page_title="Search",
         page_context="Reception / Search",
         patients=snapshot["patients"],
@@ -433,10 +485,273 @@ def search_page():
     )
 
 
+def duplicate_match_candidates(patient, patients):
+    query_first = (patient.get("p_first_name") or "").strip().casefold()
+    query_last = (patient.get("p_last_name") or "").strip().casefold()
+    query_dob = patient.get("p_date_of_birth")
+    candidates = []
+    for candidate in patients:
+        if candidate.get("patient_id") == patient.get("patient_id"):
+            continue
+        score = 0
+        if query_first and query_first == (candidate.get("p_first_name") or "").strip().casefold():
+            score += 3
+        if query_last and query_last == (candidate.get("p_last_name") or "").strip().casefold():
+            score += 3
+        if query_dob and query_dob == candidate.get("p_date_of_birth"):
+            score += 4
+        if score:
+            candidates.append({"patient": candidate, "score": score})
+    return sorted(candidates, key=lambda match: (-match["score"], match["patient"].get("patient_id", 0)))
+
+
+def _merge_is_default(field, value, patient):
+    text = "" if value is None else str(value).strip().casefold()
+    if not text or text in {"unknown", "unassigned", "not provided", "1900-01-01", "0000"}:
+        return True
+    if len(text) > 1 and text.isdigit() and set(text) == {"0"}:
+        return True
+    if not patient.get("emergency_override"):
+        return False
+    emergency_defaults = {
+        "p_title": {"mr"}, "p_last_name": {"patient"}, "p_assigned_sex": {"unassigned"},
+        "p_mobile": {"0000000000"}, "p_marital_status": {"single"},
+        "address_street": {"not provided"}, "address_suburb": {"unknown"},
+        "address_state": {"new south wales"}, "address_postcode": {"0000"},
+        "medicare_number": {"unknown"}, "medicare_individual_reference_number": {"1"},
+        "medicare_expiry_date": {"2030-12-31"},
+    }
+    return text in emergency_defaults.get(field, set())
+
+
+def build_merge_fields(source, duplicate, submitted=None):
+    rows = []
+    submitted = submitted or {}
+    for group, fields in MERGE_FIELD_GROUPS.items():
+        source_group = source if group == "patient" else source.get(group) or {}
+        duplicate_group = duplicate if group == "patient" else duplicate.get(group) or {}
+        for field, label in fields:
+            source_original = source_group.get(field)
+            duplicate_original = duplicate_group.get(field)
+            source_name = f"source_{group}_{field}"
+            duplicate_name = f"duplicate_{group}_{field}"
+            source_value = source_original
+            duplicate_value = duplicate_original
+            source_default = _merge_is_default(field, source_original, source) or _merge_is_default(field, source_value, source)
+            duplicate_default = _merge_is_default(field, duplicate_original, duplicate) or _merge_is_default(field, duplicate_value, duplicate)
+            source_empty = source_value is None or str(source_value).strip() == ""
+            duplicate_empty = duplicate_value is None or str(duplicate_value).strip() == ""
+            auto_source = not source_empty and not source_default and duplicate_empty
+            values_match = source_value == duplicate_value
+            both_blank = source_empty and duplicate_empty
+            needs_review = not auto_source and not values_match and not both_blank
+            rows.append({
+                "group": group,
+                "field": field,
+                "label": label,
+                "source_name": source_name,
+                "duplicate_name": duplicate_name,
+                "source_value": "" if source_value is None else source_value,
+                "duplicate_value": "" if duplicate_value is None else duplicate_value,
+                "source_default": source_default,
+                "duplicate_default": duplicate_default,
+                "needs_review": needs_review,
+                "auto_source": auto_source,
+                "both_blank": both_blank,
+                "choice_name": f"choice_{group}_{field}",
+                "custom_name": f"custom_{group}_{field}",
+                "custom_value": submitted.get(f"custom_{group}_{field}", ""),
+                "custom_options": MERGE_SELECT_OPTIONS.get(field),
+                "custom_type": "date" if field in MERGE_DATE_FIELDS else "text",
+            })
+    return rows
+
+
+def resolve_merge_fields(rows, form):
+    values = {group: {} for group in MERGE_FIELD_GROUPS}
+    reviewed_fields = []
+    errors = []
+    for row in rows:
+        left = row["source_value"]
+        right = row["duplicate_value"]
+        getlist = getattr(form, "getlist", None)
+        choices = getlist(row["choice_name"]) if getlist else ([form.get(row["choice_name"])] if form.get(row["choice_name"]) else [])
+        choice = choices[0] if len(choices) == 1 else ""
+        if row["needs_review"] or row["auto_source"]:
+            if choice not in {"source", "duplicate", "custom"}:
+                errors.append(f"Choose how to resolve {row['label']}.")
+                continue
+        if choice == "source":
+            resolved = left
+        elif choice == "duplicate":
+            resolved = right
+        elif choice == "custom":
+            resolved = form.get(row["custom_name"], "")
+        elif row["auto_source"]:
+            errors.append(f"Choose how to resolve {row['label']}.")
+            continue
+        else:
+            resolved = left
+
+        if row["needs_review"] or row["auto_source"] and choice != "source" or choice == "custom":
+            reviewed_fields.append(f"{row['group']}:{row['field']}")
+
+        if row["field"] in MERGE_BOOLEAN_FIELDS:
+            if str(resolved).lower() not in {"0", "1", "false", "true"}:
+                errors.append(f"Enter 0 or 1 for {row['label']}.")
+                continue
+            resolved = int(str(resolved).lower() in {"1", "true"})
+        elif choice == "custom" and row["custom_options"] and resolved not in row["custom_options"]:
+            errors.append(f"Select an allowed value for {row['label']}.")
+            continue
+        elif resolved == "" and row["field"] in MERGE_REQUIRED_FIELDS and not row["both_blank"]:
+            errors.append(f"Enter a value for {row['label']} before merging.")
+            continue
+
+        values[row["group"]][row["field"]] = resolved if resolved != "" else ("" if row["both_blank"] else None)
+    return values, reviewed_fields, errors
+
+
+@app.route("/duplicate-review", methods=["GET", "POST"])
+def duplicate_review_page():
+    snapshot = get_seed_snapshot()
+    identity = current_identity()
+    message = "Profiles reconciled successfully." if request.args.get("merged") == "1" else None
+
+    if request.method == "POST":
+        patient_id = request.form.get("patient_id", type=int)
+        candidate_id = request.form.get("candidate_id", type=int)
+        decision = request.form.get("decision")
+        patient = find_patient_record(patient_id, snapshot) if patient_id else None
+        candidate = find_patient_record(candidate_id, snapshot) if candidate_id else None
+        if not patient or not patient.get("emergency_override") or patient.get("identity_review_status") != "Pending":
+            message = "This emergency profile is not awaiting review."
+        elif decision not in {"Duplicate", "Not duplicate"}:
+            message = "Choose whether the selected records are duplicates."
+        elif decision == "Duplicate" and (not candidate or candidate_id == patient_id):
+            message = "Select the matching patient record before confirming a duplicate."
+        elif decision == "Duplicate":
+            return redirect(url_for(
+                "duplicate_merge_page",
+                source_id=candidate_id,
+                duplicate_id=patient_id,
+            ))
+        else:
+            saved = _api_update(f"/api/patients/{patient_id}", {
+                "identity_review_status": decision,
+                "identity_review_candidate_id": candidate_id,
+                "identity_reviewed_by": identity.get("name", "Unknown user"),
+                "identity_reviewed_at": datetime.now().isoformat(timespec="seconds"),
+            })
+            message = "Review decision recorded." if saved else "The review decision could not be saved. Check the backend and try again."
+            if saved:
+                snapshot = get_live_snapshot()
+
+    pending_reviews = [
+        patient for patient in snapshot["patients"]
+        if patient.get("emergency_override") and patient.get("identity_review_status") == "Pending"
+    ]
+    reviewed = [
+        patient for patient in snapshot["patients"]
+        if patient.get("emergency_override") and patient.get("identity_review_status") in {"Duplicate", "Not duplicate"}
+    ]
+    reviews = [{
+        "patient": patient,
+        "candidates": duplicate_match_candidates(patient, snapshot["patients"]),
+    } for patient in pending_reviews]
+    return render_template(
+        "duplicate_review.html",
+        active_page="census",
+        nav=NAV_ITEMS,
+        identity=identity,
+        page_title="Duplicate Review",
+        page_context="Reception / Identity Review",
+        reviews=reviews,
+        reviewed=reviewed,
+        message=message,
+    )
+
+
+@app.route("/duplicate-review/merge", methods=["GET", "POST"])
+def duplicate_merge_page():
+    snapshot = get_seed_snapshot()
+    identity = current_identity()
+    source_id = request.values.get("source_id", type=int)
+    duplicate_id = request.values.get("duplicate_id", type=int)
+    source = find_patient_record(source_id, snapshot) if source_id else None
+    duplicate = find_patient_record(duplicate_id, snapshot) if duplicate_id else None
+    message = None
+    errors = []
+    pair_valid = bool(source and duplicate and source_id != duplicate_id)
+    if source_id or duplicate_id:
+        if not source or not duplicate or source_id == duplicate_id:
+            pair_valid = False
+            errors.append("Choose two different valid patient profiles from Duplicate Review.")
+    if source and duplicate:
+        potential_ids = {
+            match["patient"]["patient_id"]
+            for match in duplicate_match_candidates(duplicate, snapshot["patients"])
+        }
+        if not duplicate.get("emergency_override") or duplicate.get("identity_review_status") != "Pending":
+            pair_valid = False
+            errors.append("The Duplicate profile is not awaiting emergency identity review.")
+        elif source_id not in potential_ids:
+            pair_valid = False
+            errors.append("Select the Duplicate profile from the potential matches on Duplicate Review.")
+    rows = build_merge_fields(source, duplicate, request.form if request.method == "POST" else None) if source and duplicate else []
+
+    if request.method == "POST":
+        values, reviewed_fields, field_errors = resolve_merge_fields(rows, request.form) if rows else ({}, [], [])
+        errors.extend(field_errors)
+        if not errors:
+            _, succeeded = _api_post("/api/patients/merge", {
+                "source_id": source_id,
+                "duplicate_id": duplicate_id,
+                "source": values,
+                "reviewed_fields": reviewed_fields,
+                "reviewed_by": identity.get("name", "Unknown user"),
+                "contact_ids": request.form.getlist("contact_ids", type=int),
+                "admission_ids": request.form.getlist("admission_ids", type=int),
+            })
+            if succeeded:
+                return redirect(url_for("duplicate_review_page", merged="1"))
+            message = "The profiles could not be merged. No partial changes were saved; review the selections and try again."
+
+    field_groups = [
+        (title, [row for row in rows if row["group"] == group])
+        for group, title in (("patient", "Identity and demographics"), ("address", "Primary address"), ("medical", "Insurance and identifiers"))
+    ]
+    return render_template(
+        "duplicate_merge.html",
+        active_page="census",
+        nav=NAV_ITEMS,
+        identity=identity,
+        page_title="Reconcile Patient Profiles",
+        page_context="Reception / Duplicate Review / Reconciliation",
+        patients=snapshot["patients"],
+        source=source,
+        duplicate=duplicate,
+        pair_valid=pair_valid,
+        source_id=source_id,
+        duplicate_id=duplicate_id,
+        field_groups=field_groups,
+        source_admissions=[row for row in snapshot["admissions"] if source and row.get("patient_id") == source_id],
+        duplicate_admissions=[row for row in snapshot["admissions"] if duplicate and row.get("patient_id") == duplicate_id],
+        source_contacts=(source or {}).get("contacts", []),
+        duplicate_contacts=(duplicate or {}).get("contacts", []),
+        errors=errors,
+        message=message,
+        submitted=request.form if request.method == "POST" else {},
+    )
+
+
 @app.route("/patient/<int:patient_id>", methods=["GET", "POST"])
 def patient_record(patient_id):
     snapshot = get_seed_snapshot()
     patient = find_patient_record(patient_id, snapshot)
+    if patient is None:
+        snapshot = get_live_snapshot(include_inactive=True)
+        patient = find_patient_record(patient_id, snapshot)
     if patient is None:
         return render_template("patient.html", active_page="patient", nav=NAV_ITEMS, patient=None, page_title="Patient record", page_context="Patient / Not found", identity=current_identity())
 
@@ -452,7 +767,7 @@ def patient_record(patient_id):
         _, saved = _api_post(f"/api/patients/{patient_id}/admin-notes", {"note_text": summary_text})
         summary_message = "Summary applied as an administrative note." if saved else "The summary could not be applied. Check that the backend is running and try again."
     elif request.method == "POST" and request.form.get("summary_action") == "refresh":
-        live_snapshot = get_live_snapshot()
+        live_snapshot = get_live_snapshot(include_inactive=True)
         patient = find_patient_record(patient_id, live_snapshot) or patient
         admissions = [row for row in live_snapshot["admissions"] if row.get("patient_id") == patient_id]
         summary_override = generate_summary(patient, admissions)
@@ -489,6 +804,24 @@ def patient_record(patient_id):
     elif request.method == "POST" and action == "admin_note":
         _, created = _api_post(f"/api/patients/{patient_id}/admin-notes", {"note_text": request.form.get("note_text", "")})
         profile_message = "Admin note added." if created else "The admin note could not be added. Check that the backend is running and try again."
+    elif request.method == "POST" and action == "medical":
+        medical = patient.get("medical") or {}
+        medical_payload = {
+            "patient_id": patient_id,
+            "medicare_number": request.form.get("medicare_number", "").strip(),
+            "medicare_individual_reference_number": request.form.get("medicare_individual_reference_number", "").strip(),
+            "medicare_expiry_date": request.form.get("medicare_expiry_date", ""),
+            "private_insurance": 1 if request.form.get("private_insurance") == "1" else 0,
+            "p_centrelink_number": request.form.get("p_centrelink_number", "").strip(),
+        }
+        if medical.get("insurance_id"):
+            saved = _api_update(
+                f"/api/patients/medical-information/{medical['insurance_id']}",
+                {key: value for key, value in medical_payload.items() if key != "patient_id"},
+            )
+        else:
+            _, saved = _api_post("/api/patients/medical-information", medical_payload)
+        profile_message = "Medical information updated." if saved else "Medical information could not be saved. Check the backend and try again."
     elif request.method == "POST" and action == "contact":
         _, created = _api_post("/api/patients/contacts", {
             "patient_id": patient_id,
@@ -547,11 +880,11 @@ def patient_record(patient_id):
         message = "The patient could not be saved. Check that the backend is running and try again."
 
     if profile_message:
-        snapshot = get_live_snapshot()
+        snapshot = get_live_snapshot(include_inactive=True)
         patient = find_patient_record(patient_id, snapshot) or patient
         admissions = [row for row in snapshot["admissions"] if row.get("patient_id") == patient_id]
 
-    patient_summary = summary_override or generate_ai_summary(patient, admissions)
+    patient_summary = summary_override or generate_summary(patient, admissions)
     return render_template(
         "patient.html",
         active_page="patient",

@@ -756,8 +756,225 @@ tbody tr:hover {
 
 .search-form {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr) auto auto;
   gap: 12px;
+}
+
+.search-form .emergency-filter {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-body);
+}
+
+.search-form input[type="checkbox"] {
+  width: 16px;
+  min-height: 16px;
+  margin: 0;
+  accent-color: var(--status-ok);
+}
+
+.merge-profile-head,
+.merge-related-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  padding: 20px;
+}
+
+.merge-resolution select,
+.merge-value-column input,
+.merge-resolution input {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: var(--border-strong);
+  background: var(--surface-card);
+  color: var(--text-body);
+}
+
+.merge-identity-column {
+  min-width: 0;
+  padding: 16px 0;
+  border-bottom: var(--border-hair);
+}
+
+.merge-identity-column h2 {
+  margin: 6px 0;
+}
+
+.merge-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  padding: 0 20px 16px;
+  color: var(--text-muted);
+  font-size: var(--size-label-sm);
+}
+
+.merge-legend-red,
+.merge-legend-green {
+  font-weight: 600;
+}
+
+.merge-legend-red,
+.merge-conflict .merge-readonly-value {
+  border-color: #b53b35 !important;
+}
+
+.merge-legend-green,
+.merge-match .merge-readonly-value,
+.merge-field-row.merge-resolved .merge-readonly-value {
+  border-color: #267a55 !important;
+}
+
+.merge-section {
+  margin-bottom: 16px;
+}
+
+.merge-field-list {
+  padding: 0 20px 20px;
+}
+
+.merge-field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(190px, 0.8fr);
+  gap: 12px;
+  align-items: start;
+  padding: 14px 0;
+  border-bottom: var(--border-hair);
+}
+
+.merge-value-column,
+.merge-resolution {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.merge-value-column label,
+.merge-resolution label {
+  color: var(--text-label);
+  font-size: var(--size-label-xs);
+}
+
+.merge-readonly-value,
+.merge-resolution input,
+.merge-resolution select {
+  border: 2px solid;
+}
+
+.merge-readonly-value {
+  background: var(--surface-card);
+  color: var(--text-body);
+  cursor: default;
+}
+
+.merge-value-choice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.merge-value-choice input[type="checkbox"] {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--status-ok);
+}
+
+.merge-value-choice label {
+  color: var(--text-body);
+}
+
+.merge-custom-value:disabled {
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.merge-value-column input:focus,
+.merge-resolution input:focus,
+.merge-resolution select:focus {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.default-marker {
+  color: #a9322b;
+  font-weight: 700;
+}
+
+.merge-resolution {
+  gap: 8px;
+}
+
+.merge-resolution label {
+  display: grid;
+  gap: 5px;
+}
+
+.match-label {
+  padding: 8px 0;
+  color: #267a55;
+  font-weight: 600;
+}
+
+.merge-related-columns {
+  padding-top: 0;
+}
+
+.merge-related-columns h3 {
+  margin: 0 0 12px;
+  font-size: var(--size-heading-sm);
+}
+
+.merge-related-item,
+.merge-admission-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+  padding: 12px;
+  border: var(--border-hair);
+  color: var(--text-body);
+}
+
+.merge-related-item input,
+.merge-admission-item input {
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  accent-color: var(--status-ok);
+}
+
+.merge-related-item .contact-tile {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.merge-admission-item {
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.merge-finalize {
+  display: flex;
+  justify-content: flex-end;
+  padding: 4px 0 24px;
+}
+
+@media (max-width: 760px) {
+  .merge-profile-head,
+  .merge-related-columns,
+  .merge-field-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
 }
 
 .banner {

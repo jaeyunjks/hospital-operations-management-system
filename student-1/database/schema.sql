@@ -93,8 +93,16 @@ CREATE TABLE patients (
             'Active', 
             'Inactive', 
             'Deceased', 
-            'Transferred'
+            'Transferred',
+            'Merged'
         )),
+
+    emergency_override INTEGER NOT NULL DEFAULT 0 CHECK (emergency_override IN (0, 1)),
+    identity_review_status TEXT NOT NULL DEFAULT 'Not required'
+        CHECK (identity_review_status IN ('Not required', 'Pending', 'Duplicate', 'Not duplicate')),
+    identity_review_candidate_id INTEGER,
+    identity_reviewed_by TEXT,
+    identity_reviewed_at TEXT,
 
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,

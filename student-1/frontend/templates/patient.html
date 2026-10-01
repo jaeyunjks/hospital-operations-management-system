@@ -71,6 +71,31 @@
 {% if profile_message %}<div class="banner banner-ok">{{ profile_message }}</div>{% endif %}
 
 <section class="panel">
+  <div class="panel-header">
+    <div><span class="eyebrow">Insurance and identifiers</span><h2>Medical Information</h2></div>
+  </div>
+  {% if editing %}
+  <form class="form-grid" method="post">
+    <input type="hidden" name="profile_action" value="medical" />
+    <div class="field-group"><label for="medicare_number">Medicare number</label><input id="medicare_number" name="medicare_number" value="{{ patient.medical.medicare_number if patient.medical else '' }}" required /></div>
+    <div class="field-group"><label for="medicare_individual_reference_number">Individual reference number</label><input id="medicare_individual_reference_number" name="medicare_individual_reference_number" value="{{ patient.medical.medicare_individual_reference_number if patient.medical else '' }}" required /></div>
+    <div class="field-group"><label for="medicare_expiry_date">Medicare expiry date</label><input id="medicare_expiry_date" name="medicare_expiry_date" type="date" value="{{ patient.medical.medicare_expiry_date if patient.medical else '' }}" required /></div>
+    <div class="field-group"><label for="private_insurance">Insurance type</label><select id="private_insurance" name="private_insurance"><option value="0" {% if not patient.medical or not patient.medical.private_insurance %}selected{% endif %}>Medicare</option><option value="1" {% if patient.medical and patient.medical.private_insurance %}selected{% endif %}>Private insurance</option></select></div>
+    <div class="field-group"><label for="p_centrelink_number">Centrelink number</label><input id="p_centrelink_number" name="p_centrelink_number" value="{{ patient.medical.p_centrelink_number if patient.medical else '' }}" /></div>
+    <div class="field-group wide submit-row"><button class="btn btn-primary" type="submit">Save medical information</button></div>
+  </form>
+  {% else %}
+  <div class="detail-grid">
+    <div class="detail-item"><span>Medicare number</span><strong>{{ patient.medical.medicare_number if patient.medical and patient.medical.medicare_number else 'Not provided' }}</strong></div>
+    <div class="detail-item"><span>Individual reference number</span><strong>{{ patient.medical.medicare_individual_reference_number if patient.medical and patient.medical.medicare_individual_reference_number else 'Not provided' }}</strong></div>
+    <div class="detail-item"><span>Medicare expiry date</span><strong>{{ patient.medical.medicare_expiry_date if patient.medical and patient.medical.medicare_expiry_date else 'Not provided' }}</strong></div>
+    <div class="detail-item"><span>Insurance type</span><strong>{{ 'Private insurance' if patient.medical and patient.medical.private_insurance else 'Medicare' }}</strong></div>
+    <div class="detail-item"><span>Centrelink number</span><strong>{{ patient.medical.p_centrelink_number if patient.medical and patient.medical.p_centrelink_number else 'Not provided' }}</strong></div>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel">
   <div class="panel-header"><div><span class="eyebrow">Patient flow</span><h2>Admissions</h2></div></div>
   <div class="admission-list">
     {% for admission in admissions %}
