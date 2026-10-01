@@ -750,6 +750,44 @@ def purchase_orders():
         return jsonify({"purchase_orders":rows,"summary":summary,"pagination":pagination})
     except ValueError as exc:return fail(str(exc),400)
     except DatabaseServiceError as exc:return fail(str(exc),exc.status)
+ORDER_ALERT_LIMIT = 10
+
+
+def order_alert_item(order, today):
+    """Allowlisted fields for order alerts; staff names and free-text reasons are omitted."""
+    days_overdue = (today - parse_date(order["expected_at"])).days if order.get("expected_at") else 0
+    return {"po_id": order["po_id"], "medicine_name": order["medicine_name"], "supplier_name": order["supplier_name"],
+            "status": order["status"], "quantity_ordered": order["quantity_ordered"], "outstanding": order["outstanding"],
+            "total_value": order["total_value"], "ai_generated": bool(order.get("ai_generated")),
+            "created_at": (order.get("created_at") or "")[:10], "expected_at": order.get("expected_at"),
+            "days_overdue": max(0, days_overdue)}
+
+
+@app.get("/api/purchase-orders/alerts")
+def purchase_order_alerts():
+    """Read-only summary of open orders for the dashboard and the MCP order-alerts tool."""
+    try:
+        medicines, suppliers = database_request("/medicines"), database_request("/suppliers")
+        rows = [enrich_order(order, medicines, suppliers) for order in database_request("/purchase_orders")]
+    except DatabaseServiceError as exc:
+        return fail(str(exc), exc.status)
+    today = date.today()
+    oldest_first = lambda order: ((order.get("created_at") or ""), order["po_id"])
+    by_status = {status: sorted((r for r in rows if r["status"] == status), key=oldest_first)
+                 for status in ("pending_approval", "approved", "ordered")}
+    # Overdue deliveries: approved or ordered and past the expected date (the supplier is late).
+    overdue = sorted((r for r in rows if r["status"] in {"approved", "ordered"} and r["is_overdue"]),
+                     key=lambda order: (order["expected_at"], order["po_id"]))
+    return jsonify({
+        "counts": {"pending_approval": len(by_status["pending_approval"]),
+                   "ai_suggested_pending": sum(bool(r.get("ai_generated")) for r in by_status["pending_approval"]),
+                   "approved": len(by_status["approved"]), "ordered": len(by_status["ordered"]),
+                   "overdue": len(overdue)},
+        **{status: [order_alert_item(r, today) for r in orders[:ORDER_ALERT_LIMIT]] for status, orders in by_status.items()},
+        "overdue": [order_alert_item(r, today) for r in overdue[:ORDER_ALERT_LIMIT]],
+    })
+
+
 @app.get("/api/purchase-orders/open")
 def open_purchase_orders():
     try:

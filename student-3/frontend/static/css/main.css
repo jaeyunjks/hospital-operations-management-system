@@ -224,9 +224,6 @@ html { scrollbar-gutter: stable; }
   color: var(--color-text-secondary);
 }
 
-.rag-meta {
-  margin: 0;
-}
 
 /* Collapse the idle loading message; htmx adds .htmx-request while asking. */
 #rag-loading:not(.htmx-request) {
@@ -272,4 +269,10 @@ html { scrollbar-gutter: stable; }
 
 .mcp-forms .mcp-message {
   min-width: 16rem;
+}
+
+/* Centre the demonstration role picker on the page. */
+.demo-entry {
+  margin-inline: auto;
+  padding-top: var(--space-8);
 }

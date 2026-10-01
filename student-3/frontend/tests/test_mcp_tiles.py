@@ -164,3 +164,80 @@ class TileDetailRouteTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def order_row(po_id, status, *, ai=False, days_overdue=0):
+    return {"po_id": po_id, "medicine_name": f"Medicine {po_id}", "supplier_name": "MedSupply Australia",
+            "status": status, "quantity_ordered": 100, "outstanding": 100, "total_value": 250.5,
+            "ai_generated": ai, "created_at": "2026-09-20", "expected_at": "2026-09-26", "days_overdue": days_overdue}
+
+
+ORDER_ALERTS = {
+    "ok": True, "outcome": "ok", "tool": "homs_pharmacy_order_alerts", "arguments": {"alert_type": "all"},
+    "duration_ms": 30,
+    "result": {"schema_version": "1.0", "ok": True, "tool": "homs_pharmacy_order_alerts", "error": None, "data": {
+        "alert_type": "all",
+        "counts": {"pending_approval": 16, "ai_suggested_pending": 9, "approved": 20, "ordered": 12, "overdue": 21},
+        "pending_approval": [order_row(50, "pending_approval"), order_row(51, "pending_approval", ai=True)],
+        "approved": [order_row(16, "approved")],
+        "ordered": [order_row(81, "ordered")],
+        "overdue": [order_row(16, "approved", days_overdue=25)],
+        "source": "student-3-pharmacy-api"}},
+}
+
+
+class OrderAlertTileTests(unittest.TestCase):
+    def setUp(self):
+        self.client = app.app.test_client()
+        with self.client.session_transaction() as session:
+            session['demo_identity'] = {'role': 'Pharmacist', 'staff_id': 3, 'name': 'Demo pharmacist'}
+
+    def render(self, result, alert_type='all'):
+        with patch.object(api_client, 'mcp_call', return_value=result) as call:
+            html = self.client.post('/mcp/call', data={'tool': 'homs_pharmacy_order_alerts',
+                                                       'alert_type': alert_type}).get_data(as_text=True)
+        call.assert_called_once_with('homs_pharmacy_order_alerts', {'alert_type': alert_type})
+        return html
+
+    def test_order_tiles_and_panels(self):
+        html = self.render(ORDER_ALERTS)
+        self.assertIn('Purchase-order alerts', html)
+        self.assertIn('All open orders', html)
+        self.assertEqual(re.findall(r'data-mcp-tile="(\w+)"', html), ['pending', 'ai', 'approved', 'ordered', 'overdue'])
+        self.assertIn('<span class="mcp-tile__value">21</span>', html)
+        self.assertNotIn('hx-get', html)  # every list comes from the MCP result
+        self.assertIn('#50', panel(html, 'pending'))
+        ai = panel(html, 'ai')
+        self.assertIn('#51', ai)
+        self.assertNotIn('#50', ai)
+        overdue = panel(html, 'overdue')
+        self.assertIn('Days overdue', overdue)
+        self.assertIn('<td class="table__num">25</td>', overdue)
+        self.assertIn('$250.50', overdue)
+        self.assertNotIn('data-mcp-default', html)
+
+    def test_pending_and_overdue_types_open_on_their_list(self):
+        for alert_type, title, present, absent in (('pending_approval', 'Pending approval', '#50', 'Days overdue'),
+                                                   ('overdue', 'Overdue deliveries', 'Days overdue', '#50')):
+            with self.subTest(alert_type=alert_type):
+                result = copy.deepcopy(ORDER_ALERTS)
+                result['arguments'] = {'alert_type': alert_type}
+                data = result['result']['data']
+                for name in ('pending_approval', 'approved', 'ordered', 'overdue'):
+                    if name != alert_type:
+                        data[name] = None
+                html = self.render(result, alert_type)
+                default = panel(html, 'default')
+                self.assertIn(title, default)
+                self.assertIn(present, default)
+                self.assertNotIn(absent, default)
+                self.assertIn('Not included in this request', panel(html, 'approved'))
+
+    def test_dashboard_offers_order_alerts_and_purchase_order_questions(self):
+        summary = {"counts": {}, "low_stock": [], "expiring_soon": [], "recent_movements": [], "agent": None}
+        with patch.object(api_client, 'dashboard_summary', return_value=summary):
+            html = self.client.get('/').get_data(as_text=True)
+        for text in ('value="homs_pharmacy_order_alerts"', 'Get purchase-order alerts via MCP', 'Order alerts',
+                     'value="overdue"', 'data-rag-example="Who can approve a purchase order?"',
+                     'data-rag-example="When is a purchase order overdue?"'):
+            self.assertIn(text, html)

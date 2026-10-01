@@ -7,6 +7,10 @@
       {% if call.tool == 'homs_pharmacy_stock_alerts' %}
         <h3 class="mcp-subtitle">Stock alerts</h3>
         <span class="table__muted">{{ alert_labels.get((call.arguments or {}).get('alert_type'), 'All alerts') }}</span>
+      {% elif call.tool == 'homs_pharmacy_order_alerts' %}
+        {% set order_labels = {'all': 'All open orders', 'pending_approval': 'Pending approval', 'overdue': 'Overdue deliveries'} %}
+        <h3 class="mcp-subtitle">Purchase-order alerts</h3>
+        <span class="table__muted">{{ order_labels.get((call.arguments or {}).get('alert_type'), 'All open orders') }}</span>
       {% else %}
         <h3 class="mcp-subtitle">Connectivity check</h3>
       {% endif %}
@@ -97,6 +101,67 @@
     {% for key in ('active', 'expired', 'pending') %}
       <div class="mcp-detail" id="mcp-panel-{{ key }}" data-mcp-panel="{{ key }}" hidden><p class="table__muted">Loading…</p></div>
     {% endfor %}
+  {% elif call.tool == 'homs_pharmacy_order_alerts' and data %}
+    {% set order_type = (call.arguments or {}).get('alert_type') %}
+    {% set ai_pending = (data.pending_approval or [])|selectattr('ai_generated')|list %}
+    {% set order_default = (order_type == 'pending_approval' and data.pending_approval is not none)
+                           or (order_type == 'overdue' and data.overdue is not none) %}
+    {% set order_tiles = [
+      ('pending', 'Pending approval', 'pending_approval'),
+      ('ai', 'AI-suggested, pending', 'ai_suggested_pending'),
+      ('approved', 'Approved', 'approved'),
+      ('ordered', 'Ordered', 'ordered'),
+      ('overdue', 'Overdue deliveries', 'overdue'),
+    ] %}
+    <div class="mcp-tiles" role="group" aria-label="Purchase-order alert figures">
+      {% for key, label, count_key in order_tiles %}
+        <button type="button" class="mcp-tile" data-mcp-tile="{{ key }}" aria-pressed="false" aria-controls="mcp-panel-{{ key }}">
+          <span class="mcp-tile__label">{{ label }}</span>
+          <span class="mcp-tile__value">{{ data.counts[count_key] }}</span>
+        </button>
+      {% endfor %}
+    </div>
+    <p class="table__muted" data-mcp-hint{% if order_default %} hidden{% endif %}>Click a figure to see its details.</p>
+
+    {% macro orders_not_requested() %}<p class="table__muted">Not included in this request. Choose "All open orders" and get the order alerts again.</p>{% endmacro %}
+    {% macro order_table(title, rows, total, empty, overdue=False) %}
+      <h4 class="mcp-subtitle">{{ title }} <span class="table__muted">({{ rows|length }} of {{ total }} shown)</span></h4>
+      <div class="table-wrap"><table class="table table--zebra"><thead><tr>
+        <th>PO</th><th>Medicine</th><th>Supplier</th><th>Quantity</th><th>Value</th><th>Origin</th>
+        {% if overdue %}<th>Status</th><th>Expected</th><th>Days overdue</th>{% else %}<th>Created</th>{% endif %}
+      </tr></thead><tbody>
+        {% for row in rows %}<tr{% if overdue %} class="table-row--urgent"{% endif %}><td>#{{ row.po_id }}</td><td class="table__name">{{ row.medicine_name }}</td><td>{{ row.supplier_name or '—' }}</td>
+          <td class="table__num">{{ row.quantity_ordered }}</td><td class="table__num">${{ '%.2f'|format(row.total_value) }}</td><td>{{ 'AI-suggested' if row.ai_generated else 'Manual' }}</td>
+          {% if overdue %}<td>{{ row.status|replace('_', ' ')|capitalize }}</td><td>{{ row.expected_at }}</td><td class="table__num">{{ row.days_overdue }}</td>{% else %}<td>{{ row.created_at }}</td>{% endif %}</tr>
+        {% else %}<tr><td colspan="{{ 9 if overdue else 7 }}">{{ empty }}</td></tr>{% endfor %}
+      </tbody></table></div>
+    {% endmacro %}
+    {% set order_panels = [
+      ('pending', 'Pending approval', data.pending_approval, data.counts.pending_approval, 'No orders are waiting for approval.', False),
+      ('ai', 'AI-suggested orders pending approval', ai_pending if data.pending_approval is not none else none, data.counts.ai_suggested_pending, 'No AI-suggested orders are waiting for approval.', False),
+      ('approved', 'Approved, not yet ordered', data.approved, data.counts.approved, 'No approved orders are waiting to be sent.', False),
+      ('ordered', 'Ordered from suppliers', data.ordered, data.counts.ordered, 'No orders are with suppliers.', False),
+      ('overdue', 'Overdue deliveries', data.overdue, data.counts.overdue, 'No deliveries are overdue.', True),
+    ] %}
+    {% for key, title, rows, total, empty, overdue in order_panels %}
+      <div class="mcp-detail" id="mcp-panel-{{ key }}" data-mcp-panel="{{ key }}" hidden>
+        {% if rows is none %}{{ orders_not_requested() }}{% else %}
+          {{ order_table(title, rows, total, empty, overdue) }}
+          <p class="table__muted">Live data from the pharmacy purchase orders via MCP.</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+    {% if order_default %}
+      {# "Pending approval" and "Overdue deliveries" open on their own list without a click. #}
+      <div class="mcp-detail" id="mcp-panel-default" data-mcp-panel="default" data-mcp-default>
+        {% if order_type == 'pending_approval' %}
+          {{ order_table('Pending approval', data.pending_approval, data.counts.pending_approval, 'No orders are waiting for approval.') }}
+        {% else %}
+          {{ order_table('Overdue deliveries', data.overdue, data.counts.overdue, 'No deliveries are overdue.', True) }}
+        {% endif %}
+        <p class="table__muted">Live data from the pharmacy purchase orders via MCP. Click a figure above to see only that list.</p>
+      </div>
+    {% endif %}
   {% elif call.tool == 'homs_echo' and data %}
     <div class="alert alert--success" role="status">
       <div>

@@ -388,6 +388,7 @@ def batch_ai_advisory():
 # Each tool the panel may call, with the only form fields it forwards as arguments.
 MCP_TOOL_ARGUMENTS = {
     "homs_pharmacy_stock_alerts": lambda form: {"alert_type": form.get("alert_type", "all")},
+    "homs_pharmacy_order_alerts": lambda form: {"alert_type": form.get("alert_type", "all")},
     "homs_echo": lambda form: {"message": form.get("message", "")},
 }
 
@@ -467,6 +468,8 @@ RAG_EXAMPLE_QUESTIONS = (
     "Who can write off an expired batch?",
     "How is the suggested reorder quantity calculated?",
     "Can the scheduled agent approve purchase orders?",
+    "Who can approve a purchase order?",
+    "When is a purchase order overdue?",
 )
 
 

@@ -126,6 +126,7 @@ Manager-changing routes require `X-HOMS-Role: Pharmacy Manager`.
 | POST | `/api/stock/receive` | Manager delivery receipt. |
 | GET, POST | `/api/purchase-orders` | List enriched orders or create. |
 | GET | `/api/purchase-orders/open` | Open orders for one medicine. |
+| GET | `/api/purchase-orders/alerts` | Read-only open-order summary (pending, AI-suggested, approved, ordered, overdue deliveries) for the MCP order-alerts tool. |
 | GET, PUT | `/api/purchase-orders/{id}` | Detail or manager edit. |
 | POST | `/api/purchase-orders/{id}/approve`, `/reject`, `/mark-ordered`, `/cancel` | Workflow transitions. |
 
@@ -203,7 +204,7 @@ flowchart LR
   M -->|GET /api/dashboard/summary| B
 ```
 
-Only `homs_pharmacy_stock_alerts` and `homs_echo` are reachable through this
+Only `homs_pharmacy_stock_alerts`, `homs_pharmacy_order_alerts` and `homs_echo` are reachable through this
 feature; other students' tools return 403 before MCP is contacted. The MCP
 server validates each tool's arguments.
 
@@ -263,7 +264,7 @@ To run it locally, start Ollama and the RAG server from the repository root
 cd student-3/backend && python3 -m unittest discover -s tests -v
 ```
 
-Tests mock every database-service call, never using port 6300. They cover CRUD validation, FEFO, receipt/write-off, AI source/fallback behaviour, dashboard bulk reads, agent duplicate/adaptation behaviour, and MCP access (disabled flag, tool allowlist, in-process MCP round trip, 502/504 mapping). RAG access tests cover the disabled flag, request validation, contract checks and failure mapping. The current suite passes **43 tests**; MCP round-trip tests are skipped if the `mcp` SDK is not installed.
+Tests mock every database-service call, never using port 6300. They cover CRUD validation, FEFO, receipt/write-off, AI source/fallback behaviour, dashboard bulk reads, agent duplicate/adaptation behaviour, and MCP access (disabled flag, tool allowlist, in-process MCP round trip, 502/504 mapping). RAG access tests cover the disabled flag, request validation, contract checks and failure mapping. The current suite passes **48 tests**; MCP round-trip tests are skipped if the `mcp` SDK is not installed.
 
 ## Troubleshooting
 

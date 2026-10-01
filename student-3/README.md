@@ -38,17 +38,18 @@ RAG directly; it calls this feature's backend, which calls the shared servers.
 
 | Feature | Frontend | Backend | Shared server |
 |---|---|---|---|
-| **Shared MCP tools** — live stock alerts and a connectivity check | "Shared MCP tools" panel | `GET /api/mcp/status`, `POST /api/mcp/call` | MCP server (8000): `homs_pharmacy_stock_alerts`, `homs_echo` |
+| **Shared MCP tools** — live stock alerts, purchase-order alerts and a connectivity check | "Shared MCP tools" panel | `GET /api/mcp/status`, `POST /api/mcp/call` | MCP server (8000): `homs_pharmacy_stock_alerts`, `homs_pharmacy_order_alerts`, `homs_echo` |
 | **Pharmacy assistant** — grounded answers with citations and a confidence category, or an insufficient-context response | "Ask the pharmacy assistant" panel | `GET /api/rag/status`, `POST /api/rag/ask` | RAG server (8100), `feature: student-3` |
 
-- Boundaries: the backend exposes only the two pharmacy MCP tools (others return
+- Boundaries: the backend exposes only the pharmacy MCP tools and `homs_echo` (others return
   403) and asks RAG only about `student-3` and shared knowledge; citations from any
   other feature are rejected. Both tools are read-only and never change inventory.
 - Configuration: `MCP_ENABLED` / `RAG_ENABLED` (default `false`), `MCP_SERVER_URL`,
   `RAG_SERVER_URL`. Docker Compose points them at `host.docker.internal`; AI-Mode also
   uses the host's Ollama. MCP, RAG and Ollama are never containerised.
 - Pharmacy knowledge base: [`ai-services/rag-server/knowledge/student-3/`](../ai-services/rag-server/knowledge/student-3/).
-- Pharmacy MCP tool: [`ai-services/mcp-server/tools/pharmacy_stock.py`](../ai-services/mcp-server/tools/pharmacy_stock.py).
+- Pharmacy MCP tools: [`pharmacy_stock.py`](../ai-services/mcp-server/tools/pharmacy_stock.py) and
+  [`pharmacy_orders.py`](../ai-services/mcp-server/tools/pharmacy_orders.py) in `ai-services/mcp-server/tools/`.
 
 Student 3 also built the shared RAG server (`ai-services/rag-server/`) and the
 agentic loop's RAG validation mode (`ai-services/agentic-loop/rag_loop.py`).
@@ -89,7 +90,7 @@ which is the CI configuration. To run without Docker, see each service's README.
 
 | What | Command (repository root) | Expected |
 |---|---|---|
-| Unit tests | `python3 -m pytest -q student-3/database/tests`, then `backend/tests`, then `frontend/tests` (each separately) | 4, 43 and 36 passing |
+| Unit tests | `python3 -m pytest -q student-3/database/tests`, then `backend/tests`, then `frontend/tests` (each separately) | 4, 48 and 40 passing |
 | MCP in the UI | "Get stock alerts via MCP"; "Test connectivity" | "Valid tool result" with counts and tables; "Connection OK" |
 | RAG in the UI | Ask "Who can write off an expired batch?" | Answer with a confidence badge and a cited source |
 | Insufficient context | Ask "What is the capital of France?" | "Not enough information…"; no answer, no sources |

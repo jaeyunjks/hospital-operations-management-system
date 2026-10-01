@@ -56,7 +56,7 @@ class MCPDisabledTests(unittest.TestCase):
         self.assertFalse(body["enabled"])
         self.assertFalse(body["reachable"])
         self.assertEqual(body["tools"], [])
-        self.assertEqual(body["allowed_tools"], ["homs_pharmacy_stock_alerts", "homs_echo"])
+        self.assertEqual(body["allowed_tools"], ["homs_pharmacy_stock_alerts", "homs_pharmacy_order_alerts", "homs_echo"])
 
     def test_call_returns_503_when_disabled(self):
         response = self.client.post("/api/mcp/call", json={"tool": "homs_pharmacy_stock_alerts"})
