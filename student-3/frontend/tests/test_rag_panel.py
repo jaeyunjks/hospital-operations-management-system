@@ -52,7 +52,9 @@ class RAGPanelTests(unittest.TestCase):
         ]
         for status, text in cases:
             with self.subTest(text=text), patch.object(api_client, 'rag_status', return_value=status):
-                self.assertIn(text, self.client.get('/rag/status').get_data(as_text=True))
+                html = self.client.get('/rag/status').get_data(as_text=True)
+                self.assertIn(text, html)
+                self.assertNotIn(status['server_url'], html)
         with patch.object(api_client, 'rag_status', side_effect=api_client.BackendError('down')):
             self.assertIn('Backend unavailable', self.client.get('/rag/status').get_data(as_text=True))
 

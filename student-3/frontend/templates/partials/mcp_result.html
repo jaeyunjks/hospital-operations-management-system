@@ -2,9 +2,14 @@
 {% set data = envelope.data %}
 <article class="mcp-result">
   <div class="mcp-result__head">
+    {% set alert_labels = {'all': 'All alerts', 'low_stock': 'Low stock', 'expiring_soon': 'Expiring soon'} %}
     <div>
-      <strong class="mcp-code">{{ call.tool }}</strong>
-      <span class="table__muted">arguments <span class="mcp-code">{{ call.arguments|tojson }}</span> · {{ call.duration_ms }} ms</span>
+      {% if call.tool == 'homs_pharmacy_stock_alerts' %}
+        <h3 class="mcp-subtitle">Stock alerts</h3>
+        <span class="table__muted">{{ alert_labels.get((call.arguments or {}).get('alert_type'), 'All alerts') }}</span>
+      {% else %}
+        <h3 class="mcp-subtitle">Connectivity check</h3>
+      {% endif %}
     </div>
     <div>
       {% if call.ok %}<span class="badge badge-success">Valid tool result</span>{% else %}<span class="badge badge-warning">Tool returned an error</span>{% endif %}
@@ -33,7 +38,7 @@
         {% else %}<tr><td colspan="5">No non-empty batches expire within 30 days.</td></tr>{% endfor %}
       </tbody></table></div>
     {% endif %}
-    <p class="table__muted">Source: {{ data.source }}</p>
+    <p class="table__muted">Live data from the pharmacy inventory.</p>
   {% elif call.tool == 'homs_echo' and data %}
     <div class="alert alert--success" role="status">
       <div>
@@ -42,9 +47,4 @@
       </div>
     </div>
   {% endif %}
-
-  <details class="mcp-raw">
-    <summary>Structured result (JSON)</summary>
-    <pre class="mcp-json">{{ envelope|tojson(indent=2) }}</pre>
-  </details>
 </article>
