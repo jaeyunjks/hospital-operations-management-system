@@ -28,7 +28,7 @@ from mcp.types import (
 )
 
 from tools.system import MAX_MESSAGE_LENGTH, TOOL_NAME, homs_echo, validation_error
-from tools import pharmacy_stock, ward_occupancy
+from tools import pharmacy_orders, pharmacy_stock, ward_occupancy
 
 SERVER_NAME = "HOMS Shared MCP Server"
 SERVER_VERSION = "0.1.0"
@@ -271,6 +271,33 @@ HOMS_PHARMACY_STOCK_TOOL = Tool(
 )
 
 
+HOMS_PHARMACY_ORDERS_TOOL = Tool(
+    name=pharmacy_orders.TOOL_NAME,
+    title="HOMS Pharmacy Order Alerts",
+    description=(
+        "Read current purchase-order alerts from Student 3's published backend API: "
+        "counts of orders pending approval (and how many are AI-suggested), approved, "
+        "ordered and overdue for delivery, with up to 10 orders per list. Read-only; "
+        "does not approve, order, receive or cancel anything."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "alert_type": {
+                "type": ["string", "null"],
+                "enum": [*pharmacy_orders.ALERT_TYPES, None],
+                "description": (
+                    "'pending_approval', 'overdue' or 'all'; omitted/null returns all. "
+                    "Counts are always returned; lists not requested are null."
+                ),
+            }
+        },
+        "additionalProperties": False,
+    },
+    output_schema=pharmacy_orders.OUTPUT_SCHEMA,
+)
+
+
 async def list_tools(
     ctx: ServerRequestContext,
     params: PaginatedRequestParams | None,
@@ -278,7 +305,8 @@ async def list_tools(
     """Advertise the connectivity and controlled cross-service read tools."""
 
     return ListToolsResult(
-        tools=[HOMS_ECHO_TOOL, HOMS_WARD_OCCUPANCY_TOOL, HOMS_PHARMACY_STOCK_TOOL]
+        tools=[HOMS_ECHO_TOOL, HOMS_WARD_OCCUPANCY_TOOL, HOMS_PHARMACY_STOCK_TOOL,
+               HOMS_PHARMACY_ORDERS_TOOL]
     )
 
 
@@ -335,6 +363,25 @@ async def call_tool(
             )
         return _result(
             await pharmacy_stock.homs_pharmacy_stock_alerts(
+                arguments.get("alert_type"),
+                api_url=config.student3_api_url,
+                timeout=config.student3_api_timeout,
+            )
+        )
+
+    if params.name == pharmacy_orders.TOOL_NAME:
+        arguments = params.arguments or {}
+        unexpected = sorted(set(arguments) - {"alert_type"})
+        if unexpected:
+            return _result(
+                pharmacy_orders.tool_error(
+                    "validation_error",
+                    "Only the optional 'alert_type' argument is accepted.",
+                    {"reason": "unexpected_fields", "fields": unexpected},
+                )
+            )
+        return _result(
+            await pharmacy_orders.homs_pharmacy_order_alerts(
                 arguments.get("alert_type"),
                 api_url=config.student3_api_url,
                 timeout=config.student3_api_timeout,
