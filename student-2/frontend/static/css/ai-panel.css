@@ -1,0 +1,142 @@
+/* ai-panel.css - care tasks and policy question panel.
+   Styles only the classes added for patient_summary.html, mcp_result.html and
+   rag_answer.html. Shared components (.panel, .alert, .status, .table, .ai-panel,
+   .textarea, buttons) keep their own styles; this file only places them.
+   Variables are consumed, never declared. No radius, shadow, gradient or
+   transition on data. Focus outlines are left to the shared :focus-visible rule. */
+
+/* ---------- Panel shell (patient_summary.html) ---------- */
+
+/* Sits below the summary panel. */
+.ai-tools { margin-top: var(--space-7); }
+
+/* Headings are h2/h3 for structure, but this is operational content: sans, not the
+   serif display face the bare h2/h3 rule would give. */
+.ai-tools .panel__title,
+.ai-tools .section-header__title,
+.rag-answer .ai-panel__title {
+  font-family: var(--font-ui);
+  letter-spacing: normal;
+  line-height: var(--leading-ui-tight);
+}
+
+/* Admission number sits at the right of the header, mono via .panel__meta. */
+.ai-tools .panel__meta { margin-left: auto; }
+
+/* Two independent sections, separated by a hairline. */
+.ai-tools__section { min-width: 0; }
+
+.ai-tools__section + .ai-tools__section {
+  margin-top: var(--space-7);
+  padding-top: var(--space-7);
+  border-top: var(--border-hair);
+}
+
+.ai-tools__section > form { margin-top: var(--space-4); }
+
+.ai-tools .textarea { width: 100%; }
+
+/* No fade on the request indicator. */
+.ai-tools .htmx-indicator { transition: none; }
+
+/* Result area. Always in the layout (it is a live region), but only takes space
+   once a fragment has been swapped in. */
+.ai-tools__result { min-width: 0; }
+.ai-tools__result:not(:empty) { margin-top: var(--space-4); }
+
+/* ---------- Fragment containers ---------- */
+
+.mcp-result,
+.rag-answer { min-width: 0; }
+
+/* ---------- Care tasks table (mcp_result.html) ---------- */
+
+/* Inside a .panel the shared rule drops the table frame; this panel body is
+   padded, so the frame comes back. */
+.mcp-result .table-wrap { border: var(--border-strong); }
+
+/* Compact rows. min-width keeps columns readable; narrower screens scroll
+   inside .table-wrap instead of clipping. */
+.table--compact { min-width: 480px; }
+
+.table--compact thead th { padding: var(--space-3) var(--space-4); }
+
+.table--compact tbody td {
+  height: auto;
+  padding: var(--space-3) var(--space-4);
+}
+
+/* Long descriptions wrap; ids and times stay on one line (.table__id, .u-nowrap). */
+.table--compact .table__name {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* "acknowledged" label beside the status. */
+.mcp-result .status + .u-label { margin-left: var(--space-3); }
+
+/* ---------- Policy answer (rag_answer.html, grounded) ---------- */
+
+.rag-answer .ai-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* Advisory line: read first, so it carries more weight than the usual disclaimer. */
+.rag-advisory {
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--color-ai-border);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-secondary);
+}
+
+/* The answer: prose in the UI face. pre-line keeps the answer's own line breaks. */
+.rag-answer__text {
+  max-width: var(--prose-max);
+  font-size: var(--size-ui);
+  line-height: var(--leading-ui);
+  color: var(--color-text-secondary);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* Basis line: source names are data, so mono. */
+.rag-basis { margin-top: 0; }
+
+.rag-source {
+  font-size: var(--size-data);
+  color: var(--color-text-data);
+  overflow-wrap: anywhere;
+}
+
+/* Category and score, a word and a number side by side, for example "Medium 0.62". */
+.rag-confidence {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: var(--border-hair);
+}
+
+.rag-confidence__value {
+  font-size: var(--size-data);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+/* ---------- Notices for states with no answer (rag_answer.html) ---------- */
+
+/* .status is nowrap by default; a notice has to wrap on narrow screens, with the
+   dot kept level with the first line. */
+.rag-notice .status {
+  align-items: flex-start;
+  white-space: normal;
+  font-size: var(--size-ui-sm);
+  line-height: var(--leading-ui-tight);
+}
+
+.rag-notice .status__dot {
+  margin-top: calc((var(--leading-ui-tight) * 1em - 6px) / 2);
+}

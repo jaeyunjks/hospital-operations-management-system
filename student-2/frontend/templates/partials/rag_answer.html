@@ -1,0 +1,114 @@
+{#
+  rag_answer.html - HTMX fragment: the RAG server's reply to a policy question.
+  Rendered by POST /ai/policy-question (app.py ai_policy_question). Fragment only.
+
+  Variables:
+    state       ok | insufficient | disabled | unavailable | error
+                (anything else shows as error)
+    answer      ok only: the answer text
+    sources     ok only: list of source document names
+    confidence  ok only: category word (low, medium or high)
+    score       ok only: number, shown beside the category as "Medium 0.62"
+
+  The other states carry no answer, so the advisory label, answer text, basis
+  and score are never rendered for them. All text is autoescaped by Jinja.
+  Nothing here uses |safe.
+#}
+
+{# A grounded answer needs real text and at least one source; otherwise it is
+   not safe to show as an answer, so it falls through to the error state. #}
+{% set has_answer = (state == 'ok'
+                     and answer is string and answer | trim
+                     and sources is sequence and sources is not string and sources | length > 0) %}
+
+{# Pick the state to show. Always one of five known values. #}
+{% if has_answer %}
+  {% set shown = 'ok' %}
+{% elif state in ['insufficient', 'disabled', 'unavailable'] %}
+  {% set shown = state %}
+{% else %}
+  {% set shown = 'error' %}
+{% endif %}
+
+{# Container: aria-live so screen readers announce whatever lands here. #}
+<div class="rag-answer rag-answer--{{ shown }}" aria-live="polite">
+
+  {% if shown == 'ok' %}
+
+    {# Grounded answer. Same AI panel pattern as patient_summary.html. #}
+    <div class="ai-panel">
+      <div class="ai-panel__header">
+        {# Origin marker: required on every AI surface. #}
+        <span class="ai-label">
+          <span class="ai-label__dot"></span>AI-generated
+        </span>
+        <h2 class="ai-panel__title">Policy answer</h2>
+      </div>
+
+      <div class="ai-panel__body">
+        {# Advisory label: stated before the answer so it is read first. #}
+        <p class="ai-disclaimer rag-advisory">Advisory only. A doctor, nurse or specialist decides.</p>
+
+        {# The answer. Plain text, escaped; line breaks are for CSS to keep. #}
+        <p class="rag-answer__text">{{ answer }}</p>
+
+        {# Basis line: the source documents, names in mono. #}
+        <p class="ai-basis rag-basis">
+          Basis:
+          {% for name in sources %}
+            <span class="rag-source u-mono">{{ name }}</span>{{ ',' if not loop.last }}
+          {% endfor %}
+        </p>
+
+        {# Category with its score beside it, in mono, for example "Medium 0.62".
+           A word and a number only: no bar, no percentage. #}
+        {% if confidence is string and confidence %}
+          <p class="rag-confidence">
+            <span class="rag-confidence__label u-label">Confidence</span>
+            <span class="rag-confidence__value u-mono">
+              {{ confidence | capitalize }}{% if score is number %} {{ '%.2f' | format(score) }}{% endif %}
+            </span>
+          </p>
+        {% endif %}
+      </div>
+    </div>
+
+  {% elif shown == 'insufficient' %}
+    {# Search worked but nothing approved covers the question. Info colour,
+       filled dot. No answer, no advisory label, no score. #}
+    <div class="alert alert--info rag-notice rag-notice--insufficient">
+      <span class="status status--info">
+        <span class="status__dot"></span>
+        <span class="alert__title">Insufficient context: no approved policy covers this question</span>
+      </span>
+    </div>
+
+  {% elif shown == 'disabled' %}
+    {# Feature switch is off. Neutral colour, hollow dot: not a fault. #}
+    <div class="alert rag-notice rag-notice--disabled">
+      <span class="status status--pending">
+        <span class="status__dot"></span>
+        <span class="alert__title">Policy search is switched off</span>
+      </span>
+    </div>
+
+  {% elif shown == 'unavailable' %}
+    {# Search server cannot be reached. Warning colour. #}
+    <div class="alert alert--warning rag-notice rag-notice--unavailable">
+      <span class="status status--warning">
+        <span class="status__dot"></span>
+        <span class="alert__title">Policy search is unavailable, the search server cannot be reached</span>
+      </span>
+    </div>
+
+  {% else %}
+    {# Backend error, backend down, or an unusable reply. Danger colour. #}
+    <div class="alert alert--danger rag-notice rag-notice--error">
+      <span class="status status--danger">
+        <span class="status__dot"></span>
+        <span class="alert__title">Policy search failed, try again</span>
+      </span>
+    </div>
+  {% endif %}
+
+</div>

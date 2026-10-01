@@ -1,0 +1,106 @@
+{#
+  mcp_result.html - HTMX fragment: result of the "open care tasks" tool.
+  Rendered by POST /ai/care-tasks (app.py ai_care_tasks). Fragment only, no page chrome.
+
+  Variables:
+    state   ok | disabled | unavailable | error   (anything else shows as error)
+    result  ok only: the tool data, {"admission_id", "count", "tasks": [...]}.
+            A bare list of tasks is also accepted.
+            Each task: task_id, description, status, due_at (may be null).
+    now     optional, "YYYY-MM-DD HH:MM" local time. Only needed to show
+            "Overdue"; without it open tasks read "Due".
+
+  All text is autoescaped by Jinja. Nothing here uses |safe.
+#}
+
+{# Take the task list from either shape; anything unusable counts as empty. #}
+{% set tasks = result.tasks if (result is mapping) else result %}
+{% set tasks = tasks if (tasks is sequence and tasks is not string) else [] %}
+
+{# Fall back to "error" so the modifier class is always one of four known values. #}
+{% set shown = state if state in ['ok', 'disabled', 'unavailable'] else 'error' %}
+
+{# Container: aria-live so screen readers announce whatever lands here. #}
+<div class="mcp-result mcp-result--{{ shown }}" aria-live="polite">
+
+  {% if shown == 'ok' %}
+
+    {% if tasks %}
+      {# Compact table. IDs and times use the shared mono cell class. #}
+      <div class="table-wrap">
+        <table class="table table--zebra table--compact">
+          <caption class="visually-hidden">Open care tasks for this admission</caption>
+          <thead>
+            <tr>
+              <th scope="col">Task</th>
+              <th scope="col">Description</th>
+              <th scope="col">Status</th>
+              <th scope="col">Due</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for t in tasks %}
+              {# Due time as 24-hour "YYYY-MM-DD HH:MM", same slice as care_tasks.html. #}
+              {% set due = ((t.due_at | string)[:16] | replace('T', ' ')) if t.due_at else none %}
+
+              {# Status wording matches care_tasks.html: Due, Overdue, Given, Refused. #}
+              {% if t.status == 'completed' %}
+                {% set word, dot = 'Given', 'status--success' %}
+              {% elif t.status == 'cancelled' %}
+                {% set word, dot = 'Refused', 'status--danger' %}
+              {% elif now is defined and now and due and due < ((now | string)[:16] | replace('T', ' ')) %}
+                {# Open and past due. Only possible when the route passes now. #}
+                {% set word, dot = 'Overdue', 'status--danger' %}
+              {% elif t.status == 'acknowledged' %}
+                {% set word, dot = 'Due', 'status--info' %}
+              {% else %}
+                {% set word, dot = 'Due', 'status--pending' %}
+              {% endif %}
+
+              <tr>
+                <td class="table__id">#{{ t.task_id }}</td>
+                <td class="table__name">{{ t.description }}</td>
+                <td>
+                  <span class="status {{ dot }}">
+                    <span class="status__dot"></span><span>{{ word }}</span>
+                  </span>
+                  {# Acknowledged is a sub-state of Due, shown as a small label. #}
+                  {% if t.status == 'acknowledged' %}
+                    <span class="u-label">acknowledged</span>
+                  {% endif %}
+                </td>
+                {# A missing due time shows a dash, muted. #}
+                <td class="table__id table__muted u-nowrap">{{ due or '—' }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+    {% else %}
+      {# Lookup worked, nothing open. #}
+      <div class="empty">
+        <span class="empty__title">No open care tasks</span>
+      </div>
+    {% endif %}
+
+  {% elif shown == 'disabled' %}
+    {# Feature switch is off. Neutral banner, not a fault. #}
+    <div class="alert">
+      <span class="alert__title">Care task lookup is switched off</span>
+    </div>
+
+  {% elif shown == 'unavailable' %}
+    {# Tool server cannot be reached. Warning banner. #}
+    <div class="alert alert--warning">
+      <span class="alert__title">Care task lookup is unavailable, the tool server cannot be reached</span>
+    </div>
+
+  {% else %}
+    {# Anything else: backend error, backend down, unexpected reply. #}
+    <div class="alert alert--danger">
+      <span class="alert__title">Care task lookup failed, try again</span>
+    </div>
+  {% endif %}
+
+</div>

@@ -68,6 +68,15 @@ BACKEND_API_URL = os.environ.get(
 # real summary or its own fallback - instead of the frontend giving up first.
 BACKEND_TIMEOUT = 40
 
+# Timeouts for the two HTMX fragment routes (/ai/...). Each must stay above the
+# backend's own limit for that call (settings.py defaults) so the frontend gives
+# up after the backend does and can show the backend's answer:
+#   care tasks: backend MCP_TIMEOUT 15s
+#   policy:     backend RAG_TIMEOUT 100s, plus up to 10s for the logging write
+# The model-backed policy answer is slow, so it gets much more time.
+CARE_TASKS_TIMEOUT = 25
+POLICY_QUESTION_TIMEOUT = 120
+
 # The only roles this feature serves. Anything else falls back to the first.
 CLINICAL_ROLES = ("doctor", "nurse", "specialist")
 DEFAULT_ROLE = CLINICAL_ROLES[0]
@@ -101,7 +110,7 @@ def _remember_role(response):
 # All of them go through here so the role header and error shape are
 # applied in exactly one place.
 # ============================================================
-def _backend(method, path, **kwargs):
+def _backend(method, path, timeout=BACKEND_TIMEOUT, **kwargs):
     """
     Call the backend API once and return (data, error).
 
@@ -116,7 +125,7 @@ def _backend(method, path, **kwargs):
 
     try:
         resp = requests.request(
-            method, url, headers=headers, timeout=BACKEND_TIMEOUT, **kwargs
+            method, url, headers=headers, timeout=timeout, **kwargs
         )
     except requests.RequestException as exc:
         return None, "Could not reach the backend: {}".format(exc)
@@ -142,9 +151,9 @@ def backend_get(path, params=None):
     return _backend("GET", path, params=params)
 
 
-def backend_post(path, json_body=None):
+def backend_post(path, json_body=None, timeout=BACKEND_TIMEOUT):
     """POST helper - form submissions use this."""
-    return _backend("POST", path, json=json_body)
+    return _backend("POST", path, timeout=timeout, json=json_body)
 
 
 # ============================================================
@@ -365,6 +374,141 @@ def patient_summary(admission_id):
         ),
     }
     return _render("patient_summary.html", data, error)
+
+
+# ============================================================
+# AI fragments (HTMX)
+# Each route returns a small HTML fragment, not a page, for HTMX to swap in.
+# The browser only ever talks to this app; this app only ever talks to the
+# backend (/api/mcp/call, /api/rag/ask) - never to the MCP or RAG servers.
+#
+# The fragment is rendered with one `state` variable:
+#     ok | disabled | unavailable | insufficient | error
+# plus the data for that state. State comes from the backend's `status` word,
+# not from guessing at HTTP codes. Every outcome is returned as HTTP 200,
+# because HTMX does not swap 4xx/5xx responses by default.
+#
+# All text shown comes from the backend and is left for Jinja to autoescape;
+# nothing here wraps it in Markup or marks it safe.
+# ============================================================
+_ERROR_UNREACHABLE = "The assistant could not be reached. Please try again."
+_ERROR_UNEXPECTED = "The assistant returned an unexpected reply."
+
+
+def _id_field(raw):
+    """
+    A form value as a whole number if it looks like one, else unchanged.
+    Form fields arrive as strings but the backend only accepts real integers.
+    Anything that is not plain digits is passed on as-is so the backend's own
+    validation rejects it (the rules live there, not here).
+    """
+    text = (raw or "").strip()
+    if text.isascii() and text.isdigit():
+        try:
+            return int(text)
+        except ValueError:  # absurdly long digit string
+            pass
+    return text
+
+
+def _error_details(data):
+    """(code, message) from a backend error body; both are None if absent."""
+    err = data.get("error") if isinstance(data, dict) else None
+    if not isinstance(err, dict):
+        return None, None
+    code, message = err.get("code"), err.get("message")
+    return (
+        code if isinstance(code, str) else None,
+        message if isinstance(message, str) else None,
+    )
+
+
+def _fragment(template_name, state, **data):
+    """Render a fragment with `state` plus its data - no page chrome."""
+    return render_template(template_name, state=state, **data)
+
+
+def _error_fragment(template_name, data=None, unreachable=False):
+    """The 'error' state, with the backend's own code/message when it gave one."""
+    code, message = _error_details(data)
+    if unreachable:
+        message = _ERROR_UNREACHABLE
+    return _fragment(
+        template_name, "error", code=code, message=message or _ERROR_UNEXPECTED
+    )
+
+
+@app.post("/ai/care-tasks")
+def ai_care_tasks():
+    """
+    Open care tasks for one admission, via the backend's MCP route.
+    Form field: admission_id.
+    """
+    data, error = backend_post(
+        "/api/mcp/call",
+        json_body={
+            "tool": "homs_open_care_tasks",
+            "arguments": {"admission_id": _id_field(request.form.get("admission_id"))},
+        },
+        timeout=CARE_TASKS_TIMEOUT,
+    )
+
+    template = "partials/mcp_result.html"
+    # No usable JSON at all: backend down, timed out, or not speaking JSON.
+    if not isinstance(data, dict):
+        return _error_fragment(template, unreachable=True)
+
+    status = data.get("status")
+    if status == "ok" and not error and "result" in data:
+        return _fragment(template, "ok", result=data["result"])
+    if status in ("disabled", "unavailable"):
+        _, message = _error_details(data)
+        return _fragment(template, status, message=message)
+    # "error" from the backend, or a reply we do not recognise.
+    return _error_fragment(template, data)
+
+
+@app.post("/ai/policy-question")
+def ai_policy_question():
+    """
+    Policy question answered by the backend's RAG route.
+    Form fields: question, admission_id, patient_id (the ids are optional;
+    when both are given the backend logs a grounded answer for review).
+    """
+    body = {"question": request.form.get("question", "")}
+    for field in ("admission_id", "patient_id"):
+        value = _id_field(request.form.get(field))
+        if value != "":  # left blank: omit it, the backend treats it as absent
+            body[field] = value
+
+    data, error = backend_post(
+        "/api/rag/ask", json_body=body, timeout=POLICY_QUESTION_TIMEOUT
+    )
+
+    template = "partials/rag_answer.html"
+    if not isinstance(data, dict):
+        return _error_fragment(template, unreachable=True)
+
+    status = data.get("status")
+    if status in ("answered", "insufficient_context") and not error:
+        answer = data.get("answer")
+        sources = data.get("sources")
+        if not isinstance(answer, str) or not isinstance(sources, list):
+            return _error_fragment(template)
+        details = {
+            "answer": answer,
+            "sources": [s for s in sources if isinstance(s, str)],
+            "confidence": data.get("confidence"),
+            "score": data.get("score"),
+            "logged": data.get("logged") is True,
+            "summary_id": data.get("summary_id"),
+        }
+        state = "ok" if status == "answered" else "insufficient"
+        return _fragment(template, state, **details)
+    if status in ("disabled", "unavailable"):
+        _, message = _error_details(data)
+        return _fragment(template, status, message=message)
+    return _error_fragment(template, data)
 
 
 # ------------------------------------------------------------

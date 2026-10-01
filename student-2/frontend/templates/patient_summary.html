@@ -52,6 +52,8 @@
 
   <link rel="stylesheet" href="/static/shared/css/main.css">
   <link rel="stylesheet" href="/static/css/clinical-staff.css">
+  {# Styles for the care tasks and policy question panel. #}
+  <link rel="stylesheet" href="/static/css/ai-panel.css">
   <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   <script src="https://unpkg.com/htmx.org@1.9.12/dist/ext/json-enc.js"></script>
 </head>
@@ -279,6 +281,105 @@
               </div>
             </div>
           {% endif %}
+          </div>
+
+          {#
+            ============================================== care tasks and policy
+            Second panel, below the summary and outside #review-region so the
+            summary's own swaps never touch it. Two independent forms; each
+            posts to its own frontend route (never to the backend directly),
+            swaps the returned fragment into its own result area, and disables
+            its own button while the request runs.
+
+              POST /ai/care-tasks       form field: admission_id
+                                        -> partials/mcp_result.html
+              POST /ai/policy-question  form fields: question, admission_id,
+                                        patient_id
+                                        -> partials/rag_answer.html
+
+            patient_id: this page is not given one directly. It is read from
+            the first surgery request row for this admission, which carries
+            it. With no such row the field stays empty; the answer still
+            comes back, it just is not logged for review.
+          #}
+          {% set surgery_rows = (data.surgery_requests.surgery_requests
+                                 if (data and data.surgery_requests) else none) or [] %}
+          {% set patient_id = surgery_rows[0].patient_id if surgery_rows else none %}
+
+          <div class="panel ai-tools">
+            <div class="panel__header">
+              <h2 class="panel__title">Care tasks and policy questions</h2>
+              {# Admission number in mono, same slot the summary panel uses for its id. #}
+              {% if admission_id is not none %}
+                <span class="panel__meta">Admission {{ admission_id }}</span>
+              {% endif %}
+            </div>
+
+            <div class="panel__body ai-tools__body">
+
+              {# ---- Open care tasks ---- #}
+              <section class="ai-tools__section" aria-labelledby="care-tasks-title">
+                <h3 class="section-header__title" id="care-tasks-title">Open care tasks</h3>
+
+                <form class="stack"
+                      hx-post="/ai/care-tasks"
+                      hx-target="#care-tasks-result"
+                      hx-swap="innerHTML"
+                      hx-disabled-elt="find button">
+                  {# The only input: which admission to look up. #}
+                  <input type="hidden" name="admission_id"
+                         value="{{ admission_id if admission_id is not none else '' }}">
+                  <div class="row">
+                    <button class="btn-secondary" type="submit">Get open care tasks</button>
+                    {# Shown only while this form's request is running. #}
+                    <span class="htmx-indicator u-label">Loading care tasks…</span>
+                  </div>
+                </form>
+
+                {# Result area. The fragment lands here; announced politely. #}
+                <div class="ai-tools__result" id="care-tasks-result" aria-live="polite"></div>
+              </section>
+
+              {# ---- Policy question ---- #}
+              <section class="ai-tools__section" aria-labelledby="policy-question-title">
+                <h3 class="section-header__title" id="policy-question-title">Policy question</h3>
+
+                <form class="stack"
+                      hx-post="/ai/policy-question"
+                      hx-target="#policy-question-result"
+                      hx-swap="innerHTML"
+                      hx-disabled-elt="find button">
+                  <label class="field">
+                    <span class="field__label">Question</span>
+                    {# 500 is the backend's limit; the backend still does the checking. #}
+                    <textarea class="textarea"
+                              name="question"
+                              id="policy-question-text"
+                              rows="3"
+                              maxlength="500"
+                              required
+                              aria-describedby="policy-question-hint"></textarea>
+                    <span class="field__hint" id="policy-question-hint">Policy questions only. Do not enter patient names or identifiers</span>
+                  </label>
+
+                  {# Sent so a grounded answer can be logged for review. #}
+                  <input type="hidden" name="admission_id"
+                         value="{{ admission_id if admission_id is not none else '' }}">
+                  <input type="hidden" name="patient_id"
+                         value="{{ patient_id if patient_id is number else '' }}">
+
+                  <div class="row">
+                    <button class="btn-secondary" type="submit">Ask policy question</button>
+                    {# Shown only while this form's request is running. #}
+                    <span class="htmx-indicator u-label">Searching policy…</span>
+                  </div>
+                </form>
+
+                {# Result area. The fragment lands here; announced politely. #}
+                <div class="ai-tools__result" id="policy-question-result" aria-live="polite"></div>
+              </section>
+
+            </div>
           </div>
 
         </div>
