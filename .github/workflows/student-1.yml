@@ -4,15 +4,21 @@ on:
   push:
     paths:
       - "student-1/**"
+      - "docker-compose.yml"
       - ".github/workflows/student-1.yml"
   pull_request:
     paths:
       - "student-1/**"
+      - "docker-compose.yml"
       - ".github/workflows/student-1.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  MCP_ENABLED: "false"
+  STUDENT1_MCP_ENABLED: "false"
 
 jobs:
   validate:

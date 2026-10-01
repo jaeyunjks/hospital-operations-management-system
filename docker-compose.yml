@@ -378,6 +378,8 @@ services:
       MCP_TIMEOUT: "${STUDENT1_MCP_TIMEOUT:-15}"
       AUTH_ENABLED: 0
       FLASK_DEBUG: 0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - student-1-database
     ports:
