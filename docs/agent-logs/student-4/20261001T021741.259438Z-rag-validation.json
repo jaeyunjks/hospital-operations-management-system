@@ -1,0 +1,404 @@
+{
+  "schema_version": 1,
+  "release": "R1",
+  "mode": "rag",
+  "run_id": "20261001T021741.259438Z",
+  "component": "student-4",
+  "model": "llama3.1:8b",
+  "ollama_url": "http://127.0.0.1:11434",
+  "rag_url": "http://127.0.0.1:8100",
+  "documents": [
+    {
+      "source": "student-4/ai-suggestions-and-boundaries.md",
+      "feature": "student-4",
+      "title": "AI Room Suggestions and Their Boundaries",
+      "sections": [
+        "What the AI does and does not do",
+        "How a suggestion is produced",
+        "Classification is deterministic",
+        "Fallback when the model is unavailable"
+      ],
+      "chunks": 4
+    },
+    {
+      "source": "student-4/bed-allocation-and-conflicts.md",
+      "feature": "student-4",
+      "title": "Bed Allocation and Double-Booking Prevention",
+      "sections": [
+        "What an arrangement is",
+        "Where the care category comes from",
+        "The double-booking rule",
+        "How bed and room status follow an arrangement",
+        "Changing an arrangement"
+      ],
+      "chunks": 5
+    },
+    {
+      "source": "student-4/bed-shortage-cases.md",
+      "feature": "student-4",
+      "title": "Bed Shortage Cases",
+      "sections": [
+        "When a case is opened",
+        "Options offered for a case",
+        "Recording the decision"
+      ],
+      "chunks": 3
+    },
+    {
+      "source": "student-4/room-bed-overview.md",
+      "feature": "student-4",
+      "title": "Room and Bed Management Overview",
+      "sections": [
+        "What this feature covers",
+        "Rooms, beds and room types",
+        "Soft delete and audit trail",
+        "Permissions"
+      ],
+      "chunks": 4
+    },
+    {
+      "source": "student-4/transfers-and-release.md",
+      "feature": "student-4",
+      "title": "Transfers, Release and Discharge",
+      "sections": [
+        "Releasing a bed",
+        "Transferring a patient between beds",
+        "Cancelling"
+      ],
+      "chunks": 3
+    },
+    {
+      "source": "student-4/ward-occupancy-and-theatres.md",
+      "feature": "student-4",
+      "title": "Ward Occupancy and the Theatre Board",
+      "sections": [
+        "Ward occupancy",
+        "Sharing occupancy through MCP",
+        "The theatre board"
+      ],
+      "chunks": 3
+    }
+  ],
+  "plan": {
+    "analysis": "Knowledge base covers student-4 feature, including AI room suggestions, bed allocation, bed shortage cases, room and bed management, transfers, and ward occupancy.",
+    "answerable": [
+      "What does the AI do and not do in the student-4 feature?",
+      "How is a bed arrangement produced in the student-4 feature?",
+      "What happens when the model is unavailable in the student-4 feature?"
+    ],
+    "out_of_scope": "What is the hospital's policy on patient confidentiality?"
+  },
+  "plan_error": null,
+  "cases": [
+    {
+      "id": "Q1",
+      "kind": "answerable",
+      "question": "What does the AI do and not do in the student-4 feature?",
+      "origin": "model"
+    },
+    {
+      "id": "Q2",
+      "kind": "answerable",
+      "question": "How is a bed arrangement produced in the student-4 feature?",
+      "origin": "model"
+    },
+    {
+      "id": "Q3",
+      "kind": "answerable",
+      "question": "What happens when the model is unavailable in the student-4 feature?",
+      "origin": "model"
+    },
+    {
+      "id": "Q4",
+      "kind": "out_of_scope",
+      "question": "What is the hospital's policy on patient confidentiality?",
+      "origin": "model"
+    },
+    {
+      "id": "Q5",
+      "kind": "out_of_scope",
+      "question": "What is the capital city of France?",
+      "origin": "control"
+    }
+  ],
+  "rounds": [
+    {
+      "round": 1,
+      "results": [
+        {
+          "id": "Q1",
+          "kind": "answerable",
+          "question": "What does the AI do and not do in the student-4 feature?",
+          "origin": "model",
+          "observation": {
+            "error": {
+              "http_status": 503,
+              "code": "model_unavailable",
+              "message": "Ollama model 'llama3.2:3b' is not installed; run: ollama pull llama3.2:3b"
+            }
+          },
+          "check": {
+            "passed": false,
+            "reasons": [
+              "RAG server error: model_unavailable"
+            ]
+          }
+        },
+        {
+          "id": "Q2",
+          "kind": "answerable",
+          "question": "How is a bed arrangement produced in the student-4 feature?",
+          "origin": "model",
+          "observation": {
+            "error": {
+              "http_status": 503,
+              "code": "model_unavailable",
+              "message": "Ollama model 'llama3.2:3b' is not installed; run: ollama pull llama3.2:3b"
+            }
+          },
+          "check": {
+            "passed": false,
+            "reasons": [
+              "RAG server error: model_unavailable"
+            ]
+          }
+        },
+        {
+          "id": "Q3",
+          "kind": "answerable",
+          "question": "What happens when the model is unavailable in the student-4 feature?",
+          "origin": "model",
+          "observation": {
+            "error": {
+              "http_status": 503,
+              "code": "model_unavailable",
+              "message": "Ollama model 'llama3.2:3b' is not installed; run: ollama pull llama3.2:3b"
+            }
+          },
+          "check": {
+            "passed": false,
+            "reasons": [
+              "RAG server error: model_unavailable"
+            ]
+          }
+        },
+        {
+          "id": "Q4",
+          "kind": "out_of_scope",
+          "question": "What is the hospital's policy on patient confidentiality?",
+          "origin": "model",
+          "observation": {
+            "error": {
+              "http_status": 503,
+              "code": "model_unavailable",
+              "message": "Ollama model 'llama3.2:3b' is not installed; run: ollama pull llama3.2:3b"
+            }
+          },
+          "check": {
+            "passed": false,
+            "reasons": [
+              "RAG server error: model_unavailable"
+            ]
+          }
+        },
+        {
+          "id": "Q5",
+          "kind": "out_of_scope",
+          "question": "What is the capital city of France?",
+          "origin": "control",
+          "observation": {
+            "status": "insufficient_context",
+            "confidence": "none",
+            "reason": "no_relevant_context",
+            "answer": "The knowledge base does not contain enough relevant information to answer this question, so no answer was generated.",
+            "citations": [],
+            "retrieval": {
+              "top_score": 0.5014,
+              "threshold": 0.62,
+              "considered": 4,
+              "relevant": 0
+            },
+            "duration_ms": 4628
+          },
+          "check": {
+            "passed": true,
+            "reasons": []
+          }
+        }
+      ],
+      "adapt": {
+        "result": {
+          "assessment": "The RAG server was unavailable for all answerable cases, and one out_of_scope case passed due to insufficient context.",
+          "retry": [
+            {
+              "id": "Q1",
+              "question": "What does the AI do and not do in the student-4 feature, specifically in terms of its availability and functionality?"
+            },
+            {
+              "id": "Q2",
+              "question": "How is a bed arrangement produced in the student-4 feature, particularly in the context of the model's availability?"
+            },
+            {
+              "id": "Q3",
+              "question": "What happens when the model is unavailable in the student-4 feature, and how does this impact the AI's functionality?"
+            }
+          ],
+          "next_action": "Check the RAG server status and retry the validation loop.",
+          "outcome": "fail"
+        },
+        "error": null
+      }
+    },
+    {
+      "round": 2,
+      "results": [
+        {
+          "id": "Q1-retry",
+          "retry_of": "Q1",
+          "kind": "answerable",
+          "question": "What does the AI do and not do in the student-4 feature, specifically in terms of its availability and functionality?",
+          "origin": "adapt",
+          "observation": {
+            "error": {
+              "http_status": 503,
+              "code": "model_unavailable",
+              "message": "Ollama model 'llama3.2:3b' is not installed; run: ollama pull llama3.2:3b"
+            }
+          },
+          "check": {
+            "passed": false,
+            "reasons": [
+              "RAG server error: model_unavailable"
+            ]
+          }
+        },
+        {
+          "id": "Q2-retry",
+          "retry_of": "Q2",
+          "kind": "answerable",
+          "question": "How is a bed arrangement produced in the student-4 feature, particularly in the context of the model's availability?",
+          "origin": "adapt",
+          "observation": {
+            "error": {
+              "http_status": 503,
+              "code": "model_unavailable",
+              "message": "Ollama model 'llama3.2:3b' is not installed; run: ollama pull llama3.2:3b"
+            }
+          },
+          "check": {
+            "passed": false,
+            "reasons": [
+              "RAG server error: model_unavailable"
+            ]
+          }
+        },
+        {
+          "id": "Q3-retry",
+          "retry_of": "Q3",
+          "kind": "answerable",
+          "question": "What happens when the model is unavailable in the student-4 feature, and how does this impact the AI's functionality?",
+          "origin": "adapt",
+          "observation": {
+            "error": {
+              "http_status": 503,
+              "code": "model_unavailable",
+              "message": "Ollama model 'llama3.2:3b' is not installed; run: ollama pull llama3.2:3b"
+            }
+          },
+          "check": {
+            "passed": false,
+            "reasons": [
+              "RAG server error: model_unavailable"
+            ]
+          }
+        }
+      ],
+      "adapt": {
+        "result": {
+          "assessment": "The RAG server was unavailable for all answerable cases, resulting in a failure to provide evidence.",
+          "retry": [],
+          "next_action": "Check the RAG server status and ensure it is functioning correctly.",
+          "outcome": "fail"
+        },
+        "error": null
+      }
+    }
+  ],
+  "summary": {
+    "verdict": "fail",
+    "cases": 5,
+    "passed": 1,
+    "failed": [
+      "Q1",
+      "Q2",
+      "Q3",
+      "Q4"
+    ],
+    "notes": [],
+    "final": [
+      {
+        "id": "Q1",
+        "kind": "answerable",
+        "question": "What does the AI do and not do in the student-4 feature, specifically in terms of its availability and functionality?",
+        "status": null,
+        "confidence": null,
+        "citations": [],
+        "passed": false,
+        "reasons": [
+          "RAG server error: model_unavailable"
+        ],
+        "retried": true
+      },
+      {
+        "id": "Q2",
+        "kind": "answerable",
+        "question": "How is a bed arrangement produced in the student-4 feature, particularly in the context of the model's availability?",
+        "status": null,
+        "confidence": null,
+        "citations": [],
+        "passed": false,
+        "reasons": [
+          "RAG server error: model_unavailable"
+        ],
+        "retried": true
+      },
+      {
+        "id": "Q3",
+        "kind": "answerable",
+        "question": "What happens when the model is unavailable in the student-4 feature, and how does this impact the AI's functionality?",
+        "status": null,
+        "confidence": null,
+        "citations": [],
+        "passed": false,
+        "reasons": [
+          "RAG server error: model_unavailable"
+        ],
+        "retried": true
+      },
+      {
+        "id": "Q4",
+        "kind": "out_of_scope",
+        "question": "What is the hospital's policy on patient confidentiality?",
+        "status": null,
+        "confidence": null,
+        "citations": [],
+        "passed": false,
+        "reasons": [
+          "RAG server error: model_unavailable"
+        ],
+        "retried": false
+      },
+      {
+        "id": "Q5",
+        "kind": "out_of_scope",
+        "question": "What is the capital city of France?",
+        "status": "insufficient_context",
+        "confidence": "none",
+        "citations": [],
+        "passed": true,
+        "reasons": [],
+        "retried": false
+      }
+    ]
+  }
+}
