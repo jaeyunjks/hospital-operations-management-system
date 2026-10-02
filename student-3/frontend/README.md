@@ -146,8 +146,18 @@ status badge loads after the page, so a slow or stopped MCP server never delays
 the dashboard.
 
 - **Get stock alerts via MCP** calls `homs_pharmacy_stock_alerts` with the
-  chosen `alert_type` and renders its counts, low-stock and expiring-batch
-  tables, plus the raw structured result.
+  chosen `alert_type` and shows six clickable figures. Clicking one shows only
+  that figure's details underneath (click again to close): low stock and
+  batches expiring within 30 or 7 days come from the MCP result; active
+  medicines, expired batches and pending approvals load their first 10 rows
+  from the backend via `/mcp/details/<kind>` and link to the full page.
+  With the "Low stock" alert type the result opens on the low-stock list, and
+  with "Expiring soon" on batches expiring within 7 days, then those expiring
+  in 8–30 days, without a click.
+- **Get purchase-order alerts via MCP** calls `homs_pharmacy_order_alerts` and
+  shows five clickable figures (pending approval, AI-suggested pending,
+  approved, ordered, overdue deliveries); "Pending approval" and "Overdue
+  deliveries" open on their own list.
 - **Test connectivity** calls `homs_echo` with the entered message.
 
 `/mcp/call` forwards only the form fields each tool accepts (`alert_type` or
@@ -180,7 +190,7 @@ The shared loading indicator shows elapsed time while the local model works.
 cd student-3/frontend && python3 -m unittest discover -s tests -v
 ```
 
-Tests mock `api_client`, so they never use a live backend on port 5300. They cover rendering routes, dashboard data, manager gates, agent panel output, MCP panel rendering and argument forwarding, RAG answer/refusal/error rendering, and timeout/connection-error display. The current suite passes **25 tests**.
+Tests mock `api_client`, so they never use a live backend on port 5300. They cover rendering routes, dashboard data, manager gates, agent panel output, MCP panel rendering and argument forwarding, RAG answer/refusal/error rendering, and timeout/connection-error display. The current suite passes **40 tests**.
 
 ## Troubleshooting
 

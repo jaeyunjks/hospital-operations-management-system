@@ -35,7 +35,7 @@ def assert_validation_error(result, reason):
     assert result.structured_content["error"]["details"]["reason"] == reason
 
 
-def test_registers_echo_ward_occupancy_and_pharmacy_stock():
+def test_registers_all_shared_tools():
     async def discover():
         async with Client(server_module.mcp_server) as client:
             return await client.list_tools()
@@ -46,6 +46,7 @@ def test_registers_echo_ward_occupancy_and_pharmacy_stock():
         "homs_echo",
         "homs_ward_occupancy_status",
         "homs_pharmacy_stock_alerts",
+        "homs_pharmacy_order_alerts",
     ]
     assert listing.tools[0].input_schema["required"] == ["message"]
     assert listing.tools[0].input_schema["properties"]["message"]["maxLength"] == 200

@@ -52,7 +52,9 @@ class RAGPanelTests(unittest.TestCase):
         ]
         for status, text in cases:
             with self.subTest(text=text), patch.object(api_client, 'rag_status', return_value=status):
-                self.assertIn(text, self.client.get('/rag/status').get_data(as_text=True))
+                html = self.client.get('/rag/status').get_data(as_text=True)
+                self.assertIn(text, html)
+                self.assertNotIn(status['server_url'], html)
         with patch.object(api_client, 'rag_status', side_effect=api_client.BackendError('down')):
             self.assertIn('Backend unavailable', self.client.get('/rag/status').get_data(as_text=True))
 
@@ -61,10 +63,22 @@ class RAGPanelTests(unittest.TestCase):
             html = self.client.post('/rag/ask', data={'question': '  Who can   write off a batch? '}).get_data(as_text=True)
         ask.assert_called_once_with('Who can write off a batch?')
         for text in ('High confidence', 'Only a Pharmacy Manager can write off a batch [S1].', '[S1]',
-                     'Batch Expiry and Write-Off', 'Writing off a batch', 'student-3/expiry-and-write-off.md',
-                     'similarity 0.84', '4/4 sections relevant', 'threshold 0.62', 'nomic-embed-text + llama3.2:3b'):
+                     'Batch Expiry and Write-Off', 'Writing off a batch', 'Sources'):
             self.assertIn(text, html)
+        for hidden in ('student-3/expiry-and-write-off.md', 'similarity', 'sections relevant', 'threshold',
+                       'nomic-embed-text', 'llama3.2:3b', '2323 ms'):
+            self.assertNotIn(hidden, html)
         self.assertIn('write off a &lt;batch&gt;.', html)
+
+    def test_snippet_markdown_is_cleaned(self):
+        answer = {**ANSWERED, 'answer': 'Only `pending_approval` orders [S1].',
+                  'citations': [{**ANSWERED['citations'][0], 'snippet': 'Runs a cycle: - **Plan** — reads stock.'}]}
+        with patch.object(api_client, 'rag_ask', return_value=answer):
+            html = self.client.post('/rag/ask', data={'question': 'q'}).get_data(as_text=True)
+        self.assertIn('Runs a cycle: Plan — reads stock.', html)
+        self.assertNotIn('**', html)
+        self.assertIn('Only pending_approval orders [S1].', html)
+        self.assertNotIn('`', html)
 
     def test_confidence_badges(self):
         for confidence, badge in (('high', 'badge-success'), ('medium', 'badge-info'), ('low', 'badge-warning')):
@@ -77,8 +91,10 @@ class RAGPanelTests(unittest.TestCase):
         with patch.object(api_client, 'rag_ask', return_value=REFUSED):
             html = self.client.post('/rag/ask', data={'question': 'What is the capital of France?'}).get_data(as_text=True)
         for text in ('Insufficient context', 'Not enough information in the pharmacy knowledge base',
-                     'best match 0.50, below the 0.62 threshold', 'the model was not asked to answer'):
+                     'No part of the knowledge base was relevant enough to answer it.'):
             self.assertIn(text, html)
+        for hidden in ('best match', 'threshold', '0.50', ' ms'):
+            self.assertNotIn(hidden, html)
         self.assertNotIn('Sources', html)
         self.assertNotIn('confidence</span>', html)
 
@@ -93,7 +109,7 @@ class RAGPanelTests(unittest.TestCase):
         with patch.object(api_client, 'rag_ask', return_value=minimal):
             response = self.client.post('/rag/ask', data={'question': 'q'})
         self.assertEqual(response.status_code, 200)
-        self.assertIn('21 ms', response.get_data(as_text=True))
+        self.assertIn('Not enough information in the pharmacy knowledge base', response.get_data(as_text=True))
 
     def test_blank_question_is_not_sent(self):
         with patch.object(api_client, 'rag_ask', side_effect=AssertionError('sent')):

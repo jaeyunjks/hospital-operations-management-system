@@ -59,6 +59,18 @@ class FrontendRouteSmokeTests(unittest.TestCase):
             with self.subTest(route=route):
                 self.assertEqual(self.client.get(route).status_code, 200)
 
+    def test_header_highlights_only_the_current_page(self):
+        import re
+        pages = {"/": "Dashboard", "/medicines": "Medicines", "/batches": "Batches &amp; Expiry",
+                 "/movements": "Stock Movements", "/purchase-orders": "Purchase Orders", "/suppliers": "Suppliers"}
+        for route, label in pages.items():
+            with self.subTest(route=route):
+                html = self.client.get(route).get_data(as_text=True)
+                current = re.findall(r'<a class="nav-link" href="([^"]+)" aria-current="page">([^<]+)</a>', html)
+                self.assertEqual(current, [(route, label)])
+                self.assertIn('class="btn btn-secondary btn-compact app-header__role-button" href="/demo"', html)
+                self.assertIn('<img class="app-header__brand-logo" src="/shared/assets/images/hospital-operations-logo.png"', html)
+
     def test_non_manager_has_no_mutating_controls(self):
         with self.client.session_transaction() as session:
             session["demo_identity"]["role"] = app.ROLE_PHARMACIST

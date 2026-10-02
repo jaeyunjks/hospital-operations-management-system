@@ -52,7 +52,9 @@ class MCPPanelTests(unittest.TestCase):
         ]
         for status, text in cases:
             with self.subTest(text=text), patch.object(api_client, 'mcp_status', return_value=status):
-                self.assertIn(text, self.client.get('/mcp/status').get_data(as_text=True))
+                html = self.client.get('/mcp/status').get_data(as_text=True)
+                self.assertIn(text, html)
+                self.assertNotIn(status['server_url'], html)
         with patch.object(api_client, 'mcp_status', side_effect=api_client.BackendError('down')):
             self.assertIn('Backend unavailable', self.client.get('/mcp/status').get_data(as_text=True))
 
@@ -62,8 +64,10 @@ class MCPPanelTests(unittest.TestCase):
                 'tool': 'homs_pharmacy_stock_alerts', 'alert_type': 'low_stock', 'message': 'ignored'}).get_data(as_text=True)
         call.assert_called_once_with('homs_pharmacy_stock_alerts', {'alert_type': 'low_stock'})
         for text in ('Valid tool result', 'Paracetamol 500mg', 'MedSupply Australia', '1 of 26 shown',
-                     'PHM-26026', 'student-3-pharmacy-api', 'Structured result (JSON)', '42 ms'):
+                     'PHM-26026', 'Stock alerts', 'All alerts', 'Live data from the pharmacy inventory'):
             self.assertIn(text, html)
+        for hidden in ('Structured result', 'student-3-pharmacy-api', 'arguments', '42 ms', '"schema_version"'):
+            self.assertNotIn(hidden, html)
         self.assertIn('Salbutamol &lt;inhaler&gt;', html)
         self.assertNotIn('Salbutamol <inhaler>', html)
 
@@ -74,6 +78,7 @@ class MCPPanelTests(unittest.TestCase):
             html = self.client.post('/mcp/call', data={'tool': 'homs_echo', 'message': 'hi',
                                                        'alert_type': 'all'}).get_data(as_text=True)
         call.assert_called_once_with('homs_echo', {'message': 'hi'})
+        self.assertIn('Connectivity check', html)
         self.assertIn('Connection OK', html)
         self.assertIn('returned your message unchanged in 3 ms: <strong>hi</strong>', html)
 

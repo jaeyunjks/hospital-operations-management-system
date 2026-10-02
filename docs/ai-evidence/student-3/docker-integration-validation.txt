@@ -1,27 +1,19 @@
 # Student 3 - Docker Compose integration validation
-# 2026-09-28T07:17:38Z
-# Captured with MCP and RAG enabled for the demo (MCP_ENABLED=true / RAG_ENABLED=true below).
-# Compose now defaults both to false so CI never uses them; enable them with
-# STUDENT3_MCP_ENABLED=true STUDENT3_RAG_ENABLED=true docker compose up.
+# 2026-10-01T05:44:26Z
+# Captured with the demo switches: STUDENT3_MCP_ENABLED=true STUDENT3_RAG_ENABLED=true docker compose up
+# (Compose defaults both to false so CI never uses them.)
 
 ## Running containers (docker compose ps)
-SERVICE              STATUS                        PORTS
-homs-homepage        Up About a minute (healthy)   3000->80/tcp
-student-2-backend    Up 59 seconds (healthy)       5200->5200/tcp
-student-2-database   Up About a minute (healthy)   6200->6200/tcp
-student-2-frontend   Up 54 seconds (healthy)       3200->3200/tcp
-student5-backend     Up 59 seconds (healthy)       5500->5500/tcp
-student5-database    Up About a minute (healthy)   6500->6500/tcp
-student5-frontend    Up 54 seconds (healthy)       3500->3500/tcp
-student-3-backend    Up 54 seconds (healthy)       5300->5300/tcp
-student-3-database   Up About a minute (healthy)   6300->6300/tcp
-student-3-frontend   Up 44 seconds (healthy)       3300->3300/tcp
-student-4-backend    Up 54 seconds (healthy)       5400->5400/tcp
-student-4-database   Up About a minute (healthy)   6400->6400/tcp
-student-4-frontend   Up 44 seconds (healthy)       3400->3400/tcp
-student-1-backend    Up About a minute             5100->5100/tcp
-student-1-database   Up About a minute (healthy)   6100->6100/tcp
-student-1-frontend   Up About a minute (healthy)   3100->3100/tcp
+SERVICE              STATUS                 PORTS
+homs-homepage        Up 2 days (healthy)    3000->80/tcp
+student-2-database   Up 2 days (healthy)    6200->6200/tcp
+student5-backend     Up 3 hours (healthy)   5500->5500/tcp
+student5-database    Up 3 hours (healthy)   6500->6500/tcp
+student5-frontend    Up 3 hours (healthy)   3500->3500/tcp
+student-3-backend    Up 2 hours (healthy)   5300->5300/tcp
+student-3-database   Up 2 days (healthy)    6300->6300/tcp
+student-3-frontend   Up 2 hours (healthy)   3300->3300/tcp
+student-1-backend    Up 2 days              5100->5100/tcp
 
 ## Student 3 backend container configuration (MCP/RAG/AI-Mode point at the host)
 MCP_ENABLED=true
@@ -46,26 +38,27 @@ RAG_TIMEOUT=100
     "data": {
       "ok": true
     },
-    "duration_seconds": 0.21659429199999636,
+    "duration_seconds": 0.2764967080001952,
     "error": null,
     "eval_count": 6,
-    "eval_duration_ns": 117495000,
+    "eval_duration_ns": 112757000,
     "model": "llama3.2:3b",
     "ok": true,
     "outcome": "ok",
     "prompt_name": "smoke",
     "prompt_version": "v1",
     "retried": false,
-    "tokens_per_second": 51.06600280863015
+    "tokens_per_second": 53.2117739918586
   },
   "reachable": true,
-  "round_trip_seconds": 0.217
+  "round_trip_seconds": 0.277
 }
 
 ## MCP: GET /api/mcp/status
 {
   "allowed_tools": [
     "homs_pharmacy_stock_alerts",
+    "homs_pharmacy_order_alerts",
     "homs_echo"
   ],
   "enabled": true,
@@ -73,12 +66,18 @@ RAG_TIMEOUT=100
   "server_url": "http://host.docker.internal:8000/mcp",
   "tools": [
     "homs_echo",
-    "homs_pharmacy_stock_alerts"
+    "homs_pharmacy_stock_alerts",
+    "homs_pharmacy_order_alerts"
   ]
 }
 
 ## MCP: POST /api/mcp/call homs_pharmacy_stock_alerts {alert_type: expiring_soon}
-{"arguments":{"alert_type":"expiring_soon"},"duration_ms":38,"ok":true,"outcome":"ok","result":{"data":{"alert_type":"expiring_soon","counts":{"active_medicines":132,"expired_batches":22,"expiring_within_30_days":28,"expiring_within_7_days":8,"low_stock":26,"pending_approvals":16},"expiring_soon":[{"batch_number":"PHM-26034","days_until_expiry":0,"expiry_date":"2026-09-28","medicine_name":"Morphine 10mg/mL (034)","quantity_remaining":230},{"batch_number":"PHM-26035","days_until_expiry":1,"expiry_date":"2026-09-29","medicine_name":"Normal Saline Flush 10mL (035)","quantity_remaining":50},{"batch_number":"PHM-26036","days_until_expiry":2,"expiry_date":"2026-09-30","medicine_name":"Oseltamivir 75mg (036)","quantity_remaining":80},{"batch_number":"PHM-26037","days_until_expiry":3,"expiry_date":"2026-10-01","medicine_name":"Metoprolol 25mg (037)","quantity_remaining":110},{"batch_number":"PHM
+{"arguments":{"alert_type":"expiring_soon"},"duration_ms":45,"ok":true,"outcome":"ok","result":{"data":{"alert_type":"expiring_soon","counts":{"active_medicines":132,"expired_batches":25,"expiring_within_30_days":28,"expiring_within_7_days":6,"low_stock":26,"pending_approvals":16},"expiring_soon":[{"batch_number":"PHM-26037","days_until_expiry":0,"expiry_date":"2026-10-01","medicine_name":"Metoprolol 25mg (037)","quantity_remaining":110},{"batch_number":"PHM-26038","days_until_expiry":1,"expiry_date":"2026-10-02","medicine_name":"Salbutamol 2.5mg (038)","quantity_remaining":140},{"batch_number":"PHM-26039","days_until_expiry":2,"expiry_date":"2026-10-03","medicine_name":"Sterile Dressing Pack (039)","quantity_remaining":170},{"batch_number":"PHM-26040","days_until_expiry":3,"expiry_date":"2026-10-04","medicine_name":"Acyclovir 400mg (040)","quantity_remaining":200},{"batch_number":"PHM-2
+
+## MCP: POST /api/mcp/call homs_pharmacy_order_alerts {alert_type: overdue}
+outcome: ok | ok: True | counts: {"ai_suggested_pending": 9, "approved": 20, "ordered": 12, "overdue": 21, "pending_approval": 16}
+lists returned: {'approved': None, 'ordered': None, 'overdue': 10, 'pending_approval': None}
+first overdue: {"ai_generated": true, "created_at": "2026-08-20", "days_overdue": 25, "expected_at": "2026-09-06", "medicine_name": "Acyclovir 400mg (016)", "outstanding": 210, "po_id": 16, "quantity_ordered": 210, "status": "approved", "supplier_name": "Southern Clinical Supplies", "total_value": 1274.7}
 
 ## RAG: GET /api/rag/status
 {
@@ -98,6 +97,10 @@ RAG_TIMEOUT=100
     {
       "source": "student-3/issuing-and-receiving-stock.md",
       "title": "Issuing and Receiving Stock"
+    },
+    {
+      "source": "student-3/pharmacy-overview.md",
+      "title": "Pharmacy & Medication Inventory Overview"
     },
     {
       "source": "student-3/reorder-and-purchase-orders.md",
@@ -125,7 +128,7 @@ RAG_TIMEOUT=100
     }
   ],
   "confidence": "high",
-  "duration_ms": 1898,
+  "duration_ms": 2428,
   "models": {
     "embedding": "nomic-embed-text",
     "generation": "llama3.2:3b"
@@ -141,12 +144,17 @@ RAG_TIMEOUT=100
   }
 }
 
+## RAG: POST /api/rag/ask (purchase-order question)
+outcome: answered | confidence: high
+answer: According to [S1], only the Pharmacy Manager can approve a purchase order.
+sources: ['Reordering and Purchase Orders > Human approval']
+
 ## RAG: POST /api/rag/ask (not covered -> insufficient context)
 {
   "answer": "The knowledge base does not contain enough relevant information to answer this question, so no answer was generated.",
   "citations": [],
   "confidence": "none",
-  "duration_ms": 29,
+  "duration_ms": 27,
   "models": {
     "embedding": "nomic-embed-text",
     "generation": "llama3.2:3b"
@@ -159,16 +167,31 @@ RAG_TIMEOUT=100
     "considered": 4,
     "relevant": 0,
     "threshold": 0.62,
-    "top_score": 0.5982
+    "top_score": 0.5375
   }
 }
 
 ## Backend container log lines for MCP and RAG calls
-[MCP] list_tools tool=- outcome=ok duration_ms=305 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=78 server=http://host.docker.internal:8000/mcp
-[RAG] ask outcome=answered confidence=high citations=1 duration_ms=4249 server=http://host.docker.internal:8100
-[RAG] ask outcome=insufficient_context confidence=none citations=0 duration_ms=36 server=http://host.docker.internal:8100
-[MCP] list_tools tool=- outcome=ok duration_ms=27 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=38 server=http://host.docker.internal:8000/mcp
-[RAG] ask outcome=answered confidence=high citations=1 duration_ms=1898 server=http://host.docker.internal:8100
-[RAG] ask outcome=insufficient_context confidence=none citations=0 duration_ms=29 server=http://host.docker.internal:8100
+[MCP] list_tools tool=- outcome=ok duration_ms=434 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=84 server=http://host.docker.internal:8000/mcp
+[MCP] list_tools tool=- outcome=ok duration_ms=14 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=56 server=http://host.docker.internal:8000/mcp
+[RAG] ask outcome=answered confidence=high citations=1 duration_ms=2602 server=http://host.docker.internal:8100
+[RAG] ask outcome=answered confidence=low citations=1 duration_ms=2308 server=http://host.docker.internal:8100
+[RAG] ask outcome=answered confidence=high citations=1 duration_ms=1549 server=http://host.docker.internal:8100
+[MCP] list_tools tool=- outcome=ok duration_ms=29 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=192 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=92 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=99 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=102 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=83 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=211 server=http://host.docker.internal:8000/mcp
+[MCP] list_tools tool=- outcome=ok duration_ms=29 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=49 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=57 server=http://host.docker.internal:8000/mcp
+[MCP] list_tools tool=- outcome=ok duration_ms=38 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=45 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=37 server=http://host.docker.internal:8000/mcp
+[RAG] ask outcome=answered confidence=high citations=1 duration_ms=2428 server=http://host.docker.internal:8100
+[RAG] ask outcome=answered confidence=high citations=1 duration_ms=791 server=http://host.docker.internal:8100
+[RAG] ask outcome=insufficient_context confidence=none citations=0 duration_ms=27 server=http://host.docker.internal:8100

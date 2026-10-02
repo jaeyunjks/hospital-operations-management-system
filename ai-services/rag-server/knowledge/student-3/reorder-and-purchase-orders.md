@@ -44,6 +44,11 @@ An order is overdue when its expected delivery date has passed and it is not
 yet received, rejected or cancelled. The expected date is based on the
 supplier's lead time.
 
+The dashboard's "Overdue deliveries" alert is narrower: it counts only orders
+that are approved or ordered and past their expected delivery date, meaning
+the supplier is late. Draft and pending-approval orders past their date are
+waiting on the pharmacy, not the supplier, so they are not counted there.
+
 ## Human approval
 
 Every purchase order, including AI-suggested and agent-proposed orders, needs a
