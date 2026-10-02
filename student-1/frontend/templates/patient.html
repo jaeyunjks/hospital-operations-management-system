@@ -96,7 +96,10 @@
 </section>
 
 <section class="panel">
-  <div class="panel-header"><div><span class="eyebrow">Patient flow</span><h2>Admissions</h2></div></div>
+  <div class="panel-header">
+    <div><span class="eyebrow">Patient flow</span><h2>Admissions</h2></div>
+    <button class="btn btn-icon" type="button" aria-label="Add admission" onclick="document.getElementById('admission-overlay').hidden = false">+</button>
+  </div>
   <div class="admission-list">
     {% for admission in admissions %}
     <div class="admission-row">
@@ -120,14 +123,19 @@
     <div class="empty-state">No admissions recorded</div>
     {% endfor %}
   </div>
-  <form class="form-grid profile-form" method="post">
-    <input type="hidden" name="profile_action" value="admission" />
-    <div class="field-group"><label for="admission_date">Admission date</label><input id="admission_date" name="admission_date" type="date" value="{{ today }}" required /></div>
-    <div class="field-group"><label for="admission_time">Start time</label><input id="admission_time" name="admission_time" type="time" step="900" value="09:00" required /></div>
-    <div class="field-group"><label for="duration_minutes">Duration in minutes</label><input id="duration_minutes" name="duration_minutes" type="number" min="15" step="15" value="60" required /></div>
-    <div class="field-group"><label for="admission_status">Status</label><select id="admission_status" name="admission_status"><option>Pending</option><option>Active</option></select></div>
-    <div class="field-group wide submit-row"><button class="btn btn-primary" type="submit">Create admission</button></div>
-  </form>
+  <div id="admission-overlay" class="note-overlay" hidden>
+    <form class="form-grid note-dialog" method="post">
+      <input type="hidden" name="profile_action" value="admission" />
+      <div class="field-group"><label for="admission_date">Admission date</label><input id="admission_date" name="admission_date" type="date" value="{{ today }}" required /></div>
+      <div class="field-group"><label for="admission_time">Start time</label><input id="admission_time" name="admission_time" type="time" step="900" value="09:00" required /></div>
+      <div class="field-group"><label for="duration_minutes">Duration in minutes</label><input id="duration_minutes" name="duration_minutes" type="number" min="15" step="15" value="60" required /></div>
+      <div class="field-group"><label for="admission_status">Status</label><select id="admission_status" name="admission_status"><option>Pending</option><option>Active</option></select></div>
+      <div class="field-group wide note-dialog-actions">
+        <button class="btn btn-secondary" type="button" onclick="document.getElementById('admission-overlay').hidden = true">Cancel</button>
+        <button class="btn btn-primary" type="submit">Create admission</button>
+      </div>
+    </form>
+  </div>
 </section>
 
 <section class="panel">
