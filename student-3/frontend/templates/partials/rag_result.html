@@ -1,0 +1,40 @@
+{% set confidence_badge = {'high': 'badge-success', 'medium': 'badge-info', 'low': 'badge-warning'} %}
+<article class="rag-result">
+  <div class="mcp-result__head">
+    <p class="rag-question"><strong>Q:</strong> {{ result.question }}</p>
+    <div>
+      {% if result.outcome == 'answered' %}
+        <span class="badge {{ confidence_badge.get(result.confidence, 'badge-neutral') }}">{{ result.confidence|capitalize }} confidence</span>
+      {% else %}
+        <span class="badge badge-neutral">Insufficient context</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if result.outcome == 'answered' %}
+    <p class="rag-answer">{{ result.answer|replace("`", "") }}</p>
+    <h3 class="mcp-subtitle">Sources</h3>
+    <ol class="rag-citations">
+      {% for citation in result.citations %}
+        <li>
+          <p><span class="mcp-code">[{{ citation.id }}]</span> <strong>{{ citation.title }}</strong> › {{ citation.section }}</p>
+          {% if citation.snippet %}<blockquote>{{ citation.snippet|replace('**', '')|replace(' - ', ' ') }}</blockquote>{% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  {% else %}
+    <div class="alert alert--warning" role="status">
+      <div>
+        <p class="alert__title">Not enough information in the pharmacy knowledge base</p>
+        <p class="alert__body">{{ result.answer }}</p>
+        <p class="alert__body">
+          {% if result.reason == 'no_relevant_context' %}No part of the knowledge base was relevant enough to answer it.
+          {% elif result.reason == 'model_declined' %}The retrieved sections did not contain the answer.
+          {% elif result.reason == 'uncited_answer' %}The draft answer did not cite a source, so it was withheld.
+          {% endif %}
+        </p>
+      </div>
+    </div>
+  {% endif %}
+
+</article>

@@ -15,7 +15,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 # Kept small and explicit: other students' tools are not exposed through this feature.
-FEATURE_TOOLS = ("homs_pharmacy_stock_alerts", "homs_echo")
+FEATURE_TOOLS = ("homs_pharmacy_stock_alerts", "homs_pharmacy_order_alerts", "homs_echo")
 
 MCP_ENABLED = os.environ.get("MCP_ENABLED", "false").strip().lower() == "true"
 MCP_SERVER_URL = os.environ.get("MCP_SERVER_URL", "http://127.0.0.1:8000/mcp").strip()

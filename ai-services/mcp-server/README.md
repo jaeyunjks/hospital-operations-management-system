@@ -3,8 +3,9 @@
 Minimal Release 1 Model Context Protocol server shared by the five HOMS
 feature areas. It exposes `homs_echo` for connectivity,
 `homs_ward_occupancy_status` for read-only controlled access to Student 4's
-published backend API, and `homs_pharmacy_stock_alerts` for read-only access to
-Student 3's published backend API. It never accesses student databases, Ollama,
+published backend API, and `homs_pharmacy_stock_alerts` and
+`homs_pharmacy_order_alerts` for read-only access to Student 3's published
+backend API. It never accesses student databases, Ollama,
 or RAG.
 
 ## Runtime
@@ -80,6 +81,22 @@ plus deterministic output. Ward-tool tests mock the Student 4 HTTP boundary,
 including timeout/unavailability, malformed aggregates, exact filtering,
 unexpected arguments and privacy projection. No Student 4 service is needed.
 
+## Terminal validation
+
+With the server (and the Student 3 backend on port 5300) running:
+
+```bash
+python3 ai-services/mcp-server/cli.py tools
+python3 ai-services/mcp-server/cli.py call homs_pharmacy_order_alerts '{"alert_type": "overdue"}' --expect ok
+bash ai-services/mcp-server/validate.sh
+```
+
+`cli.py` uses the official MCP client over Streamable HTTP, like the feature
+backends. `validate.sh` lists the registered tools, calls each pharmacy tool
+option, checks that invalid input and an unexpected `Host` header are refused,
+and exits non-zero on any unexpected result. Latest output:
+`docs/ai-evidence/mcp-server/terminal-validation.txt`.
+
 ## Tool contract
 
 `homs_echo` accepts exactly one argument:
@@ -124,7 +141,8 @@ are rejected before HTTP access.
 
 The only upstream operation is `GET /api/wards/occupancy`, optionally with
 `?ward=...`. Student 4 remains authoritative; MCP does not import its services
-or access port 6400/SQLite. Student 5 integration is not implemented.
+or access port 6400/SQLite. Student 5's workforce overview and shift planner
+call this tool through the Student 5 backend (`student-5/backend/services/mcp_client.py`).
 
 Success uses the same `schema_version`, `ok`, `tool`, `data`, `error` envelope:
 
@@ -253,3 +271,28 @@ Failures use the same codes as the ward tool: `validation_error`,
 `upstream_unavailable`, `upstream_timeout` and `upstream_invalid_response`.
 The Student 3 dashboard route is read-only and has no role guard; this adapter
 does not add authentication.
+
+## Pharmacy order alerts tool
+
+`homs_pharmacy_order_alerts` accepts only the optional `alert_type` argument:
+`all` (default, also for null), `pending_approval` or `overdue`. Unexpected
+fields are rejected before HTTP access.
+
+The only upstream operation is `GET /api/purchase-orders/alerts` on the
+Student 3 backend. The tool never approves, orders, receives or cancels.
+
+`data` contains:
+
+- `counts`: `pending_approval`, `ai_suggested_pending`, `approved`, `ordered`
+  and `overdue` (approved or ordered orders past their expected delivery date).
+- Up to 10 orders each in `pending_approval` (oldest first), `approved`,
+  `ordered` and `overdue` (most overdue first). Each order has `po_id`,
+  `medicine_name`, `supplier_name`, `status`, `quantity_ordered`,
+  `outstanding`, `total_value`, `ai_generated`, `created_at`, `expected_at`
+  and `days_overdue`. Lists not requested by `alert_type` are `null`.
+- `source`: `student-3-pharmacy-api`.
+
+Validation rejects wrong types, orders in the wrong list, overdue orders that
+are not overdue, lists longer than their counts or than 10, and counts that
+contradict each other. Staff names, AI reasoning and decision notes are never
+returned. Failures use the same error codes as the other tools.

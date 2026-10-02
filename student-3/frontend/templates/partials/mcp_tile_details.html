@@ -1,0 +1,13 @@
+{% if error %}
+  <div class="alert alert--danger" role="alert"><div><p class="alert__body">{{ error }}. No inventory data was changed.</p></div></div>
+{% else %}
+  <h4 class="mcp-subtitle">{{ title }} <span class="table__muted">({{ rows|length }} of {{ total }} shown)</span></h4>
+  <div class="table-wrap"><table class="table table--zebra">
+    <thead><tr>{% for name, numeric in columns %}<th{% if numeric %} class="table__num"{% endif %}>{{ name }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for row in rows %}<tr>{% for cell in row %}<td{% if columns[loop.index0][1] %} class="table__num"{% elif loop.first %} class="table__name"{% endif %}>{{ cell }}</td>{% endfor %}</tr>
+      {% else %}<tr><td colspan="{{ columns|length }}">Nothing to show.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  <p class="table__muted">From the pharmacy backend (not part of the MCP result). <a href="{{ view_all }}">View all {{ title|lower }}</a></p>
+{% endif %}

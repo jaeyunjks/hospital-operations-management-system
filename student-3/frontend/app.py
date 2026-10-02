@@ -275,7 +275,7 @@ def dashboard():
                           "recent_movements": [], "agent": None}, str(exc)
     return render_template("dashboard.html", title="Pharmacy Inventory Dashboard",
                            identity=current_identity(), is_manager=is_manager(),
-                           error=error, **summary)
+                           error=error, rag_examples=RAG_EXAMPLE_QUESTIONS, **summary)
 
 
 @app.get("/medicines")
@@ -388,6 +388,7 @@ def batch_ai_advisory():
 # Each tool the panel may call, with the only form fields it forwards as arguments.
 MCP_TOOL_ARGUMENTS = {
     "homs_pharmacy_stock_alerts": lambda form: {"alert_type": form.get("alert_type", "all")},
+    "homs_pharmacy_order_alerts": lambda form: {"alert_type": form.get("alert_type", "all")},
     "homs_echo": lambda form: {"message": form.get("message", "")},
 }
 
@@ -411,6 +412,85 @@ def mcp_call():
         return render_template("partials/mcp_result.html", call=call)
     except api_client.BackendError as exc:
         return render_template("partials/mcp_result_error.html", tool=tool, error=str(exc))
+
+
+def _active_medicine_details():
+    payload = api_client.list_medicines(status="active", category="all", stock_status="all", search="",
+                                        expiring_within="", page="1", page_size="10")
+    rows = [(m["name"], m["category"], m["available_quantity"], m["reorder_level"], m.get("supplier_name") or "—")
+            for m in payload["medicines"]]
+    return ("Active medicines", [("Medicine", False), ("Category", False), ("Available", True),
+                                 ("Reorder level", True), ("Supplier", False)],
+            rows, payload["pagination"]["total_items"], "/medicines")
+
+
+def _expired_batch_details():
+    payload = api_client.list_batches(expiry_status="expired", search="", include_empty="false", page="1", page_size="10")
+    rows = [(b["medicine_name"], b["batch_number"], b["expiry_date"], -b["days_until_expiry"], b["quantity_remaining"])
+            for b in payload["batches"]]
+    return ("Expired batches", [("Medicine", False), ("Batch", False), ("Expiry date", False),
+                                ("Days expired", True), ("Quantity remaining", True)],
+            rows, payload["pagination"]["total_items"], "/batches?expiry_status=expired")
+
+
+def _pending_approval_details():
+    payload = api_client.list_purchase_orders(status="pending_approval", page="1", page_size="10")
+    rows = [(o["medicine_name"], o["supplier_name"], o["quantity_ordered"], f"${o['total_value']:.2f}",
+             "AI-suggested" if o.get("ai_generated") else "Manual", (o.get("created_at") or "")[:10])
+            for o in payload["purchase_orders"]]
+    return ("Pending approvals", [("Medicine", False), ("Supplier", False), ("Quantity", True), ("Value", True),
+                                  ("Origin", False), ("Created", False)],
+            rows, payload["pagination"]["total_items"], "/purchase-orders?status=pending_approval")
+
+
+# Stock-alert tiles whose rows are not part of the MCP result load them from the backend.
+MCP_DETAIL_LOADERS = {
+    "active-medicines": _active_medicine_details,
+    "expired-batches": _expired_batch_details,
+    "pending-approvals": _pending_approval_details,
+}
+
+
+@app.get("/mcp/details/<kind>")
+def mcp_tile_details(kind):
+    loader = MCP_DETAIL_LOADERS.get(kind)
+    if loader is None:
+        return render_template("partials/mcp_tile_details.html", error="Unknown details"), 404
+    try:
+        title, columns, rows, total, view_all = loader()
+    except api_client.BackendError as exc:
+        return render_template("partials/mcp_tile_details.html", error=str(exc))
+    return render_template("partials/mcp_tile_details.html", error=None, title=title, columns=columns,
+                           rows=rows, total=total, view_all=view_all)
+
+
+RAG_EXAMPLE_QUESTIONS = (
+    "Who can write off an expired batch?",
+    "How is the suggested reorder quantity calculated?",
+    "Can the scheduled agent approve purchase orders?",
+    "Who can approve a purchase order?",
+    "When is a purchase order overdue?",
+)
+
+
+@app.get("/rag/status")
+def rag_status_badge():
+    try:
+        return render_template("partials/rag_status.html", status=api_client.rag_status(), error=None)
+    except api_client.BackendError as exc:
+        return render_template("partials/rag_status.html", status=None, error=str(exc))
+
+
+@app.post("/rag/ask")
+def rag_ask():
+    """Render a grounded answer, or an insufficient-context refusal, for either role."""
+    question = " ".join(request.form.get("question", "").split())
+    if not question:
+        return render_template("partials/rag_result_error.html", error="Enter a question first")
+    try:
+        return render_template("partials/rag_result.html", result=api_client.rag_ask(question))
+    except api_client.BackendError as exc:
+        return render_template("partials/rag_result_error.html", error=str(exc))
 
 
 @app.get("/movements")

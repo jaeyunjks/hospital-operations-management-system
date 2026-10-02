@@ -1,0 +1,40 @@
+<div class="panel__header">
+  <div>
+    <span class="page-header__eyebrow">Retrieval-Augmented Generation</span>
+    <h2 class="panel__title">Ask the pharmacy assistant</h2>
+  </div>
+  <div id="rag-status" hx-get="/rag/status" hx-trigger="load" hx-swap="innerHTML"><span class="badge badge-neutral">Checking RAG…</span></div>
+</div>
+<div class="panel__body">
+  <p class="table__muted">Answers come only from the pharmacy knowledge base on the shared local RAG server and always list their sources. If the knowledge base does not cover a question, the assistant says so instead of guessing. It never changes inventory.</p>
+  <form id="rag-ask-form" class="rag-form" data-ai-job data-ai-indicator="rag-loading" data-ai-results="rag-result"
+        hx-post="/rag/ask" hx-target="#rag-result" hx-swap="innerHTML" hx-indicator="#rag-loading">
+    <label class="mcp-field rag-field">Question
+      <input class="input" name="question" maxlength="500" required autocomplete="off"
+             placeholder="For example: Who can write off an expired batch?">
+    </label>
+    <button class="btn btn-primary" type="submit">Ask</button>
+  </form>
+  <div class="rag-examples">
+    <span class="table__muted">Try:</span>
+    {% for question in rag_examples %}<button class="btn btn-ghost btn-compact" type="button" data-rag-example="{{ question }}">{{ question }}</button>{% endfor %}
+  </div>
+  <div id="rag-loading" class="ai-loading htmx-indicator" role="status" aria-live="polite">
+    <span class="ai-spinner" aria-hidden="true"></span>
+    <div>
+      <p class="ai-loading__status">Searching the knowledge base… <span data-ai-elapsed>0s</span></p>
+      <p class="ai-loading__note">Answers usually take a few seconds; the first question after start-up can take about 20 seconds.</p>
+      <p class="ai-loading__slow" data-ai-slow hidden>Still working — the model is running locally.</p>
+    </div>
+  </div>
+  <div id="rag-result" aria-live="polite"></div>
+</div>
+<script>
+  document.addEventListener('click', (event) => {
+    const example = event.target.closest('[data-rag-example]');
+    const form = document.getElementById('rag-ask-form');
+    if (!example || !form) return;
+    form.elements.question.value = example.dataset.ragExample;
+    form.requestSubmit();
+  });
+</script>

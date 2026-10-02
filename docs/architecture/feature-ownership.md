@@ -23,6 +23,6 @@ Do not assume any ordering. Fill this in once the team confirms it.
 |-------------|--------------|--------------|---------------|
 | `student-1` | _TBD_        | _TBD_        | _TBD_         |
 | `student-2` | _TBD_        | _TBD_        | _TBD_         |
-| `student-3` | _TBD_        | _TBD_        | _TBD_         |
+| `student-3` | Pharmacy & Medication Inventory Management | Tirth Patel | `tirth676` |
 | `student-4` | _TBD_        | _TBD_        | _TBD_         |
 | `student-5` | _TBD_        | _TBD_        | _TBD_         |

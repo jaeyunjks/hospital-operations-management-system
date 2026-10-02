@@ -96,33 +96,63 @@ html { scrollbar-gutter: stable; }
   gap: var(--space-2);
 }
 
-.mcp-code,
-.mcp-json {
+.mcp-code {
   font-family: var(--font-mono);
 }
 
-.mcp-counts {
+.mcp-tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
   gap: var(--space-2);
-  margin: 0;
 }
 
-.mcp-counts div {
+.mcp-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
   padding: var(--space-2) var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-muted);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.mcp-counts dt {
+.mcp-tile:hover {
+  border-color: var(--color-border-strong);
+}
+
+.mcp-tile:focus-visible {
+  outline: 2px solid var(--color-border-strong);
+  outline-offset: 2px;
+}
+
+.mcp-tile[aria-pressed="true"] {
+  border-color: var(--color-text-primary);
+  background: var(--color-surface);
+  box-shadow: inset 0 -3px 0 var(--color-text-primary);
+}
+
+.mcp-tile__label {
   color: var(--color-text-muted);
 }
 
-.mcp-counts dd {
-  margin: 0;
+.mcp-tile__value {
   font-weight: 600;
   color: var(--color-text-data);
+}
+
+.mcp-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.mcp-detail[hidden],
+[data-mcp-hint][hidden] {
+  display: none;
 }
 
 .mcp-subtitle {
@@ -133,17 +163,165 @@ html { scrollbar-gutter: stable; }
   color: var(--color-text-primary);
 }
 
-.mcp-raw summary {
-  cursor: pointer;
+
+/* Pharmacy assistant (shared RAG) panel */
+.rag-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+  margin-block: var(--space-3);
+}
+
+.rag-field {
+  flex: 1 1 24rem;
+}
+
+.rag-examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.rag-result {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+.rag-question,
+.rag-answer {
+  margin: 0;
+}
+
+.rag-answer {
+  color: var(--color-text-primary);
+  line-height: 1.5;
+}
+
+.rag-citations {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+
+.rag-citations p {
+  margin: 0;
+}
+
+.rag-citations blockquote {
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--color-border-strong);
+  background: var(--color-surface-muted);
   color: var(--color-text-secondary);
 }
 
-.mcp-json {
-  max-height: 20rem;
-  overflow: auto;
-  padding: var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+
+/* Collapse the idle loading message; htmx adds .htmx-request while asking. */
+#rag-loading:not(.htmx-request) {
+  display: none;
+}
+
+/* Let long example questions, status badges and server URLs wrap on narrow screens. */
+.rag-examples .btn {
+  height: auto;
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
+
+#mcp-status,
+#rag-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+#mcp-status .badge,
+#rag-status .badge {
+  white-space: normal;
+}
+
+#mcp-status .table__muted,
+#rag-status .table__muted {
+  overflow-wrap: anywhere;
+}
+
+.mcp-forms .toolbar__group {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.mcp-forms .btn {
+  height: auto;
+  white-space: normal;
+}
+
+.mcp-forms .mcp-message {
+  min-width: 16rem;
+}
+
+/* Centre the demonstration role picker on the page. */
+.demo-entry {
+  margin-inline: auto;
+  padding-top: var(--space-8);
+}
+
+/* Current page in the header menu: highlighted like a selected stock-alert tile. */
+.app-header .nav-link[aria-current="page"] {
+  color: var(--color-text-primary);
+  font-weight: 600;
   background: var(--color-surface-muted);
-  white-space: pre;
+  border-bottom-color: transparent;
+  box-shadow: inset 0 -3px 0 var(--color-text-primary);
+}
+
+/* "Change demo role" is an action, so it reads as a button. */
+.app-header__role-button {
+  border-color: var(--color-border-control);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+}
+
+.app-header__role-button:hover {
+  border-color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+/* Brand: the shared HOMS logo, set apart from the page menu by a divider and spacing. */
+.app-header__brand {
+  align-items: center;
+  gap: var(--space-2);
+  margin-right: var(--space-5);
+  padding-right: var(--space-5);
+  border-right: 1px solid var(--color-border-strong);
+  color: var(--color-text-primary);
+}
+
+.app-header__brand-logo {
+  display: block;
+  width: var(--space-9);
+  height: var(--space-9);
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.app-header__brand:hover .app-header__brand-logo {
+  transform: scale(1.06);
+  transition: transform var(--dur) var(--ease);
+}
+
+/* Numeric column headings line up with their right-aligned numbers. */
+.table thead th.table__num {
+  text-align: right;
 }

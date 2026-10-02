@@ -258,3 +258,53 @@ running.
 - `surgeon_name` is stored as text, not a `staff_id` from Staff & Shift
   Management. If the roster needs to know a surgeon is in theatre, add
   `surgeon_id` alongside it and keep the name as a display snapshot.
+
+## Release 1 — shared MCP and RAG access
+
+The frontend never calls a shared server. Both paths run
+frontend (3400) → backend/API (5400) → shared local server, and the
+**MCP & RAG** page at `/shared-ai` shows them side by side.
+
+| Path | Backend route | Shared server | What it returns |
+|---|---|---|---|
+| Ward occupancy via MCP | `GET /api/mcp/status`, `POST /api/mcp/call` | MCP, `:8000/mcp` | Live ward bed counts from this feature's own published API |
+| Room and bed questions | `GET /api/rag/status`, `POST /api/rag/ask` | RAG, `:8100` | An answer from `knowledge/student-4/` with citations and a confidence category, or an insufficient-context refusal |
+
+Boundaries enforced in this feature:
+
+- `services/mcp_client.py` may call only `homs_ward_occupancy_status` and
+  `homs_echo`; any other tool is refused with 403 before MCP is contacted.
+- `services/rag_client.py` scopes every question to `feature: student-4` and
+  rejects a response citing another feature's documents.
+- Both are read-only. Neither can create, change or release a bed.
+- An insufficient-context answer is a successful outcome, not an error: the
+  server declining to guess is the behaviour being validated.
+- Disabled or unreachable servers degrade the page, never the API: the routes
+  answer with 503 (disabled), 502 (unavailable) or 504 (timeout).
+
+### Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MCP_ENABLED` | `false` | Turn MCP access on |
+| `MCP_SERVER_URL` | `http://127.0.0.1:8000/mcp` | Shared MCP endpoint |
+| `MCP_TIMEOUT` | `15` | Seconds per MCP session |
+| `RAG_ENABLED` | `false` | Turn RAG access on |
+| `RAG_SERVER_URL` | `http://127.0.0.1:8100` | Shared RAG server |
+| `RAG_TIMEOUT` | `100` | Seconds per question |
+
+Both default to off, so the stack starts without the shared servers. To demo
+them under Compose, start each shared server in Docker mode
+(`HOMS_MCP_HOST=0.0.0.0 HOMS_MCP_ALLOW_DOCKER_HOST=true`, same for RAG), then:
+
+```bash
+STUDENT4_MCP_ENABLED=true STUDENT4_RAG_ENABLED=true \
+  docker compose up -d student-4-backend student-4-frontend
+```
+
+Open <http://localhost:3400/shared-ai>.
+
+CI keeps both disabled and asserts it: `student-4.yml` checks that the routes
+report `enabled: false`, that the tool allowlist is still present, and that a
+call and a question are refused with 503. The shared servers are never started
+in CI.

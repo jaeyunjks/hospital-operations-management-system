@@ -10,7 +10,7 @@
   <div class="mcp-forms">
     <form class="toolbar__group" hx-post="/mcp/call" hx-target="#mcp-result" hx-swap="innerHTML" hx-indicator="#mcp-loading" hx-disabled-elt="find button">
       <input type="hidden" name="tool" value="homs_pharmacy_stock_alerts">
-      <label class="mcp-field">Alert type
+      <label class="mcp-field">Stock alerts
         <select class="select" name="alert_type">
           <option value="all">All alerts</option>
           <option value="low_stock">Low stock</option>
@@ -20,9 +20,20 @@
       <button class="btn btn-primary" type="submit">Get stock alerts via MCP</button>
     </form>
     <form class="toolbar__group" hx-post="/mcp/call" hx-target="#mcp-result" hx-swap="innerHTML" hx-indicator="#mcp-loading" hx-disabled-elt="find button">
+      <input type="hidden" name="tool" value="homs_pharmacy_order_alerts">
+      <label class="mcp-field">Order alerts
+        <select class="select" name="alert_type">
+          <option value="all">All open orders</option>
+          <option value="pending_approval">Pending approval</option>
+          <option value="overdue">Overdue deliveries</option>
+        </select>
+      </label>
+      <button class="btn btn-primary" type="submit">Get purchase-order alerts via MCP</button>
+    </form>
+    <form class="toolbar__group" hx-post="/mcp/call" hx-target="#mcp-result" hx-swap="innerHTML" hx-indicator="#mcp-loading" hx-disabled-elt="find button">
       <input type="hidden" name="tool" value="homs_echo">
       <label class="mcp-field">Message
-        <input class="input" name="message" value="pharmacy connectivity check" maxlength="200" required>
+        <input class="input mcp-message" name="message" value="pharmacy connectivity check" maxlength="200" required>
       </label>
       <button class="btn btn-secondary" type="submit">Test connectivity</button>
     </form>
@@ -30,3 +41,22 @@
   <p id="mcp-loading" class="htmx-indicator table__muted" role="status">Calling the shared MCP server…</p>
   <div id="mcp-result" aria-live="polite"></div>
 </div>
+<script>
+  // Stock alert tiles act as tabs: show only the clicked figure's details; click again to close.
+  document.addEventListener('click', (event) => {
+    const tile = event.target.closest('[data-mcp-tile]');
+    if (!tile) return;
+    const result = tile.closest('.mcp-result');
+    const opening = tile.getAttribute('aria-pressed') !== 'true';
+    result.querySelectorAll('[data-mcp-tile]').forEach((other) => {
+      other.setAttribute('aria-pressed', String(opening && other === tile));
+    });
+    // Closing a figure returns to the result's default view (if it has one) or the hint.
+    const hasDefault = Boolean(result.querySelector('[data-mcp-default]'));
+    result.querySelectorAll('[data-mcp-panel]').forEach((panel) => {
+      panel.hidden = opening ? panel.dataset.mcpPanel !== tile.dataset.mcpTile : !panel.hasAttribute('data-mcp-default');
+    });
+    const hint = result.querySelector('[data-mcp-hint]');
+    if (hint) hint.hidden = opening || hasDefault;
+  });
+</script>

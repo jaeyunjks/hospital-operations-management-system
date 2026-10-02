@@ -11,11 +11,19 @@ Manager. Medicine names must be unique, ignoring letter case.
 ## Low stock rule
 
 An active medicine is low stock when its stock quantity is at or below its
-reorder level. For example, Paracetamol 500mg with 20 units in stock and a
-reorder level of 200 is low stock. The dashboard counts all low-stock medicines
-and lists the ten with the largest shortfall first (reorder level minus stock
-quantity). Low stock does not create an order by itself; it makes the medicine
-a candidate for a reorder suggestion.
+reorder level. For example, a hypothetical medicine with 20 units in stock and
+a reorder level of 200 would be low stock. The dashboard counts all low-stock
+medicines and lists the ten with the largest shortfall first (reorder level
+minus stock quantity). Low stock does not create an order by itself; it makes
+the medicine a candidate for a reorder suggestion.
+
+## Current stock figures are not in this knowledge base
+
+These documents describe pharmacy rules and workflows only. They do not record
+how many units of any medicine are in stock, which batches currently exist, or
+how many orders are pending, because those figures change constantly. Current
+figures come from the live pharmacy data: the dashboard, the Medicines and
+Batches pages, and the "Get stock alerts via MCP" tool.
 
 ## Roles and permissions
 

@@ -1,0 +1,6 @@
+{% if error %}<span class="badge badge-danger">Backend unavailable</span>
+{% elif not status.enabled %}<span class="badge badge-neutral">RAG disabled</span>
+{% elif not status.reachable %}<span class="badge badge-danger">RAG server unreachable</span>
+{% elif not status.ready %}<span class="badge badge-warning">RAG not ready</span>
+{% else %}<span class="badge badge-success" title="{{ status.documents|map(attribute='title')|join(', ') }}">RAG connected · {{ status.documents|length }} pharmacy document{{ '' if status.documents|length == 1 else 's' }}</span>
+{% endif %}

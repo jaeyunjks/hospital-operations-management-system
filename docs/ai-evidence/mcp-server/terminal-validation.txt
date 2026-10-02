@@ -1,0 +1,231 @@
+# HOMS shared MCP server - terminal validation
+# 2026-10-01T05:43:57Z  endpoint http://127.0.0.1:8000/mcp
+
+## Registered tools
+$ python3 ai-services/mcp-server/cli.py tools
+- homs_echo: HOMS Echo  (arguments: message)
+- homs_ward_occupancy_status: HOMS Ward Occupancy Status  (arguments: ward)
+- homs_pharmacy_stock_alerts: HOMS Pharmacy Stock Alerts  (arguments: alert_type)
+- homs_pharmacy_order_alerts: HOMS Pharmacy Order Alerts  (arguments: alert_type)
+(exit 0)
+
+## Connectivity
+$ python3 ai-services/mcp-server/cli.py call homs_echo '{"message": "terminal check"}' --expect ok --json
+OK {"message": "terminal check"}
+{
+  "schema_version": "1.0",
+  "ok": true,
+  "tool": "homs_echo",
+  "data": {
+    "message": "terminal check"
+  },
+  "error": null
+}
+(exit 0)
+
+## Pharmacy stock alerts (Student 3)
+$ python3 ai-services/mcp-server/cli.py call homs_pharmacy_stock_alerts '{}' --expect ok
+OK counts[active_medicines=132, low_stock=26, expiring_within_30_days=28, expiring_within_7_days=6, expired_batches=25, pending_approvals=16] lists[low_stock: 10 rows, expiring_soon: 10 rows]
+(exit 0)
+
+$ python3 ai-services/mcp-server/cli.py call homs_pharmacy_stock_alerts '{"alert_type": "low_stock"}' --expect ok
+OK counts[active_medicines=132, low_stock=26, expiring_within_30_days=28, expiring_within_7_days=6, expired_batches=25, pending_approvals=16] lists[low_stock: 10 rows]
+(exit 0)
+
+$ python3 ai-services/mcp-server/cli.py call homs_pharmacy_stock_alerts '{"alert_type": "expiring_soon"}' --expect ok
+OK counts[active_medicines=132, low_stock=26, expiring_within_30_days=28, expiring_within_7_days=6, expired_batches=25, pending_approvals=16] lists[expiring_soon: 10 rows]
+(exit 0)
+
+## Pharmacy order alerts (Student 3)
+$ python3 ai-services/mcp-server/cli.py call homs_pharmacy_order_alerts '{}' --expect ok
+OK counts[pending_approval=16, ai_suggested_pending=9, approved=20, ordered=12, overdue=21] lists[pending_approval: 10 rows, approved: 10 rows, ordered: 10 rows, overdue: 10 rows]
+(exit 0)
+
+$ python3 ai-services/mcp-server/cli.py call homs_pharmacy_order_alerts '{"alert_type": "pending_approval"}' --expect ok
+OK counts[pending_approval=16, ai_suggested_pending=9, approved=20, ordered=12, overdue=21] lists[pending_approval: 10 rows]
+(exit 0)
+
+$ python3 ai-services/mcp-server/cli.py call homs_pharmacy_order_alerts '{"alert_type": "overdue"}' --expect ok --json
+OK counts[pending_approval=16, ai_suggested_pending=9, approved=20, ordered=12, overdue=21] lists[overdue: 10 rows]
+{
+  "schema_version": "1.0",
+  "ok": true,
+  "tool": "homs_pharmacy_order_alerts",
+  "data": {
+    "alert_type": "overdue",
+    "counts": {
+      "pending_approval": 16,
+      "ai_suggested_pending": 9,
+      "approved": 20,
+      "ordered": 12,
+      "overdue": 21
+    },
+    "pending_approval": null,
+    "approved": null,
+    "ordered": null,
+    "overdue": [
+      {
+        "po_id": 16,
+        "medicine_name": "Acyclovir 400mg (016)",
+        "supplier_name": "Southern Clinical Supplies",
+        "status": "approved",
+        "quantity_ordered": 210,
+        "outstanding": 210,
+        "total_value": 1274.7,
+        "ai_generated": true,
+        "created_at": "2026-08-20",
+        "expected_at": "2026-09-06",
+        "days_overdue": 25
+      },
+      {
+        "po_id": 17,
+        "medicine_name": "Furosemide 40mg (017)",
+        "supplier_name": "MetroMed Wholesale",
+        "status": "ordered",
+        "quantity_ordered": 220,
+        "outstanding": 220,
+        "total_value": 1416.8,
+        "ai_generated": true,
+        "created_at": "2026-08-19",
+        "expected_at": "2026-09-07",
+        "days_overdue": 24
+      },
+      {
+        "po_id": 83,
+        "medicine_name": "Ciprofloxacin 500mg (019)",
+        "supplier_name": "MetroMed Wholesale",
+        "status": "approved",
+        "quantity_ordered": 40,
+        "outstanding": 40,
+        "total_value": 243.6,
+        "ai_generated": true,
+        "created_at": "2026-09-06",
+        "expected_at": "2026-09-08",
+        "days_overdue": 23
+      },
+      {
+        "po_id": 65,
+        "medicine_name": "Furosemide 40mg (065)",
+        "supplier_name": "MetroMed Wholesale",
+        "status": "approved",
+        "quantity_ordered": 700,
+        "outstanding": 700,
+        "total_value": 16940.0,
+        "ai_generated": false,
+        "created_at": "2026-08-26",
+        "expected_at": "2026-09-10",
+        "days_overdue": 21
+      },
+      {
+        "po_id": 77,
+        "medicine_name": "Ibuprofen 400mg",
+        "supplier_name": "MedSupply Australia",
+        "status": "approved",
+        "quantity_ordered": 30,
+        "outstanding": 30,
+        "total_value": 5.4,
+        "ai_generated": true,
+        "created_at": "2026-09-05",
+        "expected_at": "2026-09-10",
+        "days_overdue": 21
+      },
+      {
+        "po_id": 66,
+        "medicine_name": "Omeprazole 20mg (066)",
+        "supplier_name": "Northern Therapeutics",
+        "status": "ordered",
+        "quantity_ordered": 710,
+        "outstanding": 624,
+        "total_value": 17444.7,
+        "ai_generated": false,
+        "created_at": "2026-08-25",
+        "expected_at": "2026-09-11",
+        "days_overdue": 20
+      },
+      {
+        "po_id": 71,
+        "medicine_name": "Sodium Chloride 0.9%",
+        "supplier_name": "Southern Clinical Supplies",
+        "status": "approved",
+        "quantity_ordered": 4840,
+        "outstanding": 4840,
+        "total_value": 29.04,
+        "ai_generated": true,
+        "created_at": "2026-09-05",
+        "expected_at": "2026-09-11",
+        "days_overdue": 20
+      },
+      {
+        "po_id": 72,
+        "medicine_name": "Dextrose 5%",
+        "supplier_name": "Southern Clinical Supplies",
+        "status": "approved",
+        "quantity_ordered": 4330,
+        "outstanding": 4330,
+        "total_value": 30.31,
+        "ai_generated": true,
+        "created_at": "2026-09-05",
+        "expected_at": "2026-09-11",
+        "days_overdue": 20
+      },
+      {
+        "po_id": 86,
+        "medicine_name": "Omeprazole 20mg (018)",
+        "supplier_name": "Southern Clinical Supplies",
+        "status": "approved",
+        "quantity_ordered": 50,
+        "outstanding": 50,
+        "total_value": 289.0,
+        "ai_generated": true,
+        "created_at": "2026-09-06",
+        "expected_at": "2026-09-12",
+        "days_overdue": 19
+      },
+      {
+        "po_id": 23,
+        "medicine_name": "Normal Saline Flush 10mL (023)",
+        "supplier_name": "Coastal Sterile Products",
+        "status": "approved",
+        "quantity_ordered": 280,
+        "outstanding": 280,
+        "total_value": 2424.8,
+        "ai_generated": false,
+        "created_at": "2026-08-13",
+        "expected_at": "2026-09-13",
+        "days_overdue": 18
+      }
+    ],
+    "source": "student-3-pharmacy-api"
+  },
+  "error": null
+}
+(exit 0)
+
+## Tool boundaries: invalid input is rejected before any upstream call
+$ python3 ai-services/mcp-server/cli.py call homs_pharmacy_stock_alerts '{"alert_type": "everything"}' --expect error
+ERROR validation_error: 'alert_type' must be one of: all, low_stock, expiring_soon.
+(exit 0)
+
+$ python3 ai-services/mcp-server/cli.py call homs_pharmacy_order_alerts '{"alert_type": "overdue", "po_id": 4}' --expect error
+ERROR validation_error: Only the optional 'alert_type' argument is accepted.
+(exit 0)
+
+$ python3 ai-services/mcp-server/cli.py call homs_pharmacy_order_alerts '{"alert_type": 7}' --expect error
+ERROR validation_error: 'alert_type' must be a string or null.
+(exit 0)
+
+$ python3 ai-services/mcp-server/cli.py call homs_echo '{"message": ""}' --expect error
+ERROR validation_error: 'message' must not be blank.
+(exit 0)
+
+$ python3 ai-services/mcp-server/cli.py call homs_unknown_tool '{}' --expect error
+ERROR validation_error: Unknown tool: homs_unknown_tool
+(exit 0)
+
+## Transport security
+$ curl -X POST http://127.0.0.1:8000/mcp -H Host: evil.example:8000 -H Content-Type: application/json -H Accept: application/json, text/event-stream -d {} -> HTTP 421 (unexpected Host header refused; expected 421)
+
+## Feature boundary: the Student 3 backend only forwards its own tools
+$ curl -X POST http://127.0.0.1:5300/api/mcp/call -H Content-Type: application/json -d {"tool": "homs_ward_occupancy_status"} -> HTTP 403 (another feature's tool refused by the pharmacy backend; expected 403)
+
+# 0 failed check(s)

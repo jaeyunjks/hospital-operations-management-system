@@ -15,17 +15,17 @@
 <body>
   <div class="app">
     <header class="app-header">
-      <a class="app-header__brand" href="/">
+      <a class="app-header__brand" href="/" aria-label="HOMS Pharmacy &amp; Medication Inventory — dashboard">
+        <img class="app-header__brand-logo" src="/shared/assets/images/hospital-operations-logo.png" alt="" width="40" height="40">
         HOMS
         <span class="app-header__context">Pharmacy &amp; Medication Inventory</span>
       </a>
       <nav class="app-header__nav" aria-label="Pharmacy pages">
-        <a class="nav-link" href="/">Dashboard</a>
-        <a class="nav-link" href="/medicines">Medicines</a>
-        <a class="nav-link" href="/batches">Batches &amp; Expiry</a>
-        <a class="nav-link" href="/movements">Stock Movements</a>
-        <a class="nav-link" href="/purchase-orders">Purchase Orders</a>
-        <a class="nav-link" href="/suppliers">Suppliers</a>
+        {% set nav_items = [('/', 'Dashboard'), ('/medicines', 'Medicines'), ('/batches', 'Batches & Expiry'),
+                            ('/movements', 'Stock Movements'), ('/purchase-orders', 'Purchase Orders'), ('/suppliers', 'Suppliers')] %}
+        {% for href, label in nav_items %}
+          <a class="nav-link" href="{{ href }}"{% if request.path == href or (href != '/' and request.path.startswith(href + '/')) %} aria-current="page"{% endif %}>{{ label }}</a>
+        {% endfor %}
       </nav>
       <div class="app-header__actions">
         <div class="user-chip">
@@ -35,7 +35,7 @@
             <span class="user-chip__role">{{ identity.role if identity else 'Demo mode' }}</span>
           </span>
         </div>
-        <a class="btn btn-ghost btn-compact" href="/demo">Change demo role</a>
+        <a class="btn btn-secondary btn-compact app-header__role-button" href="/demo">Change demo role</a>
       </div>
     </header>
 
