@@ -25,6 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYTHONDONTWRITEBYTECODE: "1"
+      MCP_ENABLED: "false"
+      RAG_ENABLED: "false"
 
     steps:
       - name: Check out repository
@@ -93,6 +95,42 @@ jobs:
           assert status == 200
           assert content_type == "text/html"
           assert "<!DOCTYPE html>" in html
+          PY
+
+      - name: Verify Student 2 MCP and RAG are disabled
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          print("MCP_ENABLED =", os.environ.get("MCP_ENABLED"))
+          print("RAG_ENABLED =", os.environ.get("RAG_ENABLED"))
+
+          def read_status(url):
+              # The status routes need a clinical role; they only read local config
+              # when disabled, so no MCP or RAG server is contacted here.
+              call = urllib.request.Request(
+                  url, headers={"Accept": "application/json", "X-User-Role": "doctor"})
+              try:
+                  with urllib.request.urlopen(call, timeout=15) as response:
+                      return json.loads(response.read().decode()).get("status")
+              except (urllib.error.URLError, ValueError) as exc:
+                  return "unreadable ({})".format(type(exc).__name__)
+
+          results = {
+              "MCP": read_status("http://127.0.0.1:5200/api/mcp/status"),
+              "RAG": read_status("http://127.0.0.1:5200/api/rag/status"),
+          }
+          for name, state in results.items():
+              print("{} status: {}".format(name, state))
+
+          bad = [name for name, state in results.items() if state != "disabled"]
+          if bad:
+              sys.exit("FAIL: {} must be disabled in CI".format(" and ".join(bad)))
+          print("MCP and RAG are retained in the code and disabled for CI")
           PY
 
       - name: Show Student 2 container logs on failure
