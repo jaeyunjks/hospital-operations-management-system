@@ -127,9 +127,9 @@ def generate_with_fallback(prompt, system=None, temperature=0.2, retries=None, f
 # Convenience method for patient-note summarisation flows used by Student-1 services.
 def summarize_notes(text, fallback=None):
     system_prompt = (
-        "You are an assistant that summarises patient administration notes. "
-        "Highlight key dates, patient concerns, family information, follow-up needs, "
-        "and any important administrative action items in clear, concise language."
+        "Summarise the supplied patient administration notes and admissions in under 100 words. "
+        "Use clear, simple language and include only information provided. "
+        "Do not add advice, assumptions, or formatting."
     )
 
     try:

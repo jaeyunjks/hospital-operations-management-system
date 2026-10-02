@@ -1,5 +1,6 @@
 # Shared HOMS development stack.
-# Student 1, 2, 3, 4, and 5 services share this stack with the homepage and Ollama.
+# Student 1, 2, 3, 4, and 5 services share this stack with the homepage.
+# Ollama, MCP, RAG, and the agentic loop run on the host outside Compose.
 
 services:
   # --- shared Release 0 home page --------------------------------------
@@ -381,6 +382,17 @@ services:
     ports:
       - "6100:6100"
     command: python -m database.app
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:6100/health', timeout=3)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
 
   student-1-backend:
     build:
@@ -393,15 +405,36 @@ services:
       PORT: 5100
       DATABASE_URL: http://student-1-database:6100
       OLLAMA_URL: "${STUDENT1_OLLAMA_URL:-http://host.docker.internal:11434}"
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      OLLAMA_TIMEOUT: 30
+      MCP_ENABLED: "${STUDENT1_MCP_ENABLED:-false}"
+      MCP_SERVER_URL: "${STUDENT1_MCP_SERVER_URL:-http://host.docker.internal:8000/mcp}"
+      MCP_TIMEOUT: "${STUDENT1_MCP_TIMEOUT:-15}"
+      RAG_ENABLED: "${STUDENT1_RAG_ENABLED:-false}"
+      RAG_SERVER_URL: "${STUDENT1_RAG_SERVER_URL:-http://host.docker.internal:8100}"
+      RAG_TIMEOUT: "${STUDENT1_RAG_TIMEOUT:-100}"
+      AUTH_ENABLED: 0
       FLASK_DEBUG: 0
-    depends_on:
-      - student-1-database
-    ports:
-      - "5100:5100"
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    depends_on:
+      student-1-database:
+        condition: service_healthy
+    ports:
+      - "5100:5100"
     networks: [homs-net]
     command: python -m backend.app
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5100/health', timeout=3)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
 
   student-1-frontend:
     networks: [homs-net]
@@ -414,12 +447,25 @@ services:
       HOST: 0.0.0.0
       PORT: 3100
       BACKEND_URL: http://student-1-backend:5100
+      RAG_API_TIMEOUT: "${STUDENT1_RAG_API_TIMEOUT:-105}"
       FLASK_DEBUG: 0
     depends_on:
-      - student-1-backend
+      student-1-backend:
+        condition: service_healthy
     ports:
       - "3100:3100"
     command: python app.py
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:3100/', timeout=3)"
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
 
 networks:
   homs-net:

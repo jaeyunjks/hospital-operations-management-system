@@ -4,6 +4,14 @@ Markdown files in this folder (except this README) are indexed by the shared
 RAG server and searched when a request uses `"feature": "student-1"`.
 Documents in `knowledge/shared/` are always searched as well.
 
+## Current topics
+
+- Admission scheduling and status rules.
+- Patient intake fields, emergency defaults, and record groups.
+- Duplicate identity review and profile reconciliation.
+- Emergency admission response behavior and capacity boundaries.
+- Patient administration summaries and AI decision-support boundaries.
+
 ## Writing a document
 
 - One topic per file, named in kebab case, for example `admission-workflow.md`.

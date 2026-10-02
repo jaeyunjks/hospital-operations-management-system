@@ -1,0 +1,26 @@
+<section class="panel rag-guidance-panel" aria-labelledby="rag-guidance-title">
+  <div class="panel-header">
+    <div>
+      <span class="eyebrow">Patient &amp; Admissions</span>
+      <h2 id="rag-guidance-title">Workflow guidance</h2>
+    </div>
+    <span class="status-pill neutral">Read only</span>
+  </div>
+  <div class="rag-guidance-body">
+    <p class="rag-guidance-disclosure">Answers use indexed workflow documents only. Patient record data is not sent.</p>
+    <form class="rag-guidance-form"
+          hx-post="/partials/rag-guidance"
+          hx-target="#rag-guidance-result"
+          hx-swap="innerHTML"
+          hx-indicator="#rag-guidance-loading"
+          hx-disabled-elt="find button">
+      <label for="rag-guidance-question">Question</label>
+      <textarea id="rag-guidance-question" name="question" maxlength="500" rows="3" required placeholder="Ask about admission scheduling or identity reconciliation"></textarea>
+      <button class="btn btn-primary" type="submit">Ask guidance</button>
+    </form>
+    <div id="rag-guidance-result" class="rag-guidance-result" aria-live="polite">
+      <p class="muted">Responses include source citations when the indexed guidance supports an answer.</p>
+    </div>
+    <p id="rag-guidance-loading" class="rag-guidance-loading" role="status">Searching workflow documents...</p>
+  </div>
+</section>

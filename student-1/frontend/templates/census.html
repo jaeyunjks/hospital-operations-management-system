@@ -26,6 +26,23 @@
   </div>
 </header>
 
+<details class="panel ward-occupancy-panel">
+  <summary class="panel-header">
+    <div>
+      <span class="eyebrow">Shared MCP snapshot</span>
+      <h2>Ward occupancy</h2>
+    </div>
+    <span class="status-pill neutral">View only</span>
+  </summary>
+  <div id="census-ward-occupancy-panel" aria-live="polite">
+    {% with initial=True, error=None, ward_snapshot=None %}
+      {% include "partials/ward_occupancy.html" %}
+    {% endwith %}
+  </div>
+  <p id="ward-occupancy-loading" class="ward-occupancy-loading muted" role="status">Loading ward occupancy…</p>
+</details>
+
+<div class="census-guidance-layout">
 <section class="panel panel-large">
   <div class="panel-header">
     <div>
@@ -60,13 +77,15 @@
             {% endif %}
           </td>
           <td>Ward {{ admission.admission_id % 5 + 1 }}</td>
-          <td><span class="status-pill {{ 'ok' if admission.admission_status == 'Active' else 'warn' if admission.admission_status == 'Pending' else 'none' }}">{{ admission.admission_status }}</span></td>
+          <td><span class="status-pill {{ 'ok' if admission.admission_status in ['Active', 'Completed'] else 'warn' if admission.admission_status == 'Pending' else 'none' }}">{{ admission.admission_status }}</span></td>
           <td><span class="tag {{ 'warn' if admission.admission_id % 2 else 'risk' if admission.admission_id % 3 == 0 else 'neutral' }}">{{ 'Emergency' if admission.admission_id % 2 else 'Urgent' if admission.admission_id % 3 == 0 else 'Routine' }}</span></td>
-          <td class="mono-data">{{ admission.admission_date }}</td>
+          <td class="mono-data">{{ admission.admission_date }}{% if admission.admission_end %} to {{ admission.admission_end }}{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </section>
+{% include "partials/rag_guidance.html" %}
+</div>
 {% endblock %}

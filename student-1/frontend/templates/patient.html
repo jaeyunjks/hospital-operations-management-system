@@ -25,6 +25,8 @@
   </div>
 </header>
 
+<div class="patient-record-layout">
+<div class="patient-record-main">
 <section class="panel">
   <div class="panel-header">
     <div>
@@ -69,11 +71,39 @@
 {% if profile_message %}<div class="banner banner-ok">{{ profile_message }}</div>{% endif %}
 
 <section class="panel">
-  <div class="panel-header"><div><span class="eyebrow">Patient flow</span><h2>Admissions</h2></div></div>
+  <div class="panel-header">
+    <div><span class="eyebrow">Insurance and identifiers</span><h2>Medical Information</h2></div>
+  </div>
+  {% if editing %}
+  <form class="form-grid" method="post">
+    <input type="hidden" name="profile_action" value="medical" />
+    <div class="field-group"><label for="medicare_number">Medicare number</label><input id="medicare_number" name="medicare_number" value="{{ patient.medical.medicare_number if patient.medical else '' }}" required /></div>
+    <div class="field-group"><label for="medicare_individual_reference_number">Individual reference number</label><input id="medicare_individual_reference_number" name="medicare_individual_reference_number" value="{{ patient.medical.medicare_individual_reference_number if patient.medical else '' }}" required /></div>
+    <div class="field-group"><label for="medicare_expiry_date">Medicare expiry date</label><input id="medicare_expiry_date" name="medicare_expiry_date" type="date" value="{{ patient.medical.medicare_expiry_date if patient.medical else '' }}" required /></div>
+    <div class="field-group"><label for="private_insurance">Insurance type</label><select id="private_insurance" name="private_insurance"><option value="0" {% if not patient.medical or not patient.medical.private_insurance %}selected{% endif %}>Medicare</option><option value="1" {% if patient.medical and patient.medical.private_insurance %}selected{% endif %}>Private insurance</option></select></div>
+    <div class="field-group"><label for="p_centrelink_number">Centrelink number</label><input id="p_centrelink_number" name="p_centrelink_number" value="{{ patient.medical.p_centrelink_number if patient.medical else '' }}" /></div>
+    <div class="field-group wide submit-row"><button class="btn btn-primary" type="submit">Save medical information</button></div>
+  </form>
+  {% else %}
+  <div class="detail-grid">
+    <div class="detail-item"><span>Medicare number</span><strong>{{ patient.medical.medicare_number if patient.medical and patient.medical.medicare_number else 'Not provided' }}</strong></div>
+    <div class="detail-item"><span>Individual reference number</span><strong>{{ patient.medical.medicare_individual_reference_number if patient.medical and patient.medical.medicare_individual_reference_number else 'Not provided' }}</strong></div>
+    <div class="detail-item"><span>Medicare expiry date</span><strong>{{ patient.medical.medicare_expiry_date if patient.medical and patient.medical.medicare_expiry_date else 'Not provided' }}</strong></div>
+    <div class="detail-item"><span>Insurance type</span><strong>{{ 'Private insurance' if patient.medical and patient.medical.private_insurance else 'Medicare' }}</strong></div>
+    <div class="detail-item"><span>Centrelink number</span><strong>{{ patient.medical.p_centrelink_number if patient.medical and patient.medical.p_centrelink_number else 'Not provided' }}</strong></div>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <div class="panel-header">
+    <div><span class="eyebrow">Patient flow</span><h2>Admissions</h2></div>
+    <button class="btn btn-icon" type="button" aria-label="Add admission" onclick="document.getElementById('admission-overlay').hidden = false">+</button>
+  </div>
   <div class="admission-list">
     {% for admission in admissions %}
     <div class="admission-row">
-      <div class="admission-meta"><span class="eyebrow">Admission {{ admission.admission_id }}</span><span class="mono-data">{{ admission.admission_date or 'Date not set' }}</span></div>
+      <div class="admission-meta"><span class="eyebrow">Admission {{ admission.admission_id }}</span><span class="mono-data">{{ admission.admission_date or 'Date not set' }} to {{ admission.admission_end or admission.discharge_date or 'End not set' }}</span></div>
       <form class="admission-edit" method="post">
         <input type="hidden" name="profile_action" value="update_admission" />
         <input type="hidden" name="admission_id" value="{{ admission.admission_id }}" />
@@ -93,12 +123,19 @@
     <div class="empty-state">No admissions recorded</div>
     {% endfor %}
   </div>
-  <form class="form-grid profile-form" method="post">
-    <input type="hidden" name="profile_action" value="admission" />
-    <div class="field-group"><label for="admission_date">Admission date</label><input id="admission_date" name="admission_date" type="date" value="{{ today }}" required /></div>
-    <div class="field-group"><label for="admission_status">Status</label><select id="admission_status" name="admission_status"><option>Pending</option><option>Active</option></select></div>
-    <div class="field-group wide submit-row"><button class="btn btn-primary" type="submit">Create admission</button></div>
-  </form>
+  <div id="admission-overlay" class="note-overlay" hidden>
+    <form class="form-grid note-dialog" method="post">
+      <input type="hidden" name="profile_action" value="admission" />
+      <div class="field-group"><label for="admission_date">Admission date</label><input id="admission_date" name="admission_date" type="date" value="{{ today }}" required /></div>
+      <div class="field-group"><label for="admission_time">Start time</label><input id="admission_time" name="admission_time" type="time" step="900" value="09:00" required /></div>
+      <div class="field-group"><label for="duration_minutes">Duration in minutes</label><input id="duration_minutes" name="duration_minutes" type="number" min="15" step="15" value="60" required /></div>
+      <div class="field-group"><label for="admission_status">Status</label><select id="admission_status" name="admission_status"><option>Pending</option><option>Active</option></select></div>
+      <div class="field-group wide note-dialog-actions">
+        <button class="btn btn-secondary" type="button" onclick="document.getElementById('admission-overlay').hidden = true">Cancel</button>
+        <button class="btn btn-primary" type="submit">Create admission</button>
+      </div>
+    </form>
+  </div>
 </section>
 
 <section class="panel">
@@ -172,18 +209,20 @@
   </form>
 </section>
 
+</div>
+<aside class="patient-summary-sidebar">
 <section class="panel">
   <div class="panel-header">
     <div>
       <span class="eyebrow">AI assist</span>
-      <h2>Clinical summary</h2>
+      <h2>AI summary</h2>
     </div>
   </div>
 
   <div class="ai-summary-box">
-    <p id="patient-summary">{{ ai_summary }}</p>
+    <p id="patient-summary" aria-live="polite">{{ ai_summary }}</p>
     <div class="summary-actions">
-      <form method="post">
+      <form method="post" hx-post="{{ url_for('patient_record', patient_id=patient.patient_id) }}" hx-target="#patient-summary" hx-swap="innerHTML">
         <input type="hidden" name="summary_action" value="refresh" />
         <button class="btn btn-secondary" type="submit">Refresh summary</button>
       </form>
@@ -196,5 +235,8 @@
   </div>
   {% if summary_message %}<div class="banner banner-ok">{{ summary_message }}</div>{% endif %}
 </section>
+{% include "partials/rag_guidance.html" %}
+</aside>
+</div>
 {% endif %}
 {% endblock %}

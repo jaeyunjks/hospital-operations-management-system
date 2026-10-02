@@ -242,14 +242,15 @@ rules.
 | Folder | Owner | Status |
 |---|---|---|
 | `knowledge/shared/` | Group | HOMS overview: features, architecture, ports, AI services |
+| `knowledge/student-1/` | Student 1 | 5 patient and admissions documents (intake and record data, admission scheduling, identity review, emergency workflow, AI summary boundaries) |
+| `knowledge/student-2/` | Student 2 | 5 clinical staff documents (care-task escalation, consultation and referral, discharge readiness, pre-surgery requirements, post-discharge record edits) |
 | `knowledge/student-3/` | Student 3 | 6 pharmacy documents (overview, inventory and low stock, issuing/receiving, expiry/write-off, reordering/POs, AI/agent) |
-| `knowledge/student-5/` | Student 5 | 4 staff and shift documents (availability, roles and decision-support boundaries, shift planning and coverage, eligibility and assignments) |
 | `knowledge/student-4/` | Student 4 | 6 room and bed documents (overview, allocation and double-booking, transfers and release, shortage cases, ward occupancy and theatres, AI suggestion boundaries) |
-| `knowledge/student-1/`, `-2/` | Each student | Awaiting documents — see each folder's README |
+| `knowledge/student-5/` | Student 5 | 4 staff and shift documents (availability, roles and decision-support boundaries, shift planning and coverage, eligibility and assignments) |
 
 Documents describe rules and workflows, not live data: questions about current
-stock levels, bed counts or rosters are refused, and those figures come from
-each feature's own pages and MCP tools.
+patient records, stock levels, bed counts or rosters are refused, and current
+operational data comes from each feature's own pages and MCP tools.
 
 ## Limitations
 

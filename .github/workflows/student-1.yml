@@ -4,15 +4,23 @@ on:
   push:
     paths:
       - "student-1/**"
+      - "docker-compose.yml"
       - ".github/workflows/student-1.yml"
   pull_request:
     paths:
       - "student-1/**"
+      - "docker-compose.yml"
       - ".github/workflows/student-1.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  MCP_ENABLED: "false"
+  STUDENT1_MCP_ENABLED: "false"
+  RAG_ENABLED: "false"
+  STUDENT1_RAG_ENABLED: "false"
 
 jobs:
   validate:
@@ -67,3 +75,13 @@ jobs:
 
       - name: Build database image
         run: docker build -f student-1/database/Dockerfile -t student-1-database:ci student-1
+
+      - name: Run Student-1 Compose smoke test
+        run: |
+          set -e
+          trap 'docker compose down --volumes --remove-orphans' EXIT
+          docker compose up -d --build --wait \
+            student-1-database student-1-backend student-1-frontend
+          curl --fail --show-error http://localhost:6100/health
+          curl --fail --show-error http://localhost:5100/health
+          curl --fail --show-error http://localhost:3100/

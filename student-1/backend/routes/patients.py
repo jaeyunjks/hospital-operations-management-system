@@ -49,6 +49,16 @@ def create_patient():
     )
     return jsonify(payload), status
 
+
+@patients_bp.route("/merge", methods=["POST"])
+def merge_patient_profiles():
+    payload, status = _db_call(
+        "POST",
+        "/api/patients/merge",
+        payload=request.get_json(silent=True) or {},
+    )
+    return jsonify(payload), status
+
 # Retrieves a single patient record by its patient ID
 @patients_bp.route("/<int:patient_id>", methods=["GET"])
 def get_patient(patient_id):
@@ -132,6 +142,16 @@ def patient_medical_information():
         payload, status = _db_call("GET", "/api/patient-medical-information", params=request.args.to_dict())
     else:
         payload, status = _db_call("POST", "/api/patient-medical-information", payload=request.get_json(silent=True) or {})
+    return jsonify(payload), status
+
+
+@patients_bp.route("/medical-information/<int:insurance_id>", methods=["PATCH"])
+def update_patient_medical_information(insurance_id):
+    payload, status = _db_call(
+        "PATCH",
+        f"/api/patient-medical-information/{insurance_id}",
+        payload=request.get_json(silent=True) or {},
+    )
     return jsonify(payload), status
 
 

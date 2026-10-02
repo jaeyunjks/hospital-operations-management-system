@@ -8,8 +8,8 @@
       <h1>{{ page_title }}</h1>
     </div>
     <div class="header-actions">
-      <button class="btn btn-secondary">Save draft</button>
-      <button class="btn btn-primary">Submit intake</button>
+      <button class="btn btn-secondary" type="submit" form="intake-form" name="emergency_override" value="1">Emergency override</button>
+      <button class="btn btn-primary" type="submit" form="intake-form">Submit intake</button>
     </div>
   </div>
 </header>
@@ -22,7 +22,7 @@
     </div>
   </div>
 
-  <form class="form-grid" method="post">
+  <form class="form-grid" method="post" id="intake-form">
     <div class="field-group">
       <label for="title">Title{% if errors.title %}<span class="required-star">*</span>{% endif %}</label>
       <select id="title" name="title">
@@ -116,10 +116,6 @@
       <textarea id="notes" name="notes" rows="4" placeholder="Reason for presentation, referral, interpreter needs, family contact..."></textarea>
     </div>
 
-    <div class="field-group wide submit-row">
-      <button class="btn btn-primary" type="submit">Submit intake</button>
-      <button class="btn btn-secondary" type="submit" name="emergency_override" value="1">Emergency override</button>
-    </div>
   </form>
 
   {% if submitted %}

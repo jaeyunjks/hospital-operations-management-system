@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="page-header">
+  <div class="context-line">{{ page_context }}</div>
+  <div class="header-row">
+    <div><h1>{{ page_title }}</h1></div>
+    <div class="header-actions"><a class="btn btn-secondary" href="{{ url_for('duplicate_review_page') }}">Back to Duplicate Review</a></div>
+  </div>
+</header>
+
+{% if message %}<div class="banner banner-risk" role="alert">{{ message }}</div>{% endif %}
+{% for error in errors %}<div class="banner banner-risk" role="alert">{{ error }}</div>{% endfor %}
+
+{% if source and duplicate and pair_valid %}
+<div class="merge-guidance-layout">
+<div class="merge-profile-head">
+  <div class="merge-identity-column source-column">
+    <div class="merge-identity-heading">
+      <span class="eyebrow">Source · retained profile</span>
+      <h2>{{ source.p_first_name }} {{ source.p_last_name }}</h2>
+    </div>
+    <div class="merge-identity-meta">
+      <span class="mono-data">MRN-{{ source.patient_id }}</span>
+      <a class="inline-link" href="{{ url_for('patient_record', patient_id=source.patient_id) }}" target="_blank" rel="noopener">Open Source profile</a>
+    </div>
+  </div>
+  <div class="merge-identity-column duplicate-column">
+    <div class="merge-identity-heading">
+      <span class="eyebrow">Duplicate · merged into Source</span>
+      <h2>{{ duplicate.p_first_name }} {{ duplicate.p_last_name }}</h2>
+    </div>
+    <div class="merge-identity-meta">
+      <span class="mono-data">MRN-{{ duplicate.patient_id }}</span>
+      <a class="inline-link" href="{{ url_for('patient_record', patient_id=duplicate.patient_id) }}" target="_blank" rel="noopener">Open Duplicate profile</a>
+    </div>
+  </div>
+</div>
+{% include "partials/rag_guidance.html" %}
+</div>
+<div class="merge-legend"><span class="merge-legend-red">Red: differs, empty, or default</span><span class="merge-legend-green">Green: same information</span><span>† System-filled default or empty value</span></div>
+
+<form method="post" class="merge-submit-form">
+  <input type="hidden" name="source_id" value="{{ source.patient_id }}">
+  <input type="hidden" name="duplicate_id" value="{{ duplicate.patient_id }}">
+  {% for group_title, fields in field_groups %}
+  <section class="panel merge-section">
+    <div class="panel-header"><div><span class="eyebrow">Profile reconciliation</span><h2>{{ group_title }}</h2></div></div>
+    <div class="merge-field-list">
+      {% for field in fields %}
+      <div class="merge-field-row {{ 'merge-conflict' if field.needs_review else 'merge-match' }} {% if submitted.get(field.choice_name) %}merge-resolved{% endif %}" id="row_{{ field.group }}_{{ field.field }}">
+        <div class="merge-value-column {{ 'merge-conflict' if field.needs_review else 'merge-match' }}">
+          <div class="merge-value-choice">
+            <input type="checkbox" name="{{ field.choice_name }}" value="source" aria-label="Use Source {{ field.label }}" {% if submitted.get(field.choice_name, 'source' if not field.needs_review or field.auto_source else '') == 'source' %}checked{% endif %} onchange="updateMergeField(this)">
+            <label for="{{ field.source_name }}">Source · {{ field.label }}{% if field.source_default %} <span class="default-marker" title="Default or empty value">†</span>{% endif %}</label>
+          </div>
+          <input class="merge-readonly-value" id="{{ field.source_name }}" name="{{ field.source_name }}" value="{{ field.source_value }}" readonly aria-readonly="true">
+        </div>
+        <div class="merge-value-column {{ 'merge-conflict' if field.needs_review else 'merge-match' }}">
+          <div class="merge-value-choice">
+            <input type="checkbox" name="{{ field.choice_name }}" value="duplicate" aria-label="Use Duplicate {{ field.label }}" {% if submitted.get(field.choice_name) == 'duplicate' %}checked{% endif %} onchange="updateMergeField(this)">
+            <label for="{{ field.duplicate_name }}">Duplicate · {{ field.label }}{% if field.duplicate_default %} <span class="default-marker" title="Default or empty value">†</span>{% endif %}</label>
+          </div>
+          <input class="merge-readonly-value" id="{{ field.duplicate_name }}" name="{{ field.duplicate_name }}" value="{{ field.duplicate_value }}" readonly aria-readonly="true">
+        </div>
+        <div class="merge-resolution">
+          <div class="merge-value-choice">
+            <input type="checkbox" name="{{ field.choice_name }}" value="custom" aria-label="Use new {{ field.label }}" {% if submitted.get(field.choice_name) == 'custom' %}checked{% endif %} onchange="updateMergeField(this)">
+            <label for="{{ field.custom_name }}">New / changed value</label>
+          </div>
+          {% if field.custom_options %}
+          <select id="{{ field.custom_name }}" name="{{ field.custom_name }}" class="merge-custom-value" data-custom-value {% if submitted.get(field.choice_name) != 'custom' %}disabled{% endif %}>
+            <option value="">Select a value</option>
+            {% for option in field.custom_options %}<option value="{{ option }}" {% if field.custom_value|string == option %}selected{% endif %}>{{ option }}</option>{% endfor %}
+          </select>
+          {% else %}
+          <input id="{{ field.custom_name }}" name="{{ field.custom_name }}" type="{{ field.custom_type }}" class="merge-custom-value" data-custom-value value="{{ field.custom_value }}" {% if submitted.get(field.choice_name) != 'custom' %}disabled{% endif %}>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+
+  <section class="panel merge-section">
+    <div class="panel-header"><div><span class="eyebrow">Retain Source contacts</span><h2>Emergency contacts</h2></div></div>
+    <div class="merge-related-columns">
+      <div><h3>Source contacts</h3>
+        {% for contact in source_contacts %}
+        <div class="contact-tile"><div class="detail-grid contact-view">
+          <div class="detail-item"><span>First name</span><strong>{{ contact.contact_first_name }}</strong></div>
+          <div class="detail-item"><span>Last name</span><strong>{{ contact.contact_last_name }}</strong></div>
+          <div class="detail-item"><span>Relationship</span><strong>{{ contact.contact_relationship }}</strong></div>
+          <div class="detail-item"><span>Date of birth</span><strong>{{ contact.contact_date_of_birth }}</strong></div>
+          <div class="detail-item"><span>Mobile</span><strong>{{ contact.contact_mobile }}</strong></div>
+          <div class="detail-item"><span>Email</span><strong>{{ contact.contact_email or 'Not provided' }}</strong></div>
+          <div class="detail-item"><span>Address</span><strong>{{ contact.contact_address }}</strong></div>
+        </div></div>
+        {% else %}<div class="empty-state">No contacts recorded</div>{% endfor %}
+      </div>
+      <div><h3>Duplicate contacts</h3>
+        {% for contact in duplicate_contacts %}
+        <label class="merge-related-item">
+          <input type="checkbox" name="contact_ids" value="{{ contact.contact_id }}" {% if not submitted or contact.contact_id|string in submitted.getlist('contact_ids') %}checked{% endif %}>
+          <span class="contact-tile"><span class="contact-tile-actions">Include this contact</span><span class="detail-grid contact-view">
+            <span class="detail-item"><span>First name</span><strong>{{ contact.contact_first_name }}</strong></span>
+            <span class="detail-item"><span>Last name</span><strong>{{ contact.contact_last_name }}</strong></span>
+            <span class="detail-item"><span>Relationship</span><strong>{{ contact.contact_relationship }}</strong></span>
+            <span class="detail-item"><span>Date of birth</span><strong>{{ contact.contact_date_of_birth }}</strong></span>
+            <span class="detail-item"><span>Mobile</span><strong>{{ contact.contact_mobile }}</strong></span>
+            <span class="detail-item"><span>Email</span><strong>{{ contact.contact_email or 'Not provided' }}</strong></span>
+            <span class="detail-item"><span>Address</span><strong>{{ contact.contact_address }}</strong></span>
+          </span></span>
+        </label>
+        {% else %}<div class="empty-state">No contacts recorded</div>{% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <section class="panel merge-section">
+    <div class="panel-header"><div><span class="eyebrow">Retain Source admissions</span><h2>Admissions</h2></div></div>
+    <div class="merge-related-columns">
+      <div><h3>Source admissions</h3>
+        {% for admission in source_admissions %}
+        <div class="merge-admission-item"><strong>ADM-{{ admission.admission_id }}</strong><span>{{ admission.admission_date }} to {{ admission.admission_end or admission.discharge_date or 'End not set' }}</span><span>{{ admission.admission_status }}</span></div>
+        {% else %}<div class="empty-state">No admissions recorded</div>{% endfor %}
+      </div>
+      <div><h3>Duplicate admissions</h3>
+        {% for admission in duplicate_admissions %}
+        <label class="merge-admission-item merge-admission-choice"><input type="checkbox" name="admission_ids" value="{{ admission.admission_id }}" {% if not submitted or admission.admission_id|string in submitted.getlist('admission_ids') %}checked{% endif %}><strong>ADM-{{ admission.admission_id }}</strong><span>{{ admission.admission_date }} to {{ admission.admission_end or admission.discharge_date or 'End not set' }}</span><span>{{ admission.admission_status }}</span><span>Include in Source</span></label>
+        {% else %}<div class="empty-state">No admissions recorded</div>{% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <div class="merge-finalize"><button class="btn btn-primary" type="submit">Reconcile and merge profiles</button></div>
+</form>
+<script>
+  function updateMergeField(checkbox) {
+    const row = checkbox.closest(".merge-field-row");
+    if (checkbox.checked) {
+      row.querySelectorAll('input[type="checkbox"]').forEach((peer) => {
+        if (peer !== checkbox) peer.checked = false;
+      });
+    }
+    const customSelected = row.querySelector('input[value="custom"]').checked;
+    row.querySelector("[data-custom-value]").disabled = !customSelected;
+    row.classList.toggle("merge-resolved", row.querySelector('input[type="checkbox"]:checked') !== null);
+  }
+</script>
+{% else %}
+<div class="merge-guidance-layout merge-guidance-layout--empty">
+  {% include "partials/rag_guidance.html" %}
+</div>
+{% endif %}
+{% endblock %}
