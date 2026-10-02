@@ -52,7 +52,7 @@ services:
       BACKEND_PORT: "5500"
       DATABASE_SERVICE_URL: "${STUDENT5_DATABASE_SERVICE_URL:-http://student5-database:6500}"
       AI_ENABLED: "${STUDENT5_AI_ENABLED:-true}"
-      OLLAMA_URL: "${STUDENT5_OLLAMA_URL:-http://ollama:11434}"
+      OLLAMA_URL: "${STUDENT5_OLLAMA_URL:-http://host.docker.internal:11434}"
       OLLAMA_MODEL: "${STUDENT5_OLLAMA_MODEL:-llama3.1:8b}"
       OLLAMA_TIMEOUT: "${STUDENT5_OLLAMA_TIMEOUT:-30}"
       MCP_ENABLED: "${STUDENT5_MCP_ENABLED:-false}"
@@ -110,18 +110,11 @@ services:
       start_period: 5s
     restart: unless-stopped
 
-  # --- shared AI runtime ------------------------------------------------
-  ollama:
-    image: ollama/ollama:latest
-    container_name: homs-ollama
-    ports: ["11434:11434"]
-    volumes: ["ollama-models:/root/.ollama"]
-    networks: [homs-net]
-    healthcheck:
-      test: ["CMD-SHELL", "ollama list || exit 1"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
+  # --- shared AI runtime -------------------------------------------------
+  # Ollama (AI Mode), the MCP server and the RAG server run on the host and are
+  # deliberately not Compose services. Backends reach all three through
+  # host.docker.internal: Ollama 11434, MCP 8000, RAG 8100.
+  # Start it on the host before `docker compose up`:  ollama serve
 
   # --- student-4 — Room & Bed Management (Jisoo Jung / Asher) -----------
   student-4-database:
@@ -147,7 +140,7 @@ services:
     environment:
       PORT: 5400
       DATABASE_URL: http://student-4-database:6400
-      OLLAMA_URL: http://ollama:11434
+      OLLAMA_URL: "${STUDENT4_OLLAMA_URL:-http://host.docker.internal:11434}"
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
       OLLAMA_TIMEOUT: 30
       AUTH_ENABLED: 0
@@ -317,7 +310,7 @@ services:
       # stays developable when a teammate's service is down or not yet built.
       # Default "false": make the real HTTP calls above.
       USE_EXTERNAL_STUBS: "${student2_USE_EXTERNAL_STUBS:-false}"
-      OLLAMA_BASE_URL: "${student2_OLLAMA_BASE_URL:-http://ollama:11434}"
+      OLLAMA_BASE_URL: "${student2_OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
       OLLAMA_MODEL: "${student2_OLLAMA_MODEL:-llama3.1:8b}"
       OLLAMA_TIMEOUT: "${student2_OLLAMA_TIMEOUT:-8}"
     ports:
@@ -325,6 +318,8 @@ services:
     depends_on:
       student-2-database:
         condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks: [homs-net]
     healthcheck:
       test:
@@ -388,12 +383,14 @@ services:
       HOST: 0.0.0.0
       PORT: 5100
       DATABASE_URL: http://student-1-database:6100
-      OLLAMA_URL: http://ollama:11434
+      OLLAMA_URL: "${STUDENT1_OLLAMA_URL:-http://host.docker.internal:11434}"
       FLASK_DEBUG: 0
     depends_on:
       - student-1-database
     ports:
       - "5100:5100"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks: [homs-net]
     command: python -m backend.app
 
@@ -421,6 +418,5 @@ networks:
 
 volumes:
   student5-database-data:
-  ollama-models:
   student3-database-data:
   student2-database-data:
