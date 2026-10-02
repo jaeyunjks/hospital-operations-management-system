@@ -42,7 +42,7 @@ jobs:
       - name: Verify all integrated service definitions
         run: |
           expected_services=(
-            homs-homepage ollama
+            homs-homepage
             student-1-database student-1-backend student-1-frontend
             student-2-database student-2-backend student-2-frontend
             student-3-database student-3-backend student-3-frontend
@@ -54,6 +54,12 @@ jobs:
             grep -qx "$service" <<< "$actual_services"
           done
           docker compose config | grep -q 'OLLAMA'
+          # AI Mode, MCP, RAG and the agentic loop run on the host and must not
+          # be Compose services; the backends reach them through host.docker.internal.
+          if grep -qx 'ollama' <<< "$actual_services"; then
+            echo "ollama must not be a Compose service"; exit 1
+          fi
+          docker compose config | grep -q 'host.docker.internal:11434'
 
       - name: Build integrated application
         run: docker compose build
@@ -100,8 +106,8 @@ jobs:
           assert status == 200
           assert isinstance(json.loads(records).get("clinical_records"), list)
 
-          status, _ = request("http://127.0.0.1:11434/api/tags")
-          assert status == 200
+          # Ollama runs on the developer's host, not in CI, so AI Mode, MCP and RAG
+          # are not exercised here. Their configuration is checked above instead.
           PY
 
       - name: Show integrated service logs on failure
