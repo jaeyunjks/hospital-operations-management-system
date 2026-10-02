@@ -308,7 +308,7 @@
 
           <div class="panel ai-tools">
             <div class="panel__header">
-              <h2 class="panel__title">Care tasks and policy questions</h2>
+              <h2 class="panel__title">MCP and RAG: Care tasks and policy questions</h2>
               {# Admission number in mono, same slot the summary panel uses for its id. #}
               {% if admission_id is not none %}
                 <span class="panel__meta">Admission {{ admission_id }}</span>
@@ -319,7 +319,7 @@
 
               {# ---- Open care tasks ---- #}
               <section class="ai-tools__section" aria-labelledby="care-tasks-title">
-                <h3 class="section-header__title" id="care-tasks-title">Open care tasks</h3>
+                <h3 class="section-header__title" id="care-tasks-title">MCP: Open care tasks</h3>
 
                 <form class="stack"
                       hx-post="/ai/care-tasks"
@@ -342,7 +342,7 @@
 
               {# ---- Policy question ---- #}
               <section class="ai-tools__section" aria-labelledby="policy-question-title">
-                <h3 class="section-header__title" id="policy-question-title">Policy question</h3>
+                <h3 class="section-header__title" id="policy-question-title">RAG: Policy question</h3>
 
                 <form class="stack"
                       hx-post="/ai/policy-question"
