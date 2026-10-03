@@ -133,6 +133,7 @@ def test_registered_with_strict_input_schema():
     tools = {tool.name: tool for tool in asyncio.run(discover()).tools}
     schema = tools["homs_open_care_tasks"].input_schema
     assert list(schema["properties"]) == ["admission_id"]
+    assert schema["required"] == ["admission_id"]
     assert schema["additionalProperties"] is False
 
 

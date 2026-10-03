@@ -53,7 +53,8 @@ def test_registers_all_shared_tools():
     assert listing.tools[0].input_schema["properties"]["message"]["maxLength"] == 200
     for tool in listing.tools[1:]:
         assert tool.input_schema["additionalProperties"] is False
-        assert "required" not in tool.input_schema
+        if tool.name != "homs_open_care_tasks":
+            assert "required" not in tool.input_schema
 
 
 def test_valid_request_returns_structured_success():

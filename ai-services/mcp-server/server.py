@@ -315,6 +315,7 @@ HOMS_OPEN_CARE_TASKS_TOOL = Tool(
                 "description": "Required. Positive whole-number admission id.",
             }
         },
+        "required": ["admission_id"],
         "additionalProperties": False,
     },
     output_schema=care_tasks.OUTPUT_SCHEMA,
