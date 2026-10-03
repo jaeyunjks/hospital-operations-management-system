@@ -187,6 +187,16 @@ def _request(method: str, path: str, params: Optional[Dict[str, Any]] = None,
             "The Staff & Shift service request timed out."
         ) from error
 
+    except ConnectionError as error:
+        # A connected peer can reset or abort the socket without urllib
+        # wrapping the failure in URLError. Treat those transport failures the
+        # same as a refused/unreachable backend while preserving the separate
+        # timeout and HTTP-status handling above.
+        raise BackendUnavailableError(
+            "Workforce data is temporarily unavailable. "
+            "Check that the Staff & Shift service is running."
+        ) from error
+
     except json.JSONDecodeError as error:
         raise BackendError("Staff & Shift service returned an unreadable response.") from error
 

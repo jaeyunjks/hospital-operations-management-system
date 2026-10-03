@@ -103,6 +103,35 @@ def _raise_unavailable(*args, **kwargs):
     raise api_client.BackendUnavailableError(UNAVAILABLE_MESSAGE)
 
 
+def _stub_pending_requests(monkeypatch, client_module):
+    """Keep KPI unit tests independent from the manager request queue."""
+    monkeypatch.setattr(
+        client_module, "list_unavailability_requests",
+        lambda **kwargs: {"count": 0, "requests": []})
+
+
+def _stub_staff_detail_dependencies(monkeypatch, client_module):
+    """Provide neutral values for the drawer's independent secondary reads."""
+    monkeypatch.setattr(
+        client_module, "list_staff_shifts", lambda staff_id: {"shifts": []})
+    monkeypatch.setattr(
+        client_module, "get_weekly_availability",
+        lambda staff_id: {"staff_id": staff_id, "periods": []})
+
+
+def _stub_shift_candidates(monkeypatch, client_module):
+    """Provide the backend-owned empty eligibility result for detail tests."""
+    monkeypatch.setattr(
+        client_module, "list_shift_candidates",
+        lambda shift_id: {
+            "shift_id": shift_id,
+            "count": 0,
+            "eligible_count": 0,
+            "already_assigned_staff_ids": [],
+            "candidates": [],
+        })
+
+
 # ------------------------------------------------- coverage response fixtures
 # The frontend now CONSUMES the coverage service's per-shift arithmetic instead
 # of recomputing it, so these fixtures derive their figures from that service's
@@ -174,6 +203,8 @@ def test_index_renders_shell_without_calling_backend(frontend_client, fe_api_cli
 
 # -------------------------------------------------------------------- kpis
 def test_kpis_partial_renders_real_data(frontend_client, fe_api_client, monkeypatch):
+    _stub_pending_requests(monkeypatch, fe_api_client)
+
     def fake_get_coverage(shift_date=None, department=None):
         return _coverage_body([
             _cov(1, "Pharmacy", start="08:00", end="16:00", role="Pharmacist",
@@ -204,6 +235,8 @@ def test_kpis_partial_renders_real_data(frontend_client, fe_api_client, monkeypa
 def test_kpis_partial_handles_no_shifts_today(frontend_client, fe_api_client, monkeypatch):
     """required_staff_count totals to zero -> coverage_pct must be None (—),
     never a ZeroDivisionError or NaN."""
+    _stub_pending_requests(monkeypatch, fe_api_client)
+
     def fake_get_coverage(shift_date=None, department=None):
         return _coverage_body([])
 
@@ -473,6 +506,7 @@ def test_staff_table_combines_all_filters_with_search(frontend_client, fe_api_cl
 
 
 def test_staff_detail_renders_real_fields(frontend_client, fe_api_client, monkeypatch):
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_staff",
                         lambda sid: {"staff": STAFF_FIXTURE[0]})
     monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
@@ -485,6 +519,7 @@ def test_staff_detail_renders_real_fields(frontend_client, fe_api_client, monkey
 
 def test_staff_detail_omits_absent_specialisation(frontend_client, fe_api_client, monkeypatch):
     """A null specialisation must be omitted, never fabricated or shown as None."""
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_staff",
                         lambda sid: {"staff": STAFF_FIXTURE[1]})
     body = frontend_client.get("/partials/staff/2").data.decode()
@@ -500,6 +535,7 @@ def test_staff_detail_backend_unavailable(frontend_client, fe_api_client, monkey
 
 
 def test_availability_update_success(frontend_client, fe_api_client, monkeypatch):
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     updated = {**STAFF_FIXTURE[0], "availability_status": "On Leave"}
     monkeypatch.setattr(fe_api_client, "update_availability",
                         lambda sid, status: {"staff": updated})
@@ -515,6 +551,7 @@ def test_availability_update_success(frontend_client, fe_api_client, monkeypatch
 
 def test_availability_update_rejects_invalid_status(frontend_client, fe_api_client, monkeypatch):
     """An invalid value must never reach the backend."""
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_staff",
                         lambda sid: {"staff": STAFF_FIXTURE[0]})
     monkeypatch.setattr(fe_api_client, "update_availability",
@@ -526,6 +563,7 @@ def test_availability_update_rejects_invalid_status(frontend_client, fe_api_clie
 
 
 def test_availability_update_failure_does_not_claim_success(frontend_client, fe_api_client, monkeypatch):
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "update_availability", _raise_unavailable)
     monkeypatch.setattr(fe_api_client, "get_staff",
                         lambda sid: {"staff": STAFF_FIXTURE[0]})
@@ -545,6 +583,7 @@ def _shift(**kw):
 
 
 def test_drawer_shows_deterministic_display_id(frontend_client, fe_api_client, monkeypatch):
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
     monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
     body = frontend_client.get("/partials/staff/1").data.decode()
@@ -554,6 +593,7 @@ def test_drawer_shows_deterministic_display_id(frontend_client, fe_api_client, m
 
 
 def test_drawer_omits_absent_specialisation_and_notes(frontend_client, fe_api_client, monkeypatch):
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[1]})
     monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
     body = frontend_client.get("/partials/staff/2").data.decode()
@@ -564,6 +604,7 @@ def test_drawer_omits_absent_specialisation_and_notes(frontend_client, fe_api_cl
 
 def test_drawer_contains_no_fabricated_mockup_fields(frontend_client, fe_api_client, monkeypatch):
     """Guards against reintroducing mockup-only concepts the schema lacks."""
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
     monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
     body = frontend_client.get("/partials/staff/1").data.decode().lower()
@@ -578,6 +619,7 @@ def test_drawer_contains_no_fabricated_mockup_fields(frontend_client, fe_api_cli
 
 def test_drawer_renders_upcoming_shifts(frontend_client, fe_api_client, monkeypatch):
     import datetime
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     soon = (datetime.date.today() + datetime.timedelta(days=2)).isoformat()
     monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
     monkeypatch.setattr(fe_api_client, "list_staff_shifts",
@@ -589,6 +631,7 @@ def test_drawer_renders_upcoming_shifts(frontend_client, fe_api_client, monkeypa
 
 def test_drawer_excludes_cancelled_assignments(frontend_client, fe_api_client, monkeypatch):
     import datetime
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     soon = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
     monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
     monkeypatch.setattr(fe_api_client, "list_staff_shifts",
@@ -599,6 +642,7 @@ def test_drawer_excludes_cancelled_assignments(frontend_client, fe_api_client, m
 
 
 def test_drawer_no_active_assignment_state(frontend_client, fe_api_client, monkeypatch):
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
     monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
     body = frontend_client.get("/partials/staff/1").data.decode()
@@ -607,6 +651,7 @@ def test_drawer_no_active_assignment_state(frontend_client, fe_api_client, monke
 
 def test_drawer_survives_shift_lookup_failure(frontend_client, fe_api_client, monkeypatch):
     """A shift-service failure must not take the whole drawer down."""
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
     monkeypatch.setattr(fe_api_client, "list_staff_shifts", _raise_unavailable)
     body = frontend_client.get("/partials/staff/1").data.decode()
@@ -627,6 +672,7 @@ def test_drawer_staff_not_found(frontend_client, fe_api_client, monkeypatch):
 
 
 def test_availability_update_emits_table_refresh_trigger(frontend_client, fe_api_client, monkeypatch):
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
     monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
     monkeypatch.setattr(fe_api_client, "update_availability",
@@ -638,6 +684,7 @@ def test_availability_update_emits_table_refresh_trigger(frontend_client, fe_api
 
 def test_failed_availability_update_emits_no_refresh_trigger(frontend_client, fe_api_client, monkeypatch):
     """A failed save must not signal the table that anything changed."""
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
     monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
     monkeypatch.setattr(fe_api_client, "update_availability", _raise_unavailable)
@@ -649,6 +696,7 @@ def test_failed_availability_update_emits_no_refresh_trigger(frontend_client, fe
 
 def test_availability_rejects_roster_state_values(frontend_client, fe_api_client, monkeypatch):
     """'On shift'/'Off duty' are roster concepts, not availability values."""
+    _stub_staff_detail_dependencies(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_staff", lambda sid: {"staff": STAFF_FIXTURE[0]})
     monkeypatch.setattr(fe_api_client, "list_staff_shifts", lambda sid: {"shifts": []})
     for bad in ("On shift", "Off duty"):
@@ -1443,6 +1491,7 @@ def test_planner_starts_with_an_empty_shift_selection(
 def test_planner_real_shift_selection_reuses_management_panel(
         frontend_client, fe_api_client, monkeypatch):
     _stub_week_planner(monkeypatch, fe_api_client)
+    _stub_shift_candidates(monkeypatch, fe_api_client)
     selected = WEEK_SHIFTS[1]
     monkeypatch.setattr(fe_api_client, "get_shift", lambda sid: {"shift": selected})
     monkeypatch.setattr(
@@ -1981,6 +2030,7 @@ def test_no_shifts_today_is_reported_truthfully(frontend_client, fe_api_client, 
 
 def test_empty_day_coverage_is_dash_not_full(frontend_client, fe_api_client, monkeypatch):
     """Zero required positions must not render as 100% coverage."""
+    _stub_pending_requests(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_coverage",
                         lambda **kw: _coverage_body([]))
     monkeypatch.setattr(fe_api_client, "list_staff", lambda **kw: {"count": 0, "staff": []})
@@ -2100,6 +2150,7 @@ def test_weekly_summary_not_ready_when_gap_hidden_behind_surplus():
 # ----------------------------------------------- coverage cap
 def test_daily_coverage_cannot_exceed_100_percent(frontend_client, fe_api_client, monkeypatch):
     """An overstaffed shift must not inflate coverage above 100%."""
+    _stub_pending_requests(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_coverage",
                         lambda **kw: _coverage_body([_cov(1, required=2, assigned=3)]))
     monkeypatch.setattr(fe_api_client, "list_staff", lambda **kw: {"count": 5, "staff": []})
@@ -2111,6 +2162,7 @@ def test_daily_coverage_cannot_exceed_100_percent(frontend_client, fe_api_client
 
 def test_daily_coverage_uses_filled_positions(frontend_client, fe_api_client, monkeypatch):
     """Surplus on one shift must not mask a shortage on another in the %."""
+    _stub_pending_requests(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kw: _coverage_body([
         _cov(1, "Emergency", required=2, assigned=4),
         _cov(2, "Radiology", required=2, assigned=0)]))
@@ -2143,6 +2195,7 @@ def test_department_fully_staffed_when_no_gap_and_no_surplus(frontend_client, fe
 
 # ------------------------------------------------ requirement validation
 def test_requirement_zero_is_rejected(frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_form_options(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "update_shift",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not be called")))
     body = frontend_client.post("/partials/shifts/3", data={
@@ -2154,6 +2207,7 @@ def test_requirement_zero_is_rejected(frontend_client, fe_api_client, monkeypatc
 
 
 def test_requirement_non_numeric_is_rejected(frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_form_options(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "update_shift",
                         lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not be called")))
     body = frontend_client.post("/partials/shifts/3", data={
@@ -2166,6 +2220,7 @@ def test_requirement_non_numeric_is_rejected(frontend_client, fe_api_client, mon
 
 def test_filled_lifecycle_badge_is_neutral_and_gap_remains_authoritative(
         frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_candidates(monkeypatch, fe_api_client)
     filled = {**SHIFT_FIXTURE, "shift_status": "Filled"}
     monkeypatch.setattr(fe_api_client, "get_shift", lambda sid: {"shift": filled})
     monkeypatch.setattr(
@@ -2197,6 +2252,7 @@ def test_filled_shift_list_keeps_lifecycle_separate_from_coverage(
 
 def test_requirement_change_does_not_touch_assignments(frontend_client, fe_api_client, monkeypatch):
     """Editing the requirement must never add or remove staff."""
+    _stub_shift_candidates(monkeypatch, fe_api_client)
     calls = []
     monkeypatch.setattr(fe_api_client, "update_shift",
                         lambda sid, payload: calls.append(("update", payload)) or {"shift": {}})
@@ -2307,6 +2363,7 @@ def test_aggregate_uses_backend_surplus_verbatim():
 
 def test_kpi_row_reports_backend_figures_not_its_own(
         frontend_client, fe_api_client, monkeypatch):
+    _stub_pending_requests(monkeypatch, fe_api_client)
     monkeypatch.setattr(fe_api_client, "get_coverage", lambda **kw: {
         "shifts": [_contradictory_row()],
         "summary": {"total_shifts": 1, "fully_staffed": 1, "understaffed": 0,
@@ -4096,15 +4153,63 @@ def test_summary_api_client_waits_for_backend_ai_fallback(
     assert fe_api_client.SUMMARY_API_TIMEOUT > fe_api_client.API_TIMEOUT
 
 
-def test_direct_frontend_read_timeout_becomes_contained_unavailable_error(
+def test_direct_frontend_transport_and_http_results_are_classified(
         fe_api_client, monkeypatch):
+    """Transport failures are contained without swallowing valid HTTP results."""
+    import io
+
     monkeypatch.setattr(fe_api_client, "_identity_provider", lambda: {})
+
+    monkeypatch.setattr(
+        fe_api_client.urllib.request, "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            fe_api_client.urllib.error.URLError(
+                ConnectionRefusedError("connection refused"))))
+    with pytest.raises(fe_api_client.BackendUnavailableError) as refused:
+        fe_api_client.get_health()
+    assert refused.type is fe_api_client.BackendUnavailableError
+
+    monkeypatch.setattr(
+        fe_api_client.urllib.request, "urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            ConnectionResetError("connection reset")))
+    with pytest.raises(fe_api_client.BackendUnavailableError) as reset:
+        fe_api_client.get_health()
+    assert reset.type is fe_api_client.BackendUnavailableError
+
     monkeypatch.setattr(
         fe_api_client.urllib.request, "urlopen",
         lambda *args, **kwargs: (_ for _ in ()).throw(TimeoutError("timed out")))
-
-    with pytest.raises(fe_api_client.BackendUnavailableError):
+    with pytest.raises(fe_api_client.BackendTimeoutError) as timed_out:
         fe_api_client.get_coverage_summary(narrate=True)
+    assert timed_out.type is fe_api_client.BackendTimeoutError
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def read(self):
+            return b'{"status": "ok"}'
+
+    monkeypatch.setattr(
+        fe_api_client.urllib.request, "urlopen",
+        lambda *args, **kwargs: Response())
+    assert fe_api_client.get_health() == {"status": "ok"}
+
+    def service_unavailable(request, *args, **kwargs):
+        raise fe_api_client.urllib.error.HTTPError(
+            request.full_url, 503, "Service Unavailable", {},
+            io.BytesIO(b'{"message": "maintenance"}'))
+
+    monkeypatch.setattr(
+        fe_api_client.urllib.request, "urlopen", service_unavailable)
+    with pytest.raises(fe_api_client.BackendServiceUnavailableError) as http_error:
+        fe_api_client.get_health()
+    assert http_error.type is fe_api_client.BackendServiceUnavailableError
+    assert str(http_error.value) == "maintenance"
 
 
 def test_narration_goes_through_the_api_client_not_the_browser(
