@@ -115,11 +115,3 @@ Commit links: `https://github.com/jaeyunjks/hospital-operations-management-syste
 | MCP terminal validation | `docs/ai-evidence/mcp-server/terminal-validation.txt` |
 | RAG terminal validation | `docs/ai-evidence/rag-server/terminal-validation.txt` |
 | Agentic loop outputs | `docs/agent-logs/student-3/*-grounded-loop.*`, `*-rag-validation.*` |
-
-## AI assistance declaration
-
-Development of this contribution was assisted by Claude Code (Anthropic's AI coding
-assistant), which drafted code, tests, documentation and evidence under my direction.
-Commits it co-wrote carry a `Co-Authored-By: Claude` trailer. I chose the scope and
-design decisions, reviewed the changes, and ran the application, tests and validations
-recorded above.
