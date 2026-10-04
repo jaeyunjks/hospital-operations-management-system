@@ -5,8 +5,8 @@
 | Student | Tirth Patel (GitHub `tirth676`) |
 | Feature | Pharmacy & Medication Inventory Management (`student-3/`) |
 | Feature branch | `pharmacy-inventory-management`, merged into `develop` |
-| Release 1 period | 23 September – 2 October 2026 |
-| Release 1 commits | Listed below by requirement (plus one Release 0 carry-over); merged into `develop` on 24, 28 and 30 September and 1 and 2 October |
+| Release 1 period | 23 September – 4 October 2026 |
+| Release 1 commits | Listed below by requirement (plus one Release 0 carry-over); merged into `develop` on 24, 28 and 30 September and 1, 2 and 4 October |
 
 Commit links: `https://github.com/jaeyunjks/hospital-operations-management-system/commit/<id>`.
 
@@ -15,7 +15,7 @@ Commit links: `https://github.com/jaeyunjks/hospital-operations-management-syste
 | Area | Responsibility | Outcome |
 |---|---|---|
 | Individual feature | MCP and RAG access from the pharmacy frontend through its backend | Dashboard panels for live stock and purchase-order alerts (MCP) and grounded pharmacy answers (RAG); backend `/api/mcp/*` and `/api/rag/*` |
-| Individual workflow | `student-3.yml` | Unit tests, image builds, and checks that MCP and RAG are retained but disabled in CI |
+| Individual workflow | `student-3.yml` | Unit tests (feature and shared pharmacy MCP, RAG and loop tests), Compose check, image builds, and checks that MCP and RAG are retained but disabled in CI |
 | Shared MCP server | Pharmacy tools | `homs_pharmacy_stock_alerts` and `homs_pharmacy_order_alerts`, read-only allowlisted tools over the Student 3 API, plus terminal validation |
 | Shared RAG server | Whole component | Server, retrieval, relevance gate, cited answers, confidence categories, insufficient-context handling, CLI, tests, API contract |
 | Shared agentic loop | RAG validation mode | `--mode command|mcp|rag` switch and `rag_loop.py` |
@@ -59,6 +59,7 @@ Commit links: `https://github.com/jaeyunjks/hospital-operations-management-syste
 | 1 Oct | [`1381e29`](https://github.com/jaeyunjks/hospital-operations-management-system/commit/1381e29) | 'Low stock' opens on the low-stock list |
 | 1 Oct | [`7f26739`](https://github.com/jaeyunjks/hospital-operations-management-system/commit/7f26739) | Purchase-order alerts on the dashboard (MCP) and purchase-order example questions (RAG); centred sign-in page; RAG answers keep citations and confidence without technical details |
 | 1 Oct | [`996d0e7`](https://github.com/jaeyunjks/hospital-operations-management-system/commit/996d0e7) | Header menu highlights the current page, shared HOMS logo in the header, 'Change demo role' shown as a button, number column headings aligned with their values |
+| 4 Oct | [`02dc53d`](https://github.com/jaeyunjks/hospital-operations-management-system/commit/02dc53d) | Final review fixes: pending approvals shown to managers only, readable statuses and money on purchase-order screens, single-command test run (101 tests), `student-3.yml` also covers the shared pharmacy MCP, RAG and loop tests, READMEs corrected against the code |
 
 ### Shared components
 
@@ -91,11 +92,12 @@ Commit links: `https://github.com/jaeyunjks/hospital-operations-management-syste
 | 28 Sep | [`b03eae9`](https://github.com/jaeyunjks/hospital-operations-management-system/commit/b03eae9) | Docker Compose integration validation and loop reruns against the Compose deployment |
 | 30 Sep | [`219022d`](https://github.com/jaeyunjks/hospital-operations-management-system/commit/219022d) | Database operations: `verify_db.py` on the live Compose data (41/41) and database-service reads |
 | 1 Oct | [`b932624`](https://github.com/jaeyunjks/hospital-operations-management-system/commit/b932624) | Order-alerts tool in the Docker evidence; MCP-mode loop run using both pharmacy tools (grounded) |
+| 4 Oct | [`02dc53d`](https://github.com/jaeyunjks/hospital-operations-management-system/commit/02dc53d) | Recaptured on the final code: MCP and RAG terminal validation, Docker integration (all 16 containers, backend and frontend calls), loop runs in MCP and RAG modes |
 
 ## Integration and validation activities
 
 - Merged `develop` into the feature branch before each integration and merged the feature
-  branch into `develop` on 24, 28 and 30 September and 1 and 2 October, each time after CI passed.
+  branch into `develop` on 24, 28 and 30 September and 1, 2 and 4 October, each time after CI passed.
 - Validated the full Compose deployment (15 feature containers plus the shared home page,
   with Ollama outside Compose): the Student 3 backend container reached the host MCP server,
   RAG server and Ollama.
