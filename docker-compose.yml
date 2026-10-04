@@ -314,14 +314,14 @@ services:
       USE_EXTERNAL_STUBS: "${student2_USE_EXTERNAL_STUBS:-false}"
       OLLAMA_BASE_URL: "${student2_OLLAMA_BASE_URL:-http://host.docker.internal:11434}"
       OLLAMA_MODEL: "${student2_OLLAMA_MODEL:-llama3.1:8b}"
-      OLLAMA_TIMEOUT: "${student2_OLLAMA_TIMEOUT:-8}"
+      OLLAMA_TIMEOUT: "${student2_OLLAMA_TIMEOUT:-90}"
       # Shared MCP and RAG servers run on the host, outside Compose. Start the MCP
       # server with HOMS_MCP_HOST=0.0.0.0 and HOMS_MCP_ALLOW_DOCKER_HOST=true so
       # Docker can reach it.
-      MCP_ENABLED: "${student2_MCP_ENABLED:-true}"
+      MCP_ENABLED: "${student2_MCP_ENABLED:-false}"
       MCP_SERVER_URL: "${student2_MCP_SERVER_URL:-http://host.docker.internal:8000/mcp}"
       MCP_TIMEOUT: "${student2_MCP_TIMEOUT:-15}"
-      RAG_ENABLED: "${student2_RAG_ENABLED:-true}"
+      RAG_ENABLED: "${student2_RAG_ENABLED:-false}"
       RAG_SERVER_URL: "${student2_RAG_SERVER_URL:-http://host.docker.internal:8100}"
       RAG_TIMEOUT: "${student2_RAG_TIMEOUT:-100}"
     ports:
