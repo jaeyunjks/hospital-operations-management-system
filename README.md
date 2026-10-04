@@ -1,8 +1,8 @@
 # Hospital Operations Management System
 
-> **Status:** Release 0 integrated application. Student 1–5 feature services,
-> shared UI, Ollama AI-Mode, agentic workflow, Docker Compose, and CI workflows
-> are implemented.
+> **Status:** Release 1 integrated application. Student 1–5 feature services,
+> shared UI, Ollama AI-Mode, shared MCP and RAG services, the shared agentic
+> loop, Docker Compose, and CI workflows are implemented.
 
 ## Project
 
@@ -65,9 +65,16 @@ Cloud deployment will eventually target **Microsoft Azure** (preferred service:
 - Whole-group integration workflow: `integration-ci.yml`.
 
 ### Release 1
-- **MCP** (Model Context Protocol) services.
-- **RAG** (Retrieval-Augmented Generation) services.
-- Grounded AI responses backed by MCP + RAG.
+- One shared local **MCP** (Model Context Protocol) server.
+- One shared local **RAG** (Retrieval-Augmented Generation) server.
+- Grounded responses with citations, confidence and explicit
+  insufficient-context handling.
+- MCP and RAG validation modes in the shared agentic loop.
+
+Ollama, MCP, RAG and the shared agentic loop run directly on the host. They are
+not Docker Compose services. The root `docker-compose.yml` contains only the
+shared homepage and the five frontend/backend/database feature stacks: 16
+application services in total.
 
 ### Release 2
 - **Multi-Agent System**.
@@ -88,7 +95,7 @@ The layout is **aligned with the ASD 2026 prescribed repository structure**.
 ├── docs/                  # Architecture, reports, and per-release documentation
 ├── shared/                # Shared HTMX homepage, CSS/UI theme, and configuration
 ├── student-1 .. student-5/ # Independently owned feature microservice sets
-├── ai-services/           # Shared Release 0 agentic loop and future AI services
+├── ai-services/           # Host-local MCP, RAG, agentic loop and AI support
 ├── scripts/               # Build / test / deploy helper scripts
 └── docker-compose.yml     # Root integrated application orchestration
 ```
@@ -113,7 +120,15 @@ by the active service configuration available locally. If a configured model is
 unavailable, some features may use their implemented fallback behaviour until
 the required model is available.
 
-Start the integrated Release 0 application from the repository root:
+### Default and CI mode
+
+The root [`docker-compose.yml`](docker-compose.yml) is the authoritative
+integrated deployment. MCP and RAG are disabled by default in every feature
+container, so the application stack and CI workflows can start without local
+MCP or RAG processes. Ollama is also host-local; it is not a Compose service.
+
+Start the 16 application services in their default mode from the repository
+root:
 
 ```bash
 docker compose up -d --build
@@ -122,12 +137,68 @@ docker compose ps
 
 Open the shared homepage at [http://localhost:3000](http://localhost:3000).
 
+### Local Release 1 demo mode
+
+Use this startup order when demonstrating MCP and RAG through the containerised
+feature backends.
+
+1. Start Ollama on the host:
+
+   ```bash
+   ollama serve
+   ```
+
+2. Start the shared MCP server in Docker-access mode:
+
+   ```bash
+   HOMS_MCP_HOST=0.0.0.0 \
+   HOMS_MCP_ALLOW_DOCKER_HOST=true \
+   python3 ai-services/mcp-server/server.py
+   ```
+
+3. Build the current RAG index:
+
+   ```bash
+   python3 ai-services/rag-server/ingest.py
+   ```
+
+4. Start the shared RAG server in Docker-access mode:
+
+   ```bash
+   HOMS_RAG_HOST=0.0.0.0 \
+   HOMS_RAG_ALLOW_DOCKER_HOST=true \
+   python3 ai-services/rag-server/server.py
+   ```
+
+5. Explicitly enable MCP and RAG for the feature containers being
+   demonstrated. For Student 2, whose root-Compose variables intentionally use
+   a lowercase `student2_` prefix:
+
+   ```bash
+   student2_MCP_ENABLED=true \
+   student2_RAG_ENABLED=true \
+   docker compose up -d student-2-backend student-2-frontend
+   ```
+
+   The corresponding enable variables for the other feature backends are:
+
+   - `STUDENT1_MCP_ENABLED` / `STUDENT1_RAG_ENABLED`
+   - `STUDENT3_MCP_ENABLED` / `STUDENT3_RAG_ENABLED`
+   - `STUDENT4_MCP_ENABLED` / `STUDENT4_RAG_ENABLED`
+   - `STUDENT5_MCP_ENABLED` / `STUDENT5_RAG_ENABLED`
+
+For example, set both variables for a feature to `true` before its
+`docker compose up` command. The containers reach the host services through
+`host.docker.internal`; their frontends continue to call only their own
+backends.
+
 ## Architecture
 
 See [`docs/architecture/`](docs/architecture/). High-level: five independent
-microservice sets integrated behind a shared frontend and shared Ollama AI-Mode,
-with the Release 0 Plan → Act → Observe → Adapt workflow under
-[`ai-services/agentic-loop/`](ai-services/agentic-loop/).
+microservice sets use the shared homepage and host-local Ollama, MCP and RAG
+services. Frontends call only their own backends; the backends reach the shared
+services through configured HTTP boundaries. The shared Plan → Act → Observe →
+Adapt workflow is under [`ai-services/agentic-loop/`](ai-services/agentic-loop/).
 
 ## Development workflow
 

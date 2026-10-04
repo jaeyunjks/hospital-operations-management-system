@@ -68,7 +68,8 @@ Loopback-only is the default. For a Docker Compose demo, where feature backend
 containers call the server through `host.docker.internal`, run:
 
 ```bash
-HOMS_RAG_HOST=0.0.0.0 HOMS_RAG_ALLOW_DOCKER_HOST=true \
+HOMS_RAG_HOST=0.0.0.0 \
+HOMS_RAG_ALLOW_DOCKER_HOST=true \
 python3 ai-services/rag-server/server.py
 ```
 
@@ -77,6 +78,29 @@ Requests must still carry an allowed `Host` header (loopback names, plus
 requests from other origins get 403. A wildcard bind without the explicit flag
 is refused at startup. A broad bind is not authentication: use it only on a
 trusted network while developing or demonstrating.
+
+### Docker Compose and CI modes
+
+Ollama, this RAG server, the shared MCP server and the shared agentic loop all
+run on the host. They are not among the 16 application services in the root
+`docker-compose.yml`. RAG is disabled by default in every feature container,
+and CI keeps it disabled so the application can build and start without a
+local index, RAG process or Ollama dependency.
+
+For a local Release 1 demo, start Ollama, build the index with `ingest.py`, run
+the RAG server in Docker-access mode, and explicitly enable the relevant
+feature backend:
+
+- Student 1: `STUDENT1_RAG_ENABLED=true`
+- Student 2: `student2_RAG_ENABLED=true`
+- Student 3: `STUDENT3_RAG_ENABLED=true`
+- Student 4: `STUDENT4_RAG_ENABLED=true`
+- Student 5: `STUDENT5_RAG_ENABLED=true`
+
+Student 2 uses the lowercase `student2_` prefix in root Compose; the other
+students use uppercase `STUDENTN_` prefixes. Feature frontends never call this
+server directly: they call their own backend, which fixes the feature scope and
+uses `http://host.docker.internal:8100` from its container.
 
 ## Configuration
 
@@ -200,9 +224,10 @@ Follow the same pattern as MCP access:
 3. Frontend panel that shows the answer, each citation (source › section,
    snippet) and a confidence badge, and shows the insufficient-context message
    as its own clear state.
-4. `docker-compose.yml`: `RAG_ENABLED: "${STUDENTN_RAG_ENABLED:-false}"` (off by
-   default so CI never uses it; switch it on for a demo with
-   `STUDENTN_RAG_ENABLED=true docker compose up`),
+4. `docker-compose.yml`: map a feature-specific root-Compose enable variable to
+   `RAG_ENABLED`, with a default of `false`. Students 1, 3, 4 and 5 use
+   `STUDENTN_RAG_ENABLED`; Student 2 uses `student2_RAG_ENABLED`. Set the
+   applicable variable to `true` for a local demo,
    `RAG_SERVER_URL: http://host.docker.internal:8100` and
    `extra_hosts: ["host.docker.internal:host-gateway"]` on the backend.
 5. CI workflow: `RAG_ENABLED=false`, plus a check that the backend reports RAG

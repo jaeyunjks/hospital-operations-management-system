@@ -5,8 +5,9 @@ feature areas. It exposes `homs_echo` for connectivity,
 `homs_ward_occupancy_status` for read-only controlled access to Student 4's
 published backend API, and `homs_pharmacy_stock_alerts` and
 `homs_pharmacy_order_alerts` for read-only access to Student 3's published
-backend API. It never accesses student databases, Ollama,
-or RAG.
+backend API. It also exposes `homs_open_care_tasks` for read-only access to
+Student 2's published clinical-record and care-task APIs. It never accesses
+student databases, Ollama, or RAG.
 
 ## Runtime
 
@@ -42,6 +43,8 @@ Configuration is read from the environment:
 | `HOMS_STUDENT4_API_TIMEOUT` | `10` | Overall upstream deadline and per-stage HTTP timeout in seconds; range 0.1–30 |
 | `HOMS_STUDENT3_API_URL` | `http://127.0.0.1:5300/api` | Student 3 backend API base URL, including `/api`; not the database service |
 | `HOMS_STUDENT3_API_TIMEOUT` | `10` | Same deadline rules as the Student 4 timeout |
+| `HOMS_STUDENT2_API_URL` | `http://127.0.0.1:5200/api` | Student 2 backend API base URL, including `/api`; not the database service |
+| `HOMS_STUDENT2_API_TIMEOUT` | `10` | Same deadline rules as the Student 3 and Student 4 timeouts |
 
 Each upstream URL must use HTTP(S), with no credentials, query or fragment.
 Its destination is operator-configured, never supplied as a tool argument.
@@ -68,6 +71,28 @@ Origins remain limited to loopback. A broad bind is not authentication: enable
 this mode only while developing/demonstrating, on a trusted network or behind
 an appropriate host firewall. Wildcard binding without the explicit Docker
 flag is rejected at startup.
+
+### Docker Compose and CI modes
+
+The MCP server remains a host process; it is not one of the 16 application
+services in the root `docker-compose.yml`. Feature containers have MCP disabled
+by default, and CI keeps it disabled so neither mode depends on a running local
+MCP process.
+
+For a local Release 1 demo, start this server in Docker-access mode as shown
+above, then explicitly enable the relevant feature backend with its
+root-Compose variable:
+
+- Student 1: `STUDENT1_MCP_ENABLED=true`
+- Student 2: `student2_MCP_ENABLED=true`
+- Student 3: `STUDENT3_MCP_ENABLED=true`
+- Student 4: `STUDENT4_MCP_ENABLED=true`
+- Student 5: `STUDENT5_MCP_ENABLED=true`
+
+Student 2 uses the lowercase `student2_` prefix in the authoritative root
+Compose file. The other students use uppercase `STUDENTN_` prefixes. Enabling
+MCP does not change the boundary: each frontend calls its own backend, and that
+backend calls the shared MCP server through `host.docker.internal:8000`.
 
 ## Test
 
