@@ -1,5 +1,5 @@
 # HOMS shared MCP server - terminal validation
-# 2026-10-01T05:43:57Z  endpoint http://127.0.0.1:8000/mcp
+# 2026-10-04T01:37:13Z  endpoint http://127.0.0.1:8000/mcp
 
 ## Registered tools
 $ python3 ai-services/mcp-server/cli.py tools
@@ -7,6 +7,7 @@ $ python3 ai-services/mcp-server/cli.py tools
 - homs_ward_occupancy_status: HOMS Ward Occupancy Status  (arguments: ward)
 - homs_pharmacy_stock_alerts: HOMS Pharmacy Stock Alerts  (arguments: alert_type)
 - homs_pharmacy_order_alerts: HOMS Pharmacy Order Alerts  (arguments: alert_type)
+- homs_open_care_tasks: HOMS Open Care Tasks  (arguments: admission_id)
 (exit 0)
 
 ## Connectivity
@@ -25,15 +26,15 @@ OK {"message": "terminal check"}
 
 ## Pharmacy stock alerts (Student 3)
 $ python3 ai-services/mcp-server/cli.py call homs_pharmacy_stock_alerts '{}' --expect ok
-OK counts[active_medicines=132, low_stock=26, expiring_within_30_days=28, expiring_within_7_days=6, expired_batches=25, pending_approvals=16] lists[low_stock: 10 rows, expiring_soon: 10 rows]
+OK counts[active_medicines=132, low_stock=26, expiring_within_30_days=28, expiring_within_7_days=6, expired_batches=27, pending_approvals=16] lists[low_stock: 10 rows, expiring_soon: 10 rows]
 (exit 0)
 
 $ python3 ai-services/mcp-server/cli.py call homs_pharmacy_stock_alerts '{"alert_type": "low_stock"}' --expect ok
-OK counts[active_medicines=132, low_stock=26, expiring_within_30_days=28, expiring_within_7_days=6, expired_batches=25, pending_approvals=16] lists[low_stock: 10 rows]
+OK counts[active_medicines=132, low_stock=26, expiring_within_30_days=28, expiring_within_7_days=6, expired_batches=27, pending_approvals=16] lists[low_stock: 10 rows]
 (exit 0)
 
 $ python3 ai-services/mcp-server/cli.py call homs_pharmacy_stock_alerts '{"alert_type": "expiring_soon"}' --expect ok
-OK counts[active_medicines=132, low_stock=26, expiring_within_30_days=28, expiring_within_7_days=6, expired_batches=25, pending_approvals=16] lists[expiring_soon: 10 rows]
+OK counts[active_medicines=132, low_stock=26, expiring_within_30_days=28, expiring_within_7_days=6, expired_batches=27, pending_approvals=16] lists[expiring_soon: 10 rows]
 (exit 0)
 
 ## Pharmacy order alerts (Student 3)
@@ -75,7 +76,7 @@ OK counts[pending_approval=16, ai_suggested_pending=9, approved=20, ordered=12, 
         "ai_generated": true,
         "created_at": "2026-08-20",
         "expected_at": "2026-09-06",
-        "days_overdue": 25
+        "days_overdue": 28
       },
       {
         "po_id": 17,
@@ -88,7 +89,7 @@ OK counts[pending_approval=16, ai_suggested_pending=9, approved=20, ordered=12, 
         "ai_generated": true,
         "created_at": "2026-08-19",
         "expected_at": "2026-09-07",
-        "days_overdue": 24
+        "days_overdue": 27
       },
       {
         "po_id": 83,
@@ -101,7 +102,7 @@ OK counts[pending_approval=16, ai_suggested_pending=9, approved=20, ordered=12, 
         "ai_generated": true,
         "created_at": "2026-09-06",
         "expected_at": "2026-09-08",
-        "days_overdue": 23
+        "days_overdue": 26
       },
       {
         "po_id": 65,
@@ -114,7 +115,7 @@ OK counts[pending_approval=16, ai_suggested_pending=9, approved=20, ordered=12, 
         "ai_generated": false,
         "created_at": "2026-08-26",
         "expected_at": "2026-09-10",
-        "days_overdue": 21
+        "days_overdue": 24
       },
       {
         "po_id": 77,
@@ -127,7 +128,7 @@ OK counts[pending_approval=16, ai_suggested_pending=9, approved=20, ordered=12, 
         "ai_generated": true,
         "created_at": "2026-09-05",
         "expected_at": "2026-09-10",
-        "days_overdue": 21
+        "days_overdue": 24
       },
       {
         "po_id": 66,
@@ -140,7 +141,7 @@ OK counts[pending_approval=16, ai_suggested_pending=9, approved=20, ordered=12, 
         "ai_generated": false,
         "created_at": "2026-08-25",
         "expected_at": "2026-09-11",
-        "days_overdue": 20
+        "days_overdue": 23
       },
       {
         "po_id": 71,
@@ -153,7 +154,7 @@ OK counts[pending_approval=16, ai_suggested_pending=9, approved=20, ordered=12, 
         "ai_generated": true,
         "created_at": "2026-09-05",
         "expected_at": "2026-09-11",
-        "days_overdue": 20
+        "days_overdue": 23
       },
       {
         "po_id": 72,
@@ -166,7 +167,7 @@ OK counts[pending_approval=16, ai_suggested_pending=9, approved=20, ordered=12, 
         "ai_generated": true,
         "created_at": "2026-09-05",
         "expected_at": "2026-09-11",
-        "days_overdue": 20
+        "days_overdue": 23
       },
       {
         "po_id": 86,
@@ -179,7 +180,7 @@ OK counts[pending_approval=16, ai_suggested_pending=9, approved=20, ordered=12, 
         "ai_generated": true,
         "created_at": "2026-09-06",
         "expected_at": "2026-09-12",
-        "days_overdue": 19
+        "days_overdue": 22
       },
       {
         "po_id": 23,
@@ -192,7 +193,7 @@ OK counts[pending_approval=16, ai_suggested_pending=9, approved=20, ordered=12, 
         "ai_generated": false,
         "created_at": "2026-08-13",
         "expected_at": "2026-09-13",
-        "days_overdue": 18
+        "days_overdue": 21
       }
     ],
     "source": "student-3-pharmacy-api"

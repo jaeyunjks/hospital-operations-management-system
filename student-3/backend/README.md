@@ -73,7 +73,7 @@ docker compose logs -f student-3-backend
 docker compose stop student-3-backend
 ```
 
-Compose waits for database health, uses `http://student-3-database:6300` on `homs-net`, and reaches the shared Compose Ollama service at `http://ollama:11434`.
+Compose waits for database health, uses `http://student-3-database:6300` on `homs-net`, and reaches the host's non-containerised Ollama at `http://host.docker.internal:11434` (Ollama is not a Compose service).
 
 ## Configuration
 
@@ -81,7 +81,7 @@ Compose waits for database health, uses `http://student-3-database:6300` on `hom
 |---|---|---|---|
 | `PORT` / `BACKEND_PORT` | `5300` | No | Listen port; `PORT` wins. |
 | `DATABASE_URL` / `DATABASE_SERVICE_URL` | `http://localhost:6300` | No | Database-service base URL; first name wins. |
-| `OLLAMA_URL` | `http://ollama:11434` | No | Ollama API base URL. |
+| `OLLAMA_URL` | `http://localhost:11434` | No | Ollama API base URL; Compose uses `http://host.docker.internal:11434`. |
 | `OLLAMA_MODEL` | `llama3.2:3b` | No | Model submitted to Ollama. |
 | `OLLAMA_TIMEOUT` | `90` seconds | No | Bound per model call; invalid input reverts to 90. |
 | `MCP_ENABLED` | `false` | No | Exactly `true` enables calls to the shared MCP server; CI leaves it off. |
@@ -122,8 +122,8 @@ Manager-changing routes require `X-HOMS-Role: Pharmacy Manager`.
 | GET | `/api/stock/movements` | Filtered history and summary. |
 | GET | `/api/batches` | Filtered batches and expiry summary. |
 | POST | `/api/batches/{id}/write-off` | Manager write-off and waste movement. |
-| POST | `/api/stock/issue` | Manager FEFO issue. |
-| POST | `/api/stock/receive` | Manager delivery receipt. |
+| POST | `/api/stock/issue` | FEFO issue (either role). |
+| POST | `/api/stock/receive` | Delivery receipt (either role). |
 | GET, POST | `/api/purchase-orders` | List enriched orders or create. |
 | GET | `/api/purchase-orders/open` | Open orders for one medicine. |
 | GET | `/api/purchase-orders/alerts` | Read-only open-order summary (pending, AI-suggested, approved, ordered, overdue deliveries) for the MCP order-alerts tool. |

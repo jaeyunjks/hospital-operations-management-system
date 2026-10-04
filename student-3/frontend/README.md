@@ -79,7 +79,7 @@ Compose waits for backend health and uses `http://student-3-backend:5300` on `ho
 | `PORT` / `FRONTEND_PORT` | `3300` | No | Listen port; `PORT` wins. |
 | `BACKEND_API_URL` | `http://localhost:5300` | No | The only service base URL used. |
 | `BACKEND_API_TIMEOUT` | `120` seconds | No | Timeout used for AI advisory calls; invalid input reverts to 120. |
-| `FLASK_SECRET_KEY` | Random per process | No | Signs the demo-role session cookie. |
+| `FLASK_SECRET_KEY` | Random per process | No | Signs the demo-role session cookie; Compose sets it from `STUDENT3_FLASK_SECRET_KEY` (fixed development default). |
 
 `BACKEND_API_TIMEOUT` is 120 seconds because an Ollama-backed backend advisory can take longer than ordinary CRUD. `api_client` turns timeout and connection failures into `BackendError`, and page routes render their error state instead of failing with a 500.
 
@@ -102,7 +102,7 @@ HTMX routes such as `/medicines/table`, `/batches/table`, `/purchase-orders/tabl
 
 The demo role switcher calls backend staff endpoints and records a selected identity in the Flask session. It provides `Pharmacy Manager` (database role `manager`) and `Pharmacist` (database role `staff`). This is demonstration identity, not shared authentication.
 
-Manager-only controls are medicine/supplier create, edit, discontinue and reactivate; stock issue and receipt; batch write-off; reorder-draft creation; agent-proposal edit; and purchase-order approve, reject, mark-ordered, and cancel. Pharmacists can view, filter, export, and request read-only advice; manager controls are absent and protected actions return 403.
+Manager-only controls are medicine/supplier create, edit, discontinue and reactivate; batch write-off; reorder-draft creation; agent-proposal edit; and purchase-order approve, reject, mark-ordered, and cancel. Pharmacists can view, filter, export, issue stock, receive deliveries, and request read-only advice; manager controls are absent and protected actions return 403.
 
 ## API reference
 
@@ -146,7 +146,8 @@ status badge loads after the page, so a slow or stopped MCP server never delays
 the dashboard.
 
 - **Get stock alerts via MCP** calls `homs_pharmacy_stock_alerts` with the
-  chosen `alert_type` and shows six clickable figures. Clicking one shows only
+  chosen `alert_type` and shows six clickable figures (five for a Pharmacist: pending approvals is a
+  manager figure, as on the dashboard). Clicking one shows only
   that figure's details underneath (click again to close): low stock and
   batches expiring within 30 or 7 days come from the MCP result; active
   medicines, expired batches and pending approvals load their first 10 rows
@@ -169,13 +170,12 @@ that no inventory data changed.
 ## Pharmacy assistant panel (RAG)
 
 The dashboard's **Ask the pharmacy assistant** panel sends a typed question,
-or one of three example questions, to the backend (`/api/rag/ask`), which asks
+or one of five example questions, to the backend (`/api/rag/ask`), which asks
 the shared local RAG server; the frontend never contacts RAG directly. Its
 status badge loads after the page.
 
 - An answer shows a confidence badge (high, medium or low), the answer text,
-  and each source as `[S1] title › section` with the file, similarity score
-  and quoted snippet.
+  and each source as `[S1] title › section` with its quoted snippet.
 - An insufficient-context result is shown as its own state, explaining that
   the knowledge base does not cover the question (for example, the best match
   fell below the relevance threshold) and that no answer was generated.
@@ -190,7 +190,7 @@ The shared loading indicator shows elapsed time while the local model works.
 cd student-3/frontend && python3 -m unittest discover -s tests -v
 ```
 
-Tests mock `api_client`, so they never use a live backend on port 5300. They cover rendering routes, dashboard data, manager gates, agent panel output, MCP panel rendering and argument forwarding, RAG answer/refusal/error rendering, and timeout/connection-error display. The current suite passes **40 tests**.
+Tests mock `api_client`, so they never use a live backend on port 5300. They cover rendering routes, dashboard data, manager gates, agent panel output, MCP panel rendering and argument forwarding, RAG answer/refusal/error rendering, and timeout/connection-error display. The current suite passes **49 tests**.
 
 ## Troubleshooting
 

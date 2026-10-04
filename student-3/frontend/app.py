@@ -16,6 +16,8 @@ from pathlib import Path
 from flask import (Flask, Response, jsonify, redirect, render_template, request, send_from_directory,
                    session, url_for)
 
+from jinja2.exceptions import UndefinedError
+
 import api_client
 
 ROLE_MANAGER = "Pharmacy Manager"
@@ -31,6 +33,22 @@ SHARED_FRONTEND_DIR = BASE_DIR.parents[1] / "shared" / "frontend"
 app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY") or os.urandom(32)
 app.config["BACKEND_API_URL"] = BACKEND_API_URL
+
+
+@app.template_filter("money")
+def money(value) -> str:
+    """Dollar amount with two decimals; sub-cent unit prices keep three."""
+    try:
+        amount = float(value)
+    except (TypeError, ValueError, UndefinedError):
+        return "—"
+    return f"${amount:.3f}" if 0 < abs(amount) < 0.01 else f"${amount:.2f}"
+
+
+@app.template_filter("status_label")
+def status_label(value) -> str:
+    """Readable status: 'pending_approval' becomes 'Pending approval'."""
+    return str(value or "").replace("_", " ").capitalize()
 
 
 def staff_by_role() -> dict[str, list[dict]]:
@@ -409,7 +427,7 @@ def mcp_call():
         return render_template("partials/mcp_result_error.html", tool=tool, error="Unknown MCP tool")
     try:
         call = api_client.mcp_call(tool, MCP_TOOL_ARGUMENTS[tool](request.form))
-        return render_template("partials/mcp_result.html", call=call)
+        return render_template("partials/mcp_result.html", call=call, is_manager=is_manager())
     except api_client.BackendError as exc:
         return render_template("partials/mcp_result_error.html", tool=tool, error=str(exc))
 
@@ -456,6 +474,8 @@ def mcp_tile_details(kind):
     loader = MCP_DETAIL_LOADERS.get(kind)
     if loader is None:
         return render_template("partials/mcp_tile_details.html", error="Unknown details"), 404
+    if kind == "pending-approvals" and not is_manager():
+        return render_template("partials/mcp_tile_details.html", error="Pharmacy Manager role required"), 403
     try:
         title, columns, rows, total, view_all = loader()
     except api_client.BackendError as exc:

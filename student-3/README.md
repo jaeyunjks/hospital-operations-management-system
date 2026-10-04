@@ -90,13 +90,14 @@ which is the CI configuration. To run without Docker, see each service's README.
 
 | What | Command (repository root) | Expected |
 |---|---|---|
-| Unit tests | `python3 -m pytest -q student-3/database/tests`, then `backend/tests`, then `frontend/tests` (each separately) | 4, 48 and 40 passing |
+| Unit tests | `python3 -m pytest -q student-3` (or each of `student-3/database/tests`, `backend/tests`, `frontend/tests`) | 101 passing (4, 48 and 49) |
 | MCP in the UI | "Get stock alerts via MCP"; "Test connectivity" | "Valid tool result" with counts and tables; "Connection OK" |
 | RAG in the UI | Ask "Who can write off an expired batch?" | Answer with a confidence badge and a cited source |
 | Insufficient context | Ask "What is the capital of France?" | "Not enough information…"; no answer, no sources |
 | Agentic loop | `python3 ai-services/agentic-loop/agentic_loop.py --mode mcp --student 3 --question "…"` and `--mode rag --student 3` | Grounded answer / all checks PASS |
 
-CI (`student-3.yml`) runs the unit tests, builds all three images, and checks that
+CI (`student-3.yml`) runs the unit tests, the shared pharmacy MCP tool, RAG server and
+loop RAG-mode tests, validates the Compose file, builds all three images, and checks that
 MCP and RAG are present but disabled in both the backend and the dashboard.
 
 ## Evidence
@@ -105,11 +106,14 @@ MCP and RAG are present but disabled in both the backend and the dashboard.
   (captured with `STUDENT3_MCP_ENABLED=true STUDENT3_RAG_ENABLED=true`, the demo switches)
 - Database operations: [`docs/ai-evidence/student-3/database-verification.txt`](../docs/ai-evidence/student-3/database-verification.txt)
 - Agentic loop runs (MCP and RAG modes): [`docs/agent-logs/student-3/`](../docs/agent-logs/student-3/)
+- MCP server terminal validation: [`docs/ai-evidence/mcp-server/terminal-validation.txt`](../docs/ai-evidence/mcp-server/terminal-validation.txt)
 - RAG server terminal validation: [`docs/ai-evidence/rag-server/terminal-validation.txt`](../docs/ai-evidence/rag-server/terminal-validation.txt)
 
 ## Known limitations
 
 - Demonstration roles are not authentication; anyone reaching the frontend can pick any role.
+- Compose signs the demo session cookie with a fixed development key unless
+  `STUDENT3_FLASK_SECRET_KEY` is set.
 - MCP stock alerts list at most 10 rows per category; the counts show the full totals.
 - RAG answers come from documentation, not live data; live stock figures come from MCP.
 - The first RAG answer after start-up takes about 20 seconds while the local model loads.

@@ -34,8 +34,9 @@
       ('exp30', 'Expiring ≤ 30 days', 'expiring_within_30_days', None),
       ('exp7', 'Expiring ≤ 7 days', 'expiring_within_7_days', None),
       ('expired', 'Expired batches', 'expired_batches', '/mcp/details/expired-batches'),
-      ('pending', 'Pending approvals', 'pending_approvals', '/mcp/details/pending-approvals'),
     ] %}
+    {# Pending approvals are a manager figure, as on the dashboard cards. #}
+    {% if is_manager %}{% set tiles = tiles + [('pending', 'Pending approvals', 'pending_approvals', '/mcp/details/pending-approvals')] %}{% endif %}
     <div class="mcp-tiles" role="group" aria-label="Stock alert figures">
       {% for key, label, count_key, details_url in tiles %}
         <button type="button" class="mcp-tile" data-mcp-tile="{{ key }}" aria-pressed="false" aria-controls="mcp-panel-{{ key }}"
@@ -98,7 +99,7 @@
         <p class="table__muted">Live data from the pharmacy inventory via MCP. Click a figure above to see only that list.</p>
       </div>
     {% endif %}
-    {% for key in ('active', 'expired', 'pending') %}
+    {% for key in ('active', 'expired', 'pending') if key != 'pending' or is_manager %}
       <div class="mcp-detail" id="mcp-panel-{{ key }}" data-mcp-panel="{{ key }}" hidden><p class="table__muted">Loading…</p></div>
     {% endfor %}
   {% elif call.tool == 'homs_pharmacy_order_alerts' and data %}
