@@ -2,8 +2,10 @@
 # CI/CD workflow — student-3 (Pharmacy Operations)
 # Owner: student-3  (see docs/architecture/feature-ownership.md)
 #
-# Scoped to student-3/** so it never runs against another student's work.
-# Stages: syntax check and unit tests -> build all three images -> verify
+# Runs for student-3/** and for the shared pieces this feature depends on or
+# owns (pharmacy MCP tools, RAG server, loop RAG mode, Compose file).
+# Stages: syntax check and unit tests (feature and shared, with fakes; no MCP,
+# RAG or Ollama server is started) -> build all three images -> verify
 # database seeding and backend enrichment -> verify MCP and RAG are retained
 # but disabled in the backend and frontend -> tear down. Ollama and AI
 # endpoints are excluded. The shared MCP and RAG servers are never started in
@@ -14,9 +16,21 @@ name: student-3
 
 on:
   push:
-    paths: ['student-3/**', '.github/workflows/student-3.yml']
+    paths:
+      - 'student-3/**'
+      - 'ai-services/mcp-server/**'
+      - 'ai-services/rag-server/**'
+      - 'ai-services/agentic-loop/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/student-3.yml'
   pull_request:
-    paths: ['student-3/**', '.github/workflows/student-3.yml']
+    paths:
+      - 'student-3/**'
+      - 'ai-services/mcp-server/**'
+      - 'ai-services/rag-server/**'
+      - 'ai-services/agentic-loop/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/student-3.yml'
   workflow_dispatch:
 
 env:
@@ -48,7 +62,9 @@ jobs:
           python -m pip install pytest \
             -r student-3/database/requirements.txt \
             -r student-3/backend/requirements.txt \
-            -r student-3/frontend/requirements.txt
+            -r student-3/frontend/requirements.txt \
+            -r ai-services/mcp-server/requirements.txt \
+            -r ai-services/rag-server/requirements.txt
 
       - name: Run unit tests for each service
         # Each service has its own app.py, so each suite runs in its own process.
@@ -56,6 +72,20 @@ jobs:
           python -m pytest -q student-3/database/tests
           python -m pytest -q student-3/backend/tests
           python -m pytest -q student-3/frontend/tests
+
+      - name: Run all three suites in one command
+        run: python -m pytest -q student-3
+
+      - name: Run the shared MCP, RAG and loop tests this feature relies on
+        # In-memory MCP sessions and a fake Ollama: no server is started.
+        run: |
+          python -m pytest -q ai-services/mcp-server/tests/test_pharmacy_stock_tool.py \
+            ai-services/mcp-server/tests/test_pharmacy_orders_tool.py
+          python -m pytest -q ai-services/rag-server/tests
+          python -m pytest -q ai-services/agentic-loop/tests/test_rag_loop.py
+
+      - name: Validate the Compose file
+        run: docker compose config --quiet
 
   docker:
     name: Build container images and smoke test

@@ -254,7 +254,8 @@ services:
       PORT: 3300
       BACKEND_API_URL: http://student-3-backend:5300
       BACKEND_API_TIMEOUT: 120
-      FLASK_SECRET_KEY: student3-compose-development-secret
+      # Demo default only; set STUDENT3_FLASK_SECRET_KEY outside local development.
+      FLASK_SECRET_KEY: "${STUDENT3_FLASK_SECRET_KEY:-student3-compose-development-secret}"
       FLASK_DEBUG: 0
     ports: ["3300:3300"]
     depends_on:

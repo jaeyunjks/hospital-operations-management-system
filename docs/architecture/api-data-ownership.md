@@ -14,7 +14,7 @@ the table below uses neutral placeholders. See
 |-------------|--------------|---------------|---------------|
 | `student-1` | _TBD_        | _TBD_         | _TBD_         |
 | `student-2` | _TBD_        | _TBD_         | _TBD_         |
-| `student-3` | _TBD_        | _TBD_         | _TBD_         |
+| `student-3` | Pharmacy & Medication Inventory Management | `http://localhost:5300/api` | Medicines, batches, suppliers, purchase orders, stock movements, pharmacy staff |
 | `student-4` | _TBD_        | _TBD_         | _TBD_         |
 | `student-5` | _TBD_        | _TBD_         | _TBD_         |
 
@@ -31,7 +31,7 @@ uses a consistent offset: `3N00` UI, `5N00` API, `6N00` database.
 |-------------|--------------|------|------|------|
 | `student-1` | _TBD_        | 3100 | 5100 | 6100 |
 | `student-2` | _TBD_        | 3200 | 5200 | 6200 |
-| `student-3` | _TBD_        | 3300 | 5300 | 6300 |
+| `student-3` | Pharmacy & Medication Inventory Management | 3300 | 5300 | 6300 |
 | `student-4` | _TBD_        | 3400 | 5400 | 6400 |
 | `student-5` | _TBD_        | 3500 | 5500 | 6500 |
 

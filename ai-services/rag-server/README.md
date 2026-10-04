@@ -200,7 +200,9 @@ Follow the same pattern as MCP access:
 3. Frontend panel that shows the answer, each citation (source › section,
    snippet) and a confidence badge, and shows the insufficient-context message
    as its own clear state.
-4. `docker-compose.yml`: `RAG_ENABLED: "true"`,
+4. `docker-compose.yml`: `RAG_ENABLED: "${STUDENTN_RAG_ENABLED:-false}"` (off by
+   default so CI never uses it; switch it on for a demo with
+   `STUDENTN_RAG_ENABLED=true docker compose up`),
    `RAG_SERVER_URL: http://host.docker.internal:8100` and
    `extra_hosts: ["host.docker.internal:host-gateway"]` on the backend.
 5. CI workflow: `RAG_ENABLED=false`, plus a check that the backend reports RAG

@@ -19,7 +19,7 @@ import urllib.error
 import urllib.request
 
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://ollama:11434").rstrip("/")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 try:
     OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "90"))

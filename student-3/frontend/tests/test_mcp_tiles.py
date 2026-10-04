@@ -26,7 +26,7 @@ class StockAlertTileTests(unittest.TestCase):
     def setUp(self):
         self.client = app.app.test_client()
         with self.client.session_transaction() as session:
-            session['demo_identity'] = {'role': 'Pharmacist', 'staff_id': 3, 'name': 'Demo pharmacist'}
+            session['demo_identity'] = {'role': 'Pharmacy Manager', 'staff_id': 2, 'name': 'Demo manager'}
 
     def render(self, result):
         with patch.object(api_client, 'mcp_call', return_value=result):
@@ -48,6 +48,14 @@ class StockAlertTileTests(unittest.TestCase):
             self.assertIn(' hidden>', panel(html, key)[:120])
         self.assertIn('Click a figure to see its details.', html)
         self.assertIn('<span class="mcp-tile__value">26</span>', html)
+
+    def test_pharmacist_does_not_see_pending_approvals(self):
+        with self.client.session_transaction() as session:
+            session['demo_identity'] = {'role': 'Pharmacist', 'staff_id': 3, 'name': 'Demo pharmacist'}
+        html = self.render(STOCK_ALERTS)
+        self.assertEqual(re.findall(r'data-mcp-tile="(\w+)"', html), list(TILES[:-1]))
+        self.assertNotIn('Pending approvals', html)
+        self.assertNotIn('mcp-panel-pending', html)
 
     def test_backend_tiles_load_details_once(self):
         html = self.render(STOCK_ALERTS)
@@ -118,7 +126,7 @@ class TileDetailRouteTests(unittest.TestCase):
     def setUp(self):
         self.client = app.app.test_client()
         with self.client.session_transaction() as session:
-            session['demo_identity'] = {'role': 'Pharmacist', 'staff_id': 3, 'name': 'Demo pharmacist'}
+            session['demo_identity'] = {'role': 'Pharmacy Manager', 'staff_id': 2, 'name': 'Demo manager'}
 
     def test_active_medicines(self):
         payload = {"medicines": [{"name": "Paracetamol 500mg", "category": "Analgesic", "available_quantity": 20,
@@ -154,6 +162,15 @@ class TileDetailRouteTests(unittest.TestCase):
         for text in ('Pending approvals', '(1 of 16 shown)', 'Dextrose 5%', '$54.50', 'AI-suggested', '2026-09-30',
                      'href="/purchase-orders?status=pending_approval"'):
             self.assertIn(text, html)
+
+    def test_pending_approvals_are_manager_only(self):
+        with self.client.session_transaction() as session:
+            session['demo_identity'] = {'role': 'Pharmacist', 'staff_id': 3, 'name': 'Demo pharmacist'}
+        with patch.object(api_client, 'list_purchase_orders') as list_orders:
+            response = self.client.get('/mcp/details/pending-approvals')
+        self.assertEqual(response.status_code, 403)
+        list_orders.assert_not_called()
+        self.assertIn('Pharmacy Manager role required', response.get_data(as_text=True))
 
     def test_unknown_kind_and_backend_failure(self):
         self.assertEqual(self.client.get('/mcp/details/patients').status_code, 404)

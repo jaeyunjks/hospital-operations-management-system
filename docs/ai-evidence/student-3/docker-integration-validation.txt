@@ -1,19 +1,29 @@
 # Student 3 - Docker Compose integration validation
-# 2026-10-01T05:44:26Z
+# 2026-10-04T02:01:00Z
 # Captured with the demo switches: STUDENT3_MCP_ENABLED=true STUDENT3_RAG_ENABLED=true docker compose up
 # (Compose defaults both to false so CI never uses them.)
 
-## Running containers (docker compose ps)
-SERVICE              STATUS                 PORTS
-homs-homepage        Up 2 days (healthy)    3000->80/tcp
-student-2-database   Up 2 days (healthy)    6200->6200/tcp
-student5-backend     Up 3 hours (healthy)   5500->5500/tcp
-student5-database    Up 3 hours (healthy)   6500->6500/tcp
-student5-frontend    Up 3 hours (healthy)   3500->3500/tcp
-student-3-backend    Up 2 hours (healthy)   5300->5300/tcp
-student-3-database   Up 2 days (healthy)    6300->6300/tcp
-student-3-frontend   Up 2 hours (healthy)   3300->3300/tcp
-student-1-backend    Up 2 days              5100->5100/tcp
+## Running containers (docker compose ps): all 16 services of the integrated application
+SERVICE              STATUS                    PORTS
+homs-homepage        Up 52 minutes (healthy)   3000->80/tcp
+student-2-backend    Up 52 minutes (healthy)   5200->5200/tcp
+student-2-database   Up 52 minutes (healthy)   6200->6200/tcp
+student-2-frontend   Up 52 minutes (healthy)   3200->3200/tcp
+student5-backend     Up 52 minutes (healthy)   5500->5500/tcp
+student5-database    Up 52 minutes (healthy)   6500->6500/tcp
+student5-frontend    Up 52 minutes (healthy)   3500->3500/tcp
+student-3-backend    Up 7 minutes (healthy)    5300->5300/tcp
+student-3-database   Up 8 minutes (healthy)    6300->6300/tcp
+student-3-frontend   Up 7 minutes (healthy)    3300->3300/tcp
+student-4-backend    Up 52 minutes (healthy)   5400->5400/tcp
+student-4-database   Up 52 minutes (healthy)   6400->6400/tcp
+student-4-frontend   Up 52 minutes (healthy)   3400->3400/tcp
+student-1-backend    Up 52 minutes (healthy)   5100->5100/tcp
+student-1-database   Up 52 minutes (healthy)   6100->6100/tcp
+student-1-frontend   Up 52 minutes (healthy)   3100->3100/tcp
+
+## AI-Mode, MCP, RAG and the agentic loop are not Compose services
+homs-homepage student-1-backend student-1-database student-1-frontend student-2-backend student-2-database student-2-frontend student-3-backend student-3-database student-3-frontend student-4-backend student-4-database student-4-frontend student5-backend student5-database student5-frontend 
 
 ## Student 3 backend container configuration (MCP/RAG/AI-Mode point at the host)
 MCP_ENABLED=true
@@ -31,27 +41,27 @@ RAG_TIMEOUT=100
 
 ## AI-Mode reaches host Ollama: GET /api/ai/health
 {
-  "model": "llama3.2:3b",
-  "model_available": true,
-  "ollama_url": "http://host.docker.internal:11434",
-  "probe": {
-    "data": {
-      "ok": true
-    },
-    "duration_seconds": 0.2764967080001952,
-    "error": null,
-    "eval_count": 6,
-    "eval_duration_ns": 112757000,
     "model": "llama3.2:3b",
-    "ok": true,
-    "outcome": "ok",
-    "prompt_name": "smoke",
-    "prompt_version": "v1",
-    "retried": false,
-    "tokens_per_second": 53.2117739918586
-  },
-  "reachable": true,
-  "round_trip_seconds": 0.277
+    "model_available": true,
+    "ollama_url": "http://host.docker.internal:11434",
+    "probe": {
+        "data": {
+            "ok": true
+        },
+        "duration_seconds": 0.2117990410006314,
+        "error": null,
+        "eval_count": 6,
+        "eval_duration_ns": 114400000,
+        "model": "llama3.2:3b",
+        "ok": true,
+        "outcome": "ok",
+        "prompt_name": "smoke",
+        "prompt_version": "v1",
+        "retried": false,
+        "tokens_per_second": 52.44755244755245
+    },
+    "reachable": true,
+    "round_trip_seconds": 0.213
 }
 
 ## MCP: GET /api/mcp/status
@@ -72,76 +82,80 @@ RAG_TIMEOUT=100
 }
 
 ## MCP: POST /api/mcp/call homs_pharmacy_stock_alerts {alert_type: expiring_soon}
-{"arguments":{"alert_type":"expiring_soon"},"duration_ms":45,"ok":true,"outcome":"ok","result":{"data":{"alert_type":"expiring_soon","counts":{"active_medicines":132,"expired_batches":25,"expiring_within_30_days":28,"expiring_within_7_days":6,"low_stock":26,"pending_approvals":16},"expiring_soon":[{"batch_number":"PHM-26037","days_until_expiry":0,"expiry_date":"2026-10-01","medicine_name":"Metoprolol 25mg (037)","quantity_remaining":110},{"batch_number":"PHM-26038","days_until_expiry":1,"expiry_date":"2026-10-02","medicine_name":"Salbutamol 2.5mg (038)","quantity_remaining":140},{"batch_number":"PHM-26039","days_until_expiry":2,"expiry_date":"2026-10-03","medicine_name":"Sterile Dressing Pack (039)","quantity_remaining":170},{"batch_number":"PHM-26040","days_until_expiry":3,"expiry_date":"2026-10-04","medicine_name":"Acyclovir 400mg (040)","quantity_remaining":200},{"batch_number":"PHM-2
+{"arguments":{"alert_type":"expiring_soon"},"duration_ms":39,"ok":true,"outcome":"ok","result":{"data":{"alert_type":"expiring_soon","counts":{"active_medicines":132,"expired_batches":27,"expiring_within_30_days":28,"expiring_within_7_days":6,"low_stock":26,"pending_approvals":16},"expiring_soon":[{"batch_number":"PHM-26040","days_until_expiry":0,"expiry_date":"2026-10-04","medicine_name":"Acyclovir 400mg (040)","quantity_remaining":200},{"batch_number":"PHM-26041","days_until_expiry":1,"expiry_date":"2026-10-05","medicine_name":"Furosemide 40mg (041)","quantity_remaining":230},{"batch_number":"PHM-26044","days_until_expiry":4,"expiry_date":"2026-10-08","medicine_name":"Insulin Regular 100 IU/mL (044)","quantity_remaining":110},{"batch_number":"PHM-26045","days_until_expiry":5,"expiry_date":"2026-10-09","medicine_name":"Azithromycin 250mg (045)","quantity_remaining":140},{"batch_number":
+
 
 ## MCP: POST /api/mcp/call homs_pharmacy_order_alerts {alert_type: overdue}
 outcome: ok | ok: True | counts: {"ai_suggested_pending": 9, "approved": 20, "ordered": 12, "overdue": 21, "pending_approval": 16}
 lists returned: {'approved': None, 'ordered': None, 'overdue': 10, 'pending_approval': None}
-first overdue: {"ai_generated": true, "created_at": "2026-08-20", "days_overdue": 25, "expected_at": "2026-09-06", "medicine_name": "Acyclovir 400mg (016)", "outstanding": 210, "po_id": 16, "quantity_ordered": 210, "status": "approved", "supplier_name": "Southern Clinical Supplies", "total_value": 1274.7}
+first overdue: {"ai_generated": true, "created_at": "2026-08-20", "days_overdue": 28, "expected_at": "2026-09-06", "medicine_name": "Acyclovir 400mg (016)", "outstanding": 210, "po_id": 16, "quantity_ordered": 210, "status": "approved", "supplier_name": "Southern Clinical Supplies", "total_value": 1274.7}
+
+## MCP boundary: POST /api/mcp/call with another feature's tool
+homs_ward_occupancy_status -> HTTP 403
 
 ## RAG: GET /api/rag/status
 {
-  "documents": [
-    {
-      "source": "student-3/ai-advisories-and-agent.md",
-      "title": "Pharmacy AI Advisories and Scheduled Agent"
-    },
-    {
-      "source": "student-3/expiry-and-write-off.md",
-      "title": "Batch Expiry and Write-Off"
-    },
-    {
-      "source": "student-3/inventory-and-low-stock.md",
-      "title": "Pharmacy Inventory and Low Stock"
-    },
-    {
-      "source": "student-3/issuing-and-receiving-stock.md",
-      "title": "Issuing and Receiving Stock"
-    },
-    {
-      "source": "student-3/pharmacy-overview.md",
-      "title": "Pharmacy & Medication Inventory Overview"
-    },
-    {
-      "source": "student-3/reorder-and-purchase-orders.md",
-      "title": "Reordering and Purchase Orders"
-    }
-  ],
-  "enabled": true,
-  "feature": "student-3",
-  "reachable": true,
-  "ready": true,
-  "server_url": "http://host.docker.internal:8100"
+    "documents": [
+        {
+            "source": "student-3/ai-advisories-and-agent.md",
+            "title": "Pharmacy AI Advisories and Scheduled Agent"
+        },
+        {
+            "source": "student-3/expiry-and-write-off.md",
+            "title": "Batch Expiry and Write-Off"
+        },
+        {
+            "source": "student-3/inventory-and-low-stock.md",
+            "title": "Pharmacy Inventory and Low Stock"
+        },
+        {
+            "source": "student-3/issuing-and-receiving-stock.md",
+            "title": "Issuing and Receiving Stock"
+        },
+        {
+            "source": "student-3/pharmacy-overview.md",
+            "title": "Pharmacy & Medication Inventory Overview"
+        },
+        {
+            "source": "student-3/reorder-and-purchase-orders.md",
+            "title": "Reordering and Purchase Orders"
+        }
+    ],
+    "enabled": true,
+    "feature": "student-3",
+    "reachable": true,
+    "ready": true,
+    "server_url": "http://host.docker.internal:8100"
 }
 
 ## RAG: POST /api/rag/ask (answerable)
 {
-  "answer": "The suggested reorder quantity is calculated by subtracting the following from the coverage target: \n\n1. Usable stock (stock expiring within the supplier's lead time is treated as unusable)\n2. Any quantity already on open orders\n\nThe coverage target is the larger of the reorder level and the daily usage rate multiplied by (lead time + 7 days). [S1]",
-  "citations": [
-    {
-      "id": "S1",
-      "score": 0.843,
-      "section": "Suggested reorder quantity",
-      "snippet": "The backend, not the AI model, calculates the suggested quantity: 1. The daily usage rate is the stock issued in the last 30 days divided by 30. 2. Stock expiring within the supplier's lead time is treated as unusable. 3. The coverage target is the larger of the reorder level an\u2026",
-      "source": "student-3/reorder-and-purchase-orders.md",
-      "title": "Reordering and Purchase Orders"
+    "answer": "The suggested reorder quantity is calculated by subtracting the following from the coverage target: \n\n1. Usable stock (stock expiring within the supplier's lead time is treated as unusable)\n2. Any quantity already on open orders\n\nThe coverage target is the larger of the reorder level and the daily usage rate multiplied by (lead time + 7 days). [S1]",
+    "citations": [
+        {
+            "id": "S1",
+            "score": 0.843,
+            "section": "Suggested reorder quantity",
+            "snippet": "The backend, not the AI model, calculates the suggested quantity: 1. The daily usage rate is the stock issued in the last 30 days divided by 30. 2. Stock expiring within the supplier's lead time is treated as unusable. 3. The coverage target is the larger of the reorder level an\u2026",
+            "source": "student-3/reorder-and-purchase-orders.md",
+            "title": "Reordering and Purchase Orders"
+        }
+    ],
+    "confidence": "high",
+    "duration_ms": 3616,
+    "models": {
+        "embedding": "nomic-embed-text",
+        "generation": "llama3.2:3b"
+    },
+    "ok": true,
+    "outcome": "answered",
+    "question": "How is the suggested reorder quantity calculated?",
+    "retrieval": {
+        "considered": 4,
+        "relevant": 4,
+        "threshold": 0.62,
+        "top_score": 0.843
     }
-  ],
-  "confidence": "high",
-  "duration_ms": 2428,
-  "models": {
-    "embedding": "nomic-embed-text",
-    "generation": "llama3.2:3b"
-  },
-  "ok": true,
-  "outcome": "answered",
-  "question": "How is the suggested reorder quantity calculated?",
-  "retrieval": {
-    "considered": 4,
-    "relevant": 4,
-    "threshold": 0.62,
-    "top_score": 0.843
-  }
 }
 
 ## RAG: POST /api/rag/ask (purchase-order question)
@@ -151,47 +165,48 @@ sources: ['Reordering and Purchase Orders > Human approval']
 
 ## RAG: POST /api/rag/ask (not covered -> insufficient context)
 {
-  "answer": "The knowledge base does not contain enough relevant information to answer this question, so no answer was generated.",
-  "citations": [],
-  "confidence": "none",
-  "duration_ms": 27,
-  "models": {
-    "embedding": "nomic-embed-text",
-    "generation": "llama3.2:3b"
-  },
-  "ok": true,
-  "outcome": "insufficient_context",
-  "question": "What is the recommended paracetamol dose for a child?",
-  "reason": "no_relevant_context",
-  "retrieval": {
-    "considered": 4,
-    "relevant": 0,
-    "threshold": 0.62,
-    "top_score": 0.5375
-  }
+    "answer": "The knowledge base does not contain enough relevant information to answer this question, so no answer was generated.",
+    "citations": [],
+    "confidence": "none",
+    "duration_ms": 27,
+    "models": {
+        "embedding": "nomic-embed-text",
+        "generation": "llama3.2:3b"
+    },
+    "ok": true,
+    "outcome": "insufficient_context",
+    "question": "What is the recommended paracetamol dose for a child?",
+    "reason": "no_relevant_context",
+    "retrieval": {
+        "considered": 4,
+        "relevant": 0,
+        "threshold": 0.62,
+        "top_score": 0.5375
+    }
 }
 
+## Frontend UI (port 3300) reaches MCP and RAG only through the backend
+POST /mcp/call homs_pharmacy_stock_alerts (rendered text):
+Stock alerts All alerts Valid tool result Active medicines 132 Low stock 26 Expiring ≤ 30 days 28 Expiring ≤ 7 days 6 Expired batches 27 Pending approvals 16 Click a figure to see its details. Low stock (10 of 26 shown) Medicine Stock quantity Reorder level Su
+POST /mcp/call homs_pharmacy_order_alerts (rendered text):
+Purchase-order alerts All open orders Valid tool result Pending approval 16 AI-suggested, pending 9 Approved 20 Ordered 12 Overdue deliveries 21 Click a figure to see its details. Pending approval (10 of 16 shown) PO Medicine Supp
+POST /rag/ask answerable (rendered text):
+Q: Who can write off an expired batch? High confidence According to [S1], only a Pharmacy Manager can write off a batch, and a reason is required. Sources [S1] Batch Expiry and Write-Off › Writing off a batch Writing off removes a batch's remaining stock, usually because it has expired or been damaged. Only a Pharmacy Manager ca
+POST /rag/ask not covered (rendered text):
+Q: What is the capital of France? Insufficient context Not enough information in the pharmacy knowledge base The knowledge base does not contain enough relevant information to answer this question, so no answer was generated. No part of the knowledge base was 
+
 ## Backend container log lines for MCP and RAG calls
-[MCP] list_tools tool=- outcome=ok duration_ms=434 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=84 server=http://host.docker.internal:8000/mcp
-[MCP] list_tools tool=- outcome=ok duration_ms=14 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=56 server=http://host.docker.internal:8000/mcp
-[RAG] ask outcome=answered confidence=high citations=1 duration_ms=2602 server=http://host.docker.internal:8100
-[RAG] ask outcome=answered confidence=low citations=1 duration_ms=2308 server=http://host.docker.internal:8100
-[RAG] ask outcome=answered confidence=high citations=1 duration_ms=1549 server=http://host.docker.internal:8100
-[MCP] list_tools tool=- outcome=ok duration_ms=29 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=192 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=92 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=99 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=102 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=83 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=211 server=http://host.docker.internal:8000/mcp
-[MCP] list_tools tool=- outcome=ok duration_ms=29 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=49 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=57 server=http://host.docker.internal:8000/mcp
-[MCP] list_tools tool=- outcome=ok duration_ms=38 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=45 server=http://host.docker.internal:8000/mcp
-[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=37 server=http://host.docker.internal:8000/mcp
-[RAG] ask outcome=answered confidence=high citations=1 duration_ms=2428 server=http://host.docker.internal:8100
-[RAG] ask outcome=answered confidence=high citations=1 duration_ms=791 server=http://host.docker.internal:8100
+[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=32 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=32 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_echo outcome=ok duration_ms=8 server=http://host.docker.internal:8000/mcp
+[RAG] ask outcome=answered confidence=high citations=1 duration_ms=2174 server=http://host.docker.internal:8100
+[MCP] list_tools tool=- outcome=ok duration_ms=25 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=39 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=39 server=http://host.docker.internal:8000/mcp
+[RAG] ask outcome=answered confidence=high citations=1 duration_ms=3616 server=http://host.docker.internal:8100
+[RAG] ask outcome=answered confidence=high citations=1 duration_ms=529 server=http://host.docker.internal:8100
 [RAG] ask outcome=insufficient_context confidence=none citations=0 duration_ms=27 server=http://host.docker.internal:8100
+[MCP] call_tool tool=homs_pharmacy_stock_alerts outcome=ok duration_ms=66 server=http://host.docker.internal:8000/mcp
+[MCP] call_tool tool=homs_pharmacy_order_alerts outcome=ok duration_ms=40 server=http://host.docker.internal:8000/mcp
+[RAG] ask outcome=answered confidence=high citations=1 duration_ms=593 server=http://host.docker.internal:8100
+[RAG] ask outcome=insufficient_context confidence=none citations=0 duration_ms=19 server=http://host.docker.internal:8100

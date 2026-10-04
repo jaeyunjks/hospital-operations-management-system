@@ -89,13 +89,13 @@ SQLite has no native `BOOLEAN` or `DATE` type here. Boolean values use constrain
 | `purchase_orders` | `po_id INTEGER PRIMARY KEY`; `medicine_id INTEGER NOT NULL` FK → `medicines.medicine_id`; `supplier_id INTEGER NOT NULL` FK → `suppliers.supplier_id`; `quantity_ordered INTEGER NOT NULL CHECK > 0`; `quantity_received INTEGER NOT NULL DEFAULT 0`; `unit_price REAL`; `status TEXT NOT NULL DEFAULT 'draft'` constrained to `draft`, `pending_approval`, `approved`, `ordered`, `received`, `rejected`, `cancelled`; `created_by TEXT`; `approved_by TEXT`; `ai_generated INTEGER NOT NULL DEFAULT 0 CHECK (0,1)`; `ai_reasoning TEXT`; `decision_reason TEXT`; `created_at TEXT NOT NULL`; `expected_at TEXT`. |
 | `stock_movements` | `movement_id INTEGER PRIMARY KEY`; `medicine_id INTEGER NOT NULL` FK → `medicines.medicine_id`; `batch_id INTEGER` FK → `batches.batch_id`; `movement_type TEXT NOT NULL` constrained to `receive`, `issue`, `adjust`, `waste`; `quantity INTEGER NOT NULL`; `reason TEXT`; `performed_by TEXT`; `created_at TEXT NOT NULL`. |
 
-Seed data contains 14 suppliers, 140 medicines, 175 batches, 12 purchase orders, 20 stock movements, and 12 staff records. Every table meets the Student-3 minimum of 10 records.
+Seed data contains 14 suppliers, 140 medicines, 280 batches, 70 purchase orders, 700 stock movements, and 12 staff records. Every table meets the Student-3 minimum of 10 records.
 
 ## API reference
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/health` | Service health and row counts. |
+| GET | `/health` | Service health. |
 | GET | `/staff` | List staff. |
 | GET | `/staff/{staff_id}` | Get staff by ID. |
 | GET, POST | `/medicines` | List or create medicines. |
