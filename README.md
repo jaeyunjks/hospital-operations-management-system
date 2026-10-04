@@ -142,7 +142,28 @@ Open the shared homepage at [http://localhost:3000](http://localhost:3000).
 Use this startup order when demonstrating MCP and RAG through the containerised
 feature backends.
 
-1. Start Ollama on the host:
+Before the first run, install the shared servers' Python dependencies and pull
+the local models (repository root):
+
+```bash
+python3 -m pip install -r ai-services/mcp-server/requirements.txt -r ai-services/rag-server/requirements.txt
+```
+
+```bash
+ollama pull llama3.1:8b
+ollama pull llama3.2:3b
+ollama pull qwen2.5:3b
+ollama pull nomic-embed-text
+```
+
+| Model | Used by |
+|---|---|
+| `llama3.1:8b` | Student 2 and Student 5 AI-Mode; the shared agentic loop |
+| `llama3.2:3b` | Student 3 AI-Mode; RAG server answers |
+| `qwen2.5:3b` | Student 1 and Student 4 AI-Mode |
+| `nomic-embed-text` | RAG server embeddings (`ingest.py` fails without it) |
+
+1. Start Ollama on the host (skip this if the Ollama app is already running):
 
    ```bash
    ollama serve
