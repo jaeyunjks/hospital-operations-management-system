@@ -27,6 +27,8 @@ jobs:
       PYTHONDONTWRITEBYTECODE: "1"
       MCP_ENABLED: "false"
       RAG_ENABLED: "false"
+      student2_MCP_ENABLED: "false"
+      student2_RAG_ENABLED: "false"
 
     steps:
       - name: Check out repository
