@@ -1,0 +1,690 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "006a5a08-072a-4c12-ac38-d88382b8c826",
+  "timestamp": "2026-10-11T06:27:58.857Z",
+  "task": "Resolve a staffing shortage for the Emergency evening shift.",
+  "input_evidence": {
+    "scenario": "Staff/Shift Management validation example",
+    "current_state": {
+      "department": "Emergency",
+      "shift": "evening",
+      "occupancy_percent": 92
+    },
+    "objective": {
+      "metric": "assigned_staff",
+      "current": 4,
+      "target": 5,
+      "unit": "staff member"
+    },
+    "options": [
+      {
+        "id": "john",
+        "label": "John",
+        "attributes": {
+          "qualified": true,
+          "available": true,
+          "direct_conflict": false
+        },
+        "outcomes": {
+          "metric_delta": 1
+        },
+        "risk_indicators": []
+      },
+      {
+        "id": "sarah",
+        "label": "Sarah",
+        "attributes": {
+          "qualified": true,
+          "available": true,
+          "direct_conflict": false
+        },
+        "outcomes": {
+          "metric_delta": 1
+        },
+        "risk_indicators": [
+          "Already working a morning shift; total hours and fatigue need review."
+        ]
+      }
+    ],
+    "constraints": [
+      {
+        "id": "qualified",
+        "scope": "option",
+        "type": "hard",
+        "field": "qualified",
+        "operator": "equals",
+        "value": true,
+        "description": "The selected person must be qualified."
+      },
+      {
+        "id": "available",
+        "scope": "option",
+        "type": "hard",
+        "field": "available",
+        "operator": "equals",
+        "value": true,
+        "description": "The selected person must be available."
+      },
+      {
+        "id": "no_direct_conflict",
+        "scope": "option",
+        "type": "hard",
+        "field": "direct_conflict",
+        "operator": "equals",
+        "value": false,
+        "description": "The selected person must have no direct scheduling conflict."
+      },
+      {
+        "id": "avoid_excessive_hours",
+        "scope": "workflow",
+        "type": "policy",
+        "description": "Avoid excessive working hours and review fatigue risk."
+      },
+      {
+        "id": "human_approval",
+        "scope": "workflow",
+        "type": "approval",
+        "description": "Human approval is required before assignment changes."
+      }
+    ],
+    "unknowns": [
+      "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+    ],
+    "evidence_mode": "mock_sample"
+  },
+  "planner": {
+    "started_at": "2026-10-11T06:27:58.857Z",
+    "completed_at": "2026-10-11T06:27:58.857Z",
+    "input": {
+      "task": "Resolve a staffing shortage for the Emergency evening shift.",
+      "evidence": {
+        "scenario": "Staff/Shift Management validation example",
+        "current_state": {
+          "department": "Emergency",
+          "shift": "evening",
+          "occupancy_percent": 92
+        },
+        "objective": {
+          "metric": "assigned_staff",
+          "current": 4,
+          "target": 5,
+          "unit": "staff member"
+        },
+        "options": [
+          {
+            "id": "john",
+            "label": "John",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          },
+          {
+            "id": "sarah",
+            "label": "Sarah",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": [
+              "Already working a morning shift; total hours and fatigue need review."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "qualified",
+            "scope": "option",
+            "type": "hard",
+            "field": "qualified",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be qualified."
+          },
+          {
+            "id": "available",
+            "scope": "option",
+            "type": "hard",
+            "field": "available",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be available."
+          },
+          {
+            "id": "no_direct_conflict",
+            "scope": "option",
+            "type": "hard",
+            "field": "direct_conflict",
+            "operator": "equals",
+            "value": false,
+            "description": "The selected person must have no direct scheduling conflict."
+          },
+          {
+            "id": "avoid_excessive_hours",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Avoid excessive working hours and review fatigue risk."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before assignment changes."
+          }
+        ],
+        "unknowns": [
+          "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+        ],
+        "evidence_mode": "mock_sample"
+      }
+    },
+    "output": {
+      "goal": "Resolve a staffing shortage for the Emergency evening shift.",
+      "required_evidence": [
+        "objective",
+        "options",
+        "constraints",
+        "unknowns"
+      ],
+      "planned_steps": [
+        "Measure the gap between the current and target state.",
+        "Evaluate each supplied option against every hard constraint.",
+        "Compare eligible options using supplied risks and policy context.",
+        "Propose a reversible recommendation without executing a mutation.",
+        "Send the proposal and evidence to an independent reviewer."
+      ],
+      "constraints": [
+        "The selected person must be qualified.",
+        "The selected person must be available.",
+        "The selected person must have no direct scheduling conflict.",
+        "Avoid excessive working hours and review fatigue risk.",
+        "Human approval is required before assignment changes."
+      ],
+      "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": false,
+      "fallback_reason": null
+    }
+  },
+  "worker": {
+    "started_at": "2026-10-11T06:27:58.858Z",
+    "completed_at": "2026-10-11T06:27:58.858Z",
+    "input": {
+      "task": "Resolve a staffing shortage for the Emergency evening shift.",
+      "planner_output": {
+        "goal": "Resolve a staffing shortage for the Emergency evening shift.",
+        "required_evidence": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ],
+        "planned_steps": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "constraints": [
+          "The selected person must be qualified.",
+          "The selected person must be available.",
+          "The selected person must have no direct scheduling conflict.",
+          "Avoid excessive working hours and review fatigue risk.",
+          "Human approval is required before assignment changes."
+        ],
+        "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+      },
+      "evidence": {
+        "scenario": "Staff/Shift Management validation example",
+        "current_state": {
+          "department": "Emergency",
+          "shift": "evening",
+          "occupancy_percent": 92
+        },
+        "objective": {
+          "metric": "assigned_staff",
+          "current": 4,
+          "target": 5,
+          "unit": "staff member"
+        },
+        "options": [
+          {
+            "id": "john",
+            "label": "John",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          },
+          {
+            "id": "sarah",
+            "label": "Sarah",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": [
+              "Already working a morning shift; total hours and fatigue need review."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "qualified",
+            "scope": "option",
+            "type": "hard",
+            "field": "qualified",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be qualified."
+          },
+          {
+            "id": "available",
+            "scope": "option",
+            "type": "hard",
+            "field": "available",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be available."
+          },
+          {
+            "id": "no_direct_conflict",
+            "scope": "option",
+            "type": "hard",
+            "field": "direct_conflict",
+            "operator": "equals",
+            "value": false,
+            "description": "The selected person must have no direct scheduling conflict."
+          },
+          {
+            "id": "avoid_excessive_hours",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Avoid excessive working hours and review fatigue risk."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before assignment changes."
+          }
+        ],
+        "unknowns": [
+          "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+        ],
+        "evidence_mode": "mock_sample"
+      }
+    },
+    "output": {
+      "status": "proposal_ready",
+      "plan_steps_followed": [
+        "Measure the gap between the current and target state.",
+        "Evaluate each supplied option against every hard constraint.",
+        "Compare eligible options using supplied risks and policy context.",
+        "Propose a reversible recommendation without executing a mutation.",
+        "Send the proposal and evidence to an independent reviewer."
+      ],
+      "missing_planner_evidence": [],
+      "gap": {
+        "metric": "assigned_staff",
+        "current": 4,
+        "target": 5,
+        "deficit": 1
+      },
+      "evaluated_options": [
+        {
+          "option_id": "john",
+          "label": "John",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "qualified",
+              "passed": true
+            },
+            {
+              "constraint_id": "available",
+              "passed": true
+            },
+            {
+              "constraint_id": "no_direct_conflict",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": []
+        },
+        {
+          "option_id": "sarah",
+          "label": "Sarah",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "qualified",
+              "passed": true
+            },
+            {
+              "constraint_id": "available",
+              "passed": true
+            },
+            {
+              "constraint_id": "no_direct_conflict",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": [
+            "Already working a morning shift; total hours and fatigue need review."
+          ]
+        }
+      ],
+      "proposed_solution": {
+        "selected_option_id": "john",
+        "selected_option": "John",
+        "metric_delta": 1,
+        "projected_value": 5,
+        "reasoning": [
+          "Passed hard constraint: qualified",
+          "Passed hard constraint: available",
+          "Passed hard constraint: no_direct_conflict",
+          "No supplied option-specific risk indicator was identified."
+        ]
+      },
+      "limitations": [
+        "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+      ],
+      "mutation_executed": false
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": false,
+      "fallback_reason": null
+    }
+  },
+  "reviewer": {
+    "started_at": "2026-10-11T06:27:58.858Z",
+    "completed_at": "2026-10-11T06:27:58.858Z",
+    "input": {
+      "task": "Resolve a staffing shortage for the Emergency evening shift.",
+      "planner_output": {
+        "goal": "Resolve a staffing shortage for the Emergency evening shift.",
+        "required_evidence": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ],
+        "planned_steps": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "constraints": [
+          "The selected person must be qualified.",
+          "The selected person must be available.",
+          "The selected person must have no direct scheduling conflict.",
+          "Avoid excessive working hours and review fatigue risk.",
+          "Human approval is required before assignment changes."
+        ],
+        "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+      },
+      "worker_output": {
+        "status": "proposal_ready",
+        "plan_steps_followed": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "missing_planner_evidence": [],
+        "gap": {
+          "metric": "assigned_staff",
+          "current": 4,
+          "target": 5,
+          "deficit": 1
+        },
+        "evaluated_options": [
+          {
+            "option_id": "john",
+            "label": "John",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "qualified",
+                "passed": true
+              },
+              {
+                "constraint_id": "available",
+                "passed": true
+              },
+              {
+                "constraint_id": "no_direct_conflict",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": []
+          },
+          {
+            "option_id": "sarah",
+            "label": "Sarah",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "qualified",
+                "passed": true
+              },
+              {
+                "constraint_id": "available",
+                "passed": true
+              },
+              {
+                "constraint_id": "no_direct_conflict",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": [
+              "Already working a morning shift; total hours and fatigue need review."
+            ]
+          }
+        ],
+        "proposed_solution": {
+          "selected_option_id": "john",
+          "selected_option": "John",
+          "metric_delta": 1,
+          "projected_value": 5,
+          "reasoning": [
+            "Passed hard constraint: qualified",
+            "Passed hard constraint: available",
+            "Passed hard constraint: no_direct_conflict",
+            "No supplied option-specific risk indicator was identified."
+          ]
+        },
+        "limitations": [
+          "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+        ],
+        "mutation_executed": false
+      },
+      "evidence": {
+        "scenario": "Staff/Shift Management validation example",
+        "current_state": {
+          "department": "Emergency",
+          "shift": "evening",
+          "occupancy_percent": 92
+        },
+        "objective": {
+          "metric": "assigned_staff",
+          "current": 4,
+          "target": 5,
+          "unit": "staff member"
+        },
+        "options": [
+          {
+            "id": "john",
+            "label": "John",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          },
+          {
+            "id": "sarah",
+            "label": "Sarah",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": [
+              "Already working a morning shift; total hours and fatigue need review."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "qualified",
+            "scope": "option",
+            "type": "hard",
+            "field": "qualified",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be qualified."
+          },
+          {
+            "id": "available",
+            "scope": "option",
+            "type": "hard",
+            "field": "available",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be available."
+          },
+          {
+            "id": "no_direct_conflict",
+            "scope": "option",
+            "type": "hard",
+            "field": "direct_conflict",
+            "operator": "equals",
+            "value": false,
+            "description": "The selected person must have no direct scheduling conflict."
+          },
+          {
+            "id": "avoid_excessive_hours",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Avoid excessive working hours and review fatigue risk."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before assignment changes."
+          }
+        ],
+        "unknowns": [
+          "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+        ],
+        "evidence_mode": "mock_sample"
+      }
+    },
+    "output": {
+      "review_status": "validated_with_risks",
+      "validated_findings": [
+        "All evidence categories required by the Planner are present.",
+        "The Worker evaluated every supplied option as planned.",
+        "John satisfies qualified.",
+        "John satisfies available.",
+        "John satisfies no_direct_conflict.",
+        "Independent calculation projects 5/5 for assigned_staff.",
+        "The supplied constraints require human approval."
+      ],
+      "risks": [
+        "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+      ],
+      "unsupported_claims": [],
+      "recommendation": "The proposal is generally valid, but identified risks require human review.",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": false,
+      "fallback_reason": null
+    }
+  },
+  "human_review": {
+    "decision": "approve",
+    "comments": "Approved after final Phase 1 review.",
+    "timestamp": "2026-10-11T06:27:58.859Z"
+  },
+  "final_status": "approved",
+  "final_result": {
+    "status": "approved",
+    "proposal": {
+      "selected_option_id": "john",
+      "selected_option": "John",
+      "metric_delta": 1,
+      "projected_value": 5,
+      "reasoning": [
+        "Passed hard constraint: qualified",
+        "Passed hard constraint: available",
+        "Passed hard constraint: no_direct_conflict",
+        "No supplied option-specific risk indicator was identified."
+      ]
+    },
+    "review": {
+      "review_status": "validated_with_risks",
+      "validated_findings": [
+        "All evidence categories required by the Planner are present.",
+        "The Worker evaluated every supplied option as planned.",
+        "John satisfies qualified.",
+        "John satisfies available.",
+        "John satisfies no_direct_conflict.",
+        "Independent calculation projects 5/5 for assigned_staff.",
+        "The supplied constraints require human approval."
+      ],
+      "risks": [
+        "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+      ],
+      "unsupported_claims": [],
+      "recommendation": "The proposal is generally valid, but identified risks require human review.",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "human_decision": "approve",
+    "human_comments_or_correction": "Approved after final Phase 1 review.",
+    "mutation_executed": false
+  },
+  "completed_at": "2026-10-11T06:27:58.859Z"
+}

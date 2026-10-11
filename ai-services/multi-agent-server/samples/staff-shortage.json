@@ -1,0 +1,89 @@
+{
+  "scenario": "Staff/Shift Management validation example",
+  "current_state": {
+    "department": "Emergency",
+    "shift": "evening",
+    "occupancy_percent": 92
+  },
+  "objective": {
+    "metric": "assigned_staff",
+    "current": 4,
+    "target": 5,
+    "unit": "staff member"
+  },
+  "options": [
+    {
+      "id": "john",
+      "label": "John",
+      "attributes": {
+        "qualified": true,
+        "available": true,
+        "direct_conflict": false
+      },
+      "outcomes": {
+        "metric_delta": 1
+      },
+      "risk_indicators": []
+    },
+    {
+      "id": "sarah",
+      "label": "Sarah",
+      "attributes": {
+        "qualified": true,
+        "available": true,
+        "direct_conflict": false
+      },
+      "outcomes": {
+        "metric_delta": 1
+      },
+      "risk_indicators": [
+        "Already working a morning shift; total hours and fatigue need review."
+      ]
+    }
+  ],
+  "constraints": [
+    {
+      "id": "qualified",
+      "scope": "option",
+      "type": "hard",
+      "field": "qualified",
+      "operator": "equals",
+      "value": true,
+      "description": "The selected person must be qualified."
+    },
+    {
+      "id": "available",
+      "scope": "option",
+      "type": "hard",
+      "field": "available",
+      "operator": "equals",
+      "value": true,
+      "description": "The selected person must be available."
+    },
+    {
+      "id": "no_direct_conflict",
+      "scope": "option",
+      "type": "hard",
+      "field": "direct_conflict",
+      "operator": "equals",
+      "value": false,
+      "description": "The selected person must have no direct scheduling conflict."
+    },
+    {
+      "id": "avoid_excessive_hours",
+      "scope": "workflow",
+      "type": "policy",
+      "description": "Avoid excessive working hours and review fatigue risk."
+    },
+    {
+      "id": "human_approval",
+      "scope": "workflow",
+      "type": "approval",
+      "description": "Human approval is required before assignment changes."
+    }
+  ],
+  "unknowns": [
+    "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+  ],
+  "evidence_mode": "mock_sample"
+}
