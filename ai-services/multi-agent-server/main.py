@@ -15,12 +15,14 @@ from agents.reviewer import Reviewer
 from agents.worker import Worker
 from audit import AuditStore
 from model_client import (
-    DEFAULT_MODEL,
     DEFAULT_OLLAMA_URL,
+    DEFAULT_ROLE_MODELS,
+    ROLE_NAMES,
     DeterministicModelClient,
     FallbackModelClient,
     ModelClient,
     OllamaModelClient,
+    RoleModelClient,
 )
 from models import HumanDecision, HumanReview, utc_now
 from orchestrator import MultiAgentOrchestrator
@@ -31,6 +33,11 @@ REPO_ROOT = SERVICE_DIR.parents[1]
 DEFAULT_EVIDENCE = SERVICE_DIR / "samples" / "staff-shortage.json"
 DEFAULT_REPORTS_DIR = REPO_ROOT / "reports" / "multi-agent"
 DEFAULT_TASK = "Resolve a staffing shortage for the Emergency evening shift."
+ROLE_MODEL_ENV = {
+    "planner": "HOMS_MULTI_AGENT_PLANNER_MODEL",
+    "worker": "HOMS_MULTI_AGENT_WORKER_MODEL",
+    "reviewer": "HOMS_MULTI_AGENT_REVIEWER_MODEL",
+}
 
 
 def load_evidence(path: Path) -> Dict[str, Any]:
@@ -45,19 +52,43 @@ def load_evidence(path: Path) -> Dict[str, Any]:
     return value
 
 
+def resolve_role_models(
+    args: argparse.Namespace, environment: Optional[Dict[str, str]] = None
+) -> Dict[str, str]:
+    """Resolve explicit role overrides, role environment, legacy global, defaults."""
+
+    environment = os.environ if environment is None else environment
+    resolved = {}
+    for role in ROLE_NAMES:
+        resolved[role] = (
+            getattr(args, f"{role}_model", None)
+            or environment.get(ROLE_MODEL_ENV[role])
+            or args.model
+            or DEFAULT_ROLE_MODELS[role]
+        )
+    return resolved
+
+
 def build_model_client(args: argparse.Namespace) -> ModelClient:
     deterministic = DeterministicModelClient()
+    role_models = resolve_role_models(args)
     if args.model_mode == "deterministic":
-        return deterministic
-    ollama = OllamaModelClient(
-        model=args.model,
-        base_url=args.ollama_url,
-        timeout=args.ollama_timeout,
-        max_attempts=args.max_model_attempts,
-    )
-    if args.model_mode == "auto":
-        return FallbackModelClient(ollama, deterministic)
-    return ollama
+        return RoleModelClient({role: deterministic for role in ROLE_NAMES})
+
+    clients: Dict[str, ModelClient] = {}
+    for role, model in role_models.items():
+        ollama = OllamaModelClient(
+            model=model,
+            base_url=args.ollama_url,
+            timeout=args.ollama_timeout,
+            max_attempts=args.max_model_attempts,
+        )
+        clients[role] = (
+            FallbackModelClient(ollama, deterministic)
+            if args.model_mode == "auto"
+            else ollama
+        )
+    return RoleModelClient(clients)
 
 
 def request_human_review(_record: Dict[str, Any]) -> HumanReview:
@@ -88,7 +119,11 @@ def print_stage(stage: str, payload: Dict[str, Any]) -> None:
         mode = execution["provider"]
         if execution.get("fallback_used"):
             mode += f" (fallback: {execution['fallback_reason']})"
-        print(f"Execution: {mode}")
+        details = [f"Execution: {mode}"]
+        if execution.get("model"):
+            details.append(f"Model: {execution['model']}")
+        details.append(f"Attempts: {execution['attempt_count']}")
+        print(" | ".join(details))
         print(json.dumps(payload["output"], indent=2, ensure_ascii=False))
         return
     if stage == "human_review_required":
@@ -114,7 +149,35 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
             "live Ollama; auto: try Ollama and record any deterministic fallback"
         ),
     )
-    parser.add_argument("--model", default=os.environ.get("OLLAMA_MODEL", DEFAULT_MODEL))
+    parser.add_argument(
+        "--model",
+        default=os.environ.get("OLLAMA_MODEL"),
+        help=(
+            "Legacy global model override. Role-specific CLI/environment settings "
+            "take precedence."
+        ),
+    )
+    parser.add_argument(
+        "--planner-model",
+        help=(
+            "Planner model (default: llama3.1:8b; environment: "
+            "HOMS_MULTI_AGENT_PLANNER_MODEL)"
+        ),
+    )
+    parser.add_argument(
+        "--worker-model",
+        help=(
+            "Worker model (default: llama3.2:3b; environment: "
+            "HOMS_MULTI_AGENT_WORKER_MODEL)"
+        ),
+    )
+    parser.add_argument(
+        "--reviewer-model",
+        help=(
+            "Reviewer model (default: deepseek-r1:8b; environment: "
+            "HOMS_MULTI_AGENT_REVIEWER_MODEL)"
+        ),
+    )
     parser.add_argument(
         "--ollama-url", default=os.environ.get("OLLAMA_URL", DEFAULT_OLLAMA_URL)
     )

@@ -11,15 +11,23 @@ import json
 import re
 import urllib.error
 import urllib.request
-from typing import Any, Callable, Dict, Optional, Protocol
+from typing import Any, Callable, Dict, Mapping, Optional, Protocol
 
 from models import AGENT_OUTPUT_SCHEMAS, GenerationResult
 
 
-DEFAULT_MODEL = "llama3.1:8b"
+ROLE_NAMES = ("planner", "worker", "reviewer")
+DEFAULT_ROLE_MODELS = {
+    "planner": "llama3.1:8b",
+    "worker": "llama3.2:3b",
+    "reviewer": "deepseek-r1:8b",
+}
+# Retained for compatibility with Phase 2A imports and the legacy --model option.
+DEFAULT_MODEL = DEFAULT_ROLE_MODELS["planner"]
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_MAX_ATTEMPTS = 3
 MAX_CAPTURED_RESPONSE_CHARS = 20_000
+
 
 class ModelError(RuntimeError):
     """Raised when a model cannot produce a usable structured result."""
@@ -165,6 +173,32 @@ class ModelClient(Protocol):
     def generate(
         self, *, role: str, prompt: str, context: Dict[str, Any]
     ) -> GenerationResult: ...
+
+
+class RoleModelClient:
+    """Route each supported agent role to its configured model client."""
+
+    def __init__(self, clients: Mapping[str, ModelClient]):
+        missing = sorted(set(ROLE_NAMES) - set(clients))
+        unsupported = sorted(set(clients) - set(ROLE_NAMES))
+        if missing:
+            raise ValueError(
+                "missing model client configuration for role(s): " + ", ".join(missing)
+            )
+        if unsupported:
+            raise ValueError(
+                "unsupported model client role(s): " + ", ".join(unsupported)
+            )
+        self.clients = dict(clients)
+
+    def generate(
+        self, *, role: str, prompt: str, context: Dict[str, Any]
+    ) -> GenerationResult:
+        try:
+            client = self.clients[role]
+        except KeyError as error:
+            raise ModelError(f"unsupported agent role: {role}") from error
+        return client.generate(role=role, prompt=prompt, context=context)
 
 
 def _option_constraints(evidence: Dict[str, Any]) -> list[Dict[str, Any]]:

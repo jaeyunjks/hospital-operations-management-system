@@ -2,8 +2,8 @@
 
 Central AI capabilities shared across the five feature microservices.
 Release 1 implements the shared `mcp-server/` and `rag-server/`; Release 2
-Phase 2A implements schema-validated live Ollama execution in the
-`multi-agent-server/` foundation. All run locally, outside Docker Compose.
+Phase 2B implements role-specific, schema-validated local Ollama execution in
+the `multi-agent-server/` foundation. All run locally, outside Docker Compose.
 
 | Directory            | Purpose                                   | Release   |
 |----------------------|-------------------------------------------|-----------|
@@ -13,5 +13,7 @@ Phase 2A implements schema-validated live Ollama execution in the
 | `multi-agent-server/`| Planner/Worker/Reviewer + human-review foundation | Release 2 |
 
 Approved open-source LLMs: Llama, Qwen and/or DeepSeek, run via Ollama.
-The Phase 2A Multi-Agent workflow uses supplied evidence only. MCP, RAG,
-feature API, database and cloud integration remain later Release 2 work.
+The Phase 2B Multi-Agent workflow uses `llama3.1:8b` for planning,
+`llama3.2:3b` for work, and `deepseek-r1:8b` for independent review. It still
+uses supplied evidence only. MCP, RAG, feature API, database and cloud
+integration remain later Release 2 work.

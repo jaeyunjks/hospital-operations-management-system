@@ -1,4 +1,4 @@
-# Shared Multi-Agent Server — Release 2 Phase 2A
+# Shared Multi-Agent Server — Release 2 Phase 2B
 
 This host-local Python service foundation coordinates one reusable workflow:
 
@@ -6,11 +6,11 @@ This host-local Python service foundation coordinates one reusable workflow:
 Task -> Planner -> Worker -> Reviewer -> Human Review -> Final Result
 ```
 
-It is deliberately separate from `ai-services/agentic-loop/`. Phase 2A adds
-reliable schema-validated live Ollama execution while retaining the Phase 1
-deterministic mode. It uses supplied JSON evidence, performs no application or
-database mutation, and does not connect to MCP, RAG, feature backends, Docker
-Compose, or Azure.
+It is deliberately separate from `ai-services/agentic-loop/`. Phase 2B routes
+each role to its own local Ollama model while retaining the Phase 2A schemas,
+validation, retries, provenance, and deterministic fallback. It uses supplied
+JSON evidence, performs no application or database mutation, and does not
+connect to MCP, RAG, feature backends, Docker Compose, or Azure.
 
 ## Structure
 
@@ -19,7 +19,7 @@ multi-agent-server/
 ├── main.py                 # terminal entry point and human-review prompt
 ├── orchestrator.py         # ordered hand-offs and finalisation gate
 ├── models.py               # explicit Planner/Worker/Reviewer JSON schemas
-├── model_client.py         # Ollama validation/retries + deterministic fallback
+├── model_client.py         # role routing + Ollama validation/retries/fallback
 ├── audit.py                # collision-safe persistent JSON history
 ├── agents/                 # separate Planner, Worker, Reviewer roles
 ├── prompts/                # role-specific model instructions
@@ -47,7 +47,7 @@ a live LLM result. At the prompt, choose `Approve`, `Correct`, `Reject`, or
 is saved before the prompt, and the workflow stays `awaiting_human_review` if
 no decision is entered.
 
-For the Phase 2A live Ollama workflow:
+For the Phase 2B live Ollama workflow:
 
 ```bash
 python3 ai-services/multi-agent-server/main.py \
@@ -56,17 +56,29 @@ python3 ai-services/multi-agent-server/main.py \
 ```
 
 `--model-mode auto` tries Ollama first and records the reason if it falls back
-to deterministic execution. Defaults follow the existing project convention:
-`OLLAMA_MODEL=llama3.1:8b` and `OLLAMA_URL=http://127.0.0.1:11434`.
+to deterministic execution. The default live role mapping is:
 
-Every live agent response passes through conservative JSON normalisation and
-its explicit JSON Schema. The client accepts direct JSON, one surrounding JSON
-code fence, or one JSON object with minimal surrounding prose; it never coerces
-wrong field types or semantic values. Invalid output receives a corrective
-prompt containing the validation error and required schema. The default limit
-is three attempts per agent (configurable from 1 to 5). Exhaustion fails
-`ollama` mode; `auto` mode may use the deterministic fallback but records that
-fact and all failed live attempts.
+| Role | Ollama model |
+|------|--------------|
+| Planner | `llama3.1:8b` |
+| Worker | `llama3.2:3b` |
+| Reviewer | `deepseek-r1:8b` |
+
+Override roles independently with `--planner-model`, `--worker-model`, and
+`--reviewer-model`, or with `HOMS_MULTI_AGENT_PLANNER_MODEL`,
+`HOMS_MULTI_AGENT_WORKER_MODEL`, and `HOMS_MULTI_AGENT_REVIEWER_MODEL`.
+`OLLAMA_MODEL` and the legacy `--model` remain supported as lower-priority
+global overrides. The Ollama URL default remains
+`OLLAMA_URL=http://127.0.0.1:11434`.
+
+Every live agent response, regardless of model, passes through the same
+conservative JSON normalisation and explicit role JSON Schema. The client
+accepts direct JSON, one surrounding JSON code fence, or one JSON object with
+minimal surrounding prose; it never coerces wrong field types or semantic
+values. Invalid output receives a corrective prompt containing the validation
+error and required schema. The default limit is three attempts per agent
+(configurable from 1 to 5). Exhaustion fails `ollama` mode; `auto` mode may use
+the deterministic fallback but records that fact and all failed live attempts.
 
 Use another scenario without changing server code:
 

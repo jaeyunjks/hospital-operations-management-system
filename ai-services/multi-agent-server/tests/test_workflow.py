@@ -13,6 +13,7 @@ from model_client import (
     DeterministicModelClient,
     ModelError,
     OllamaModelClient,
+    RoleModelClient,
     _validate_output,
 )
 from models import GenerationResult, HumanDecision, HumanReview, utc_now
@@ -255,12 +256,24 @@ def test_live_provenance_and_human_gate_are_audited(tmp_path, sample_evidence):
             "evidence": sample_evidence,
         },
     ).output
-    responses = iter([json.dumps(plan), json.dumps(work), json.dumps(review)])
-    client = OllamaModelClient(
-        model="test-model",
-        base_url="http://ollama.invalid",
-        timeout=5,
-        transport=lambda _payload, _timeout: {"response": next(responses)},
+    outputs = {"planner": plan, "worker": work, "reviewer": review}
+    models = {
+        "planner": "llama3.1:8b",
+        "worker": "llama3.2:3b",
+        "reviewer": "deepseek-r1:8b",
+    }
+    client = RoleModelClient(
+        {
+            role: OllamaModelClient(
+                model=model,
+                base_url="http://ollama.invalid",
+                timeout=5,
+                transport=lambda _payload, _timeout, output=outputs[role]: {
+                    "response": json.dumps(output)
+                },
+            )
+            for role, model in models.items()
+        }
     )
     human_gate_reached = []
     orchestrator = MultiAgentOrchestrator(
@@ -282,8 +295,10 @@ def test_live_provenance_and_human_gate_are_audited(tmp_path, sample_evidence):
     assert record["final_status"] == "approved"
     for role in ("planner", "worker", "reviewer"):
         assert record[role]["execution"]["provider"] == "live_ollama"
+        assert record[role]["execution"]["model"] == models[role]
         assert record[role]["execution"]["fallback_used"] is False
         assert record[role]["execution"]["attempt_count"] == 1
+        assert record[role]["execution"]["attempts"][0]["model"] == models[role]
 
 
 def test_exhausted_live_attempts_are_retained_in_failed_audit(

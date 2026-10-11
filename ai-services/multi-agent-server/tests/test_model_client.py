@@ -5,14 +5,16 @@ import json
 import pytest
 
 from model_client import (
+    DEFAULT_ROLE_MODELS,
     DeterministicModelClient,
     FallbackModelClient,
     ModelError,
     OllamaModelClient,
+    RoleModelClient,
     parse_json_object,
     validate_agent_output,
 )
-from models import AGENT_OUTPUT_SCHEMAS
+from models import AGENT_OUTPUT_SCHEMAS, GenerationResult
 
 
 TASK = "Resolve a staffing shortage for the Emergency evening shift."
@@ -26,6 +28,16 @@ class SequenceTransport:
     def __call__(self, payload, timeout):
         self.calls.append({"payload": payload, "timeout": timeout})
         return {"response": self.responses.pop(0)}
+
+
+class CapturingClient:
+    def __init__(self, name):
+        self.name = name
+        self.roles = []
+
+    def generate(self, *, role, prompt, context):
+        self.roles.append(role)
+        return GenerationResult(output={"client": self.name}, provider="test")
 
 
 def role_cases(evidence):
@@ -58,6 +70,46 @@ def role_cases(evidence):
     }
 
 
+def test_default_role_models_are_the_phase_2b_assignment():
+    assert DEFAULT_ROLE_MODELS == {
+        "planner": "llama3.1:8b",
+        "worker": "llama3.2:3b",
+        "reviewer": "deepseek-r1:8b",
+    }
+
+
+@pytest.mark.parametrize("role", ["planner", "worker", "reviewer"])
+def test_role_model_client_routes_generation_by_role(role):
+    clients = {name: CapturingClient(name) for name in DEFAULT_ROLE_MODELS}
+    router = RoleModelClient(clients)
+
+    result = router.generate(role=role, prompt="prompt", context={})
+
+    assert result.output == {"client": role}
+    assert clients[role].roles == [role]
+    assert all(
+        not client.roles for name, client in clients.items() if name != role
+    )
+
+
+def test_role_model_client_rejects_missing_and_unsupported_configuration():
+    with pytest.raises(ValueError, match="missing model client configuration.*reviewer"):
+        RoleModelClient(
+            {
+                "planner": CapturingClient("planner"),
+                "worker": CapturingClient("worker"),
+            }
+        )
+
+    with pytest.raises(ValueError, match="unsupported model client role.*observer"):
+        RoleModelClient(
+            {
+                **{role: CapturingClient(role) for role in DEFAULT_ROLE_MODELS},
+                "observer": CapturingClient("observer"),
+            }
+        )
+
+
 @pytest.mark.parametrize("role", ["planner", "worker", "reviewer"])
 def test_valid_live_style_agent_outputs(role, sample_evidence):
     context, expected = role_cases(sample_evidence)[role]
@@ -84,7 +136,7 @@ def test_malformed_json_triggers_corrective_retry(sample_evidence):
     context, valid = role_cases(sample_evidence)["planner"]
     transport = SequenceTransport(["{not valid", json.dumps(valid)])
     client = OllamaModelClient(
-        model="test-model",
+        model="llama3.1:8b",
         base_url="http://ollama.invalid",
         timeout=5,
         max_attempts=2,
@@ -100,6 +152,10 @@ def test_malformed_json_triggers_corrective_retry(sample_evidence):
     assert "CORRECTION REQUIRED" in retry_prompt
     assert "Validation error:" in retry_prompt
     assert "Required JSON Schema:" in retry_prompt
+    assert [call["payload"]["model"] for call in transport.calls] == [
+        "llama3.1:8b",
+        "llama3.1:8b",
+    ]
 
 
 def test_json_code_fence_is_safely_removed(sample_evidence):
@@ -173,7 +229,7 @@ def test_fallback_provenance_never_claims_live_output(sample_evidence):
     invalid = dict(invalid)
     invalid["planned_steps"] = "not an array"
     primary = OllamaModelClient(
-        model="test-model",
+        model="llama3.1:8b",
         base_url="http://ollama.invalid",
         timeout=5,
         max_attempts=1,
@@ -188,4 +244,4 @@ def test_fallback_provenance_never_claims_live_output(sample_evidence):
     assert result.fallback_used is True
     assert "remained invalid" in result.fallback_reason
     assert len(result.attempts) == 1
-
+    assert result.attempts[0]["model"] == "llama3.1:8b"
