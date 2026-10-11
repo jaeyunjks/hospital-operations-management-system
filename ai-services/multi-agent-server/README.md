@@ -1,4 +1,4 @@
-# Shared Multi-Agent Server — Release 2 Phase 1
+# Shared Multi-Agent Server — Release 2 Phase 2A
 
 This host-local Python service foundation coordinates one reusable workflow:
 
@@ -6,9 +6,11 @@ This host-local Python service foundation coordinates one reusable workflow:
 Task -> Planner -> Worker -> Reviewer -> Human Review -> Final Result
 ```
 
-It is deliberately separate from `ai-services/agentic-loop/`. Phase 1 uses
-supplied JSON evidence, performs no application or database mutation, and does
-not connect to MCP, RAG, feature backends, Docker Compose, or Azure.
+It is deliberately separate from `ai-services/agentic-loop/`. Phase 2A adds
+reliable schema-validated live Ollama execution while retaining the Phase 1
+deterministic mode. It uses supplied JSON evidence, performs no application or
+database mutation, and does not connect to MCP, RAG, feature backends, Docker
+Compose, or Azure.
 
 ## Structure
 
@@ -16,8 +18,8 @@ not connect to MCP, RAG, feature backends, Docker Compose, or Azure.
 multi-agent-server/
 ├── main.py                 # terminal entry point and human-review prompt
 ├── orchestrator.py         # ordered hand-offs and finalisation gate
-├── models.py               # shared workflow contracts
-├── model_client.py         # Ollama interface + deterministic fallback
+├── models.py               # explicit Planner/Worker/Reviewer JSON schemas
+├── model_client.py         # Ollama validation/retries + deterministic fallback
 ├── audit.py                # collision-safe persistent JSON history
 ├── agents/                 # separate Planner, Worker, Reviewer roles
 ├── prompts/                # role-specific model instructions
@@ -30,7 +32,7 @@ unknowns. The included Staff/Shift shortage is only the first validation
 scenario. Later Worker adapters can obtain evidence from MCP and RAG without
 changing the orchestrator or human-review gate.
 
-## Run the repeatable Phase 1 demonstration
+## Run
 
 From the repository root:
 
@@ -38,22 +40,33 @@ From the repository root:
 python3 ai-services/multi-agent-server/main.py
 ```
 
-The default `--model-mode deterministic` is explicitly reported as
+The default Phase 1 mode remains `--model-mode deterministic` and is reported as
 `deterministic_fallback`; it is a repeatable, evidence-driven fallback and not
 a live LLM result. At the prompt, choose `Approve`, `Correct`, `Reject`, or
 `Partially Accept`. `Correct` requires a correction note. The audit checkpoint
 is saved before the prompt, and the workflow stays `awaiting_human_review` if
 no decision is entered.
 
-For a local Ollama call using the same role prompts and output contracts:
+For the Phase 2A live Ollama workflow:
 
 ```bash
-python3 ai-services/multi-agent-server/main.py --model-mode ollama
+python3 ai-services/multi-agent-server/main.py \
+  --model-mode ollama \
+  --max-model-attempts 3
 ```
 
 `--model-mode auto` tries Ollama first and records the reason if it falls back
 to deterministic execution. Defaults follow the existing project convention:
 `OLLAMA_MODEL=llama3.1:8b` and `OLLAMA_URL=http://127.0.0.1:11434`.
+
+Every live agent response passes through conservative JSON normalisation and
+its explicit JSON Schema. The client accepts direct JSON, one surrounding JSON
+code fence, or one JSON object with minimal surrounding prose; it never coerces
+wrong field types or semantic values. Invalid output receives a corrective
+prompt containing the validation error and required schema. The default limit
+is three attempts per agent (configurable from 1 to 5). Exhaustion fails
+`ollama` mode; `auto` mode may use the deterministic fallback but records that
+fact and all failed live attempts.
 
 Use another scenario without changing server code:
 
@@ -64,9 +77,11 @@ python3 ai-services/multi-agent-server/main.py \
 ```
 
 Each run creates a unique file under `reports/multi-agent/` containing the
-original inputs, every agent hand-off/output and execution mode, human decision,
-timestamps, final status, and final result. Existing histories are never
-reused or overwritten.
+original inputs, every agent hand-off/output, raw model attempts, normalisation,
+validation errors, model/provider provenance, human decision, timestamps,
+final status, and final result. Existing histories are never reused or
+overwritten. A successful live stage is labelled `live_ollama`; fallback output
+is labelled `deterministic_fallback` and never presented as live.
 
 ## Test
 
@@ -74,4 +89,6 @@ reused or overwritten.
 python3 -m pytest -q ai-services/multi-agent-server/tests
 ```
 
-The tests need no model, server, database, or third-party package.
+The tests mock Ollama and need no model, server, database, or third-party
+package. They cover schemas, normalisation, corrective retries, exhaustion,
+provenance, sequential hand-offs, and the human-review gate.

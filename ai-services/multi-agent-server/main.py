@@ -50,7 +50,10 @@ def build_model_client(args: argparse.Namespace) -> ModelClient:
     if args.model_mode == "deterministic":
         return deterministic
     ollama = OllamaModelClient(
-        model=args.model, base_url=args.ollama_url, timeout=args.ollama_timeout
+        model=args.model,
+        base_url=args.ollama_url,
+        timeout=args.ollama_timeout,
+        max_attempts=args.max_model_attempts,
     )
     if args.model_mode == "auto":
         return FallbackModelClient(ollama, deterministic)
@@ -116,6 +119,12 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         "--ollama-url", default=os.environ.get("OLLAMA_URL", DEFAULT_OLLAMA_URL)
     )
     parser.add_argument("--ollama-timeout", type=float, default=120.0)
+    parser.add_argument(
+        "--max-model-attempts",
+        type=int,
+        default=3,
+        help="Maximum live Ollama attempts per agent (1-5; default: 3)",
+    )
     parser.add_argument("--reports-dir", type=Path, default=DEFAULT_REPORTS_DIR)
     return parser.parse_args(argv)
 

@@ -8,81 +8,157 @@ scenario is only one sample using that contract.
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Protocol
+from typing import Any, Callable, Dict, Optional, Protocol
 
-from models import GenerationResult
+from models import AGENT_OUTPUT_SCHEMAS, GenerationResult
 
 
 DEFAULT_MODEL = "llama3.1:8b"
 DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
-
-_REQUIRED_OUTPUT_FIELDS = {
-    "planner": {"goal", "required_evidence", "planned_steps", "expected_result"},
-    "worker": {"status", "proposed_solution", "mutation_executed"},
-    "reviewer": {
-        "review_status",
-        "validated_findings",
-        "risks",
-        "unsupported_claims",
-        "recommendation",
-        "human_approval_required",
-    },
-}
-
-
-def _validate_output(role: str, output: Dict[str, Any]) -> None:
-    """Enforce the stable cross-agent contract before a hand-off occurs."""
-
-    missing = sorted(_REQUIRED_OUTPUT_FIELDS.get(role, set()) - set(output))
-    if missing:
-        raise ModelError(
-            f"{role} output missing required field(s): {', '.join(missing)}"
-        )
-    expected_types = {
-        "planner": {
-            "goal": str,
-            "required_evidence": list,
-            "planned_steps": list,
-            "expected_result": str,
-        },
-        "worker": {
-            "status": str,
-            "gap": dict,
-            "evaluated_options": list,
-            "proposed_solution": dict,
-            "limitations": list,
-            "mutation_executed": bool,
-        },
-        "reviewer": {
-            "review_status": str,
-            "validated_findings": list,
-            "risks": list,
-            "unsupported_claims": list,
-            "recommendation": str,
-            "human_approval_required": bool,
-            "mutation_verified_absent": bool,
-        },
-    }
-    for field, expected in expected_types.get(role, {}).items():
-        if not isinstance(output.get(field), expected):
-            raise ModelError(
-                f"{role} output field '{field}' must be {expected.__name__}"
-            )
-    if role == "planner" and (
-        not all(isinstance(value, str) for value in output["required_evidence"])
-        or not all(isinstance(value, str) for value in output["planned_steps"])
-    ):
-        raise ModelError("planner evidence names and planned steps must be strings")
-    if role == "worker" and output["mutation_executed"] is not False:
-        raise ModelError("worker mutation_executed must be false in Phase 1")
-    if role == "reviewer" and output["mutation_verified_absent"] is not True:
-        raise ModelError("reviewer must verify that no mutation occurred in Phase 1")
-
+DEFAULT_MAX_ATTEMPTS = 3
+MAX_CAPTURED_RESPONSE_CHARS = 20_000
 
 class ModelError(RuntimeError):
     """Raised when a model cannot produce a usable structured result."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        attempts: tuple[Dict[str, Any], ...] = (),
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+    ):
+        super().__init__(message)
+        self.attempts = attempts
+        self.provider = provider
+        self.model = model
+
+
+def _matches_json_type(value: Any, expected: str) -> bool:
+    if expected == "null":
+        return value is None
+    if expected == "boolean":
+        return isinstance(value, bool)
+    if expected == "number":
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+    if expected == "string":
+        return isinstance(value, str)
+    if expected == "array":
+        return isinstance(value, list)
+    if expected == "object":
+        return isinstance(value, dict)
+    return False
+
+
+def _schema_error(value: Any, schema: Dict[str, Any], path: str = "output") -> Optional[str]:
+    expected = schema.get("type")
+    expected_types = expected if isinstance(expected, list) else [expected]
+    if expected and not any(_matches_json_type(value, item) for item in expected_types):
+        return f"{path} must be {' or '.join(expected_types)}"
+    if "const" in schema and value != schema["const"]:
+        return f"{path} must equal {json.dumps(schema['const'])}"
+    if "enum" in schema and value not in schema["enum"]:
+        return f"{path} must be one of {json.dumps(schema['enum'])}"
+    if isinstance(value, str) and len(value) < schema.get("minLength", 0):
+        return f"{path} must not be blank"
+    if isinstance(value, dict):
+        missing = [key for key in schema.get("required", []) if key not in value]
+        if missing:
+            return f"{path} is missing required field(s): {', '.join(missing)}"
+        properties = schema.get("properties", {})
+        if schema.get("additionalProperties") is False:
+            unexpected = sorted(set(value) - set(properties))
+            if unexpected:
+                return f"{path} has unexpected field(s): {', '.join(unexpected)}"
+        for key, child_schema in properties.items():
+            if key in value:
+                error = _schema_error(value[key], child_schema, f"{path}.{key}")
+                if error:
+                    return error
+    if isinstance(value, list) and "items" in schema:
+        for index, item in enumerate(value):
+            error = _schema_error(item, schema["items"], f"{path}[{index}]")
+            if error:
+                return error
+    return None
+
+
+def validate_agent_output(
+    role: str, output: Dict[str, Any], context: Optional[Dict[str, Any]] = None
+) -> None:
+    """Validate structure and Phase 2A safety invariants without coercion."""
+
+    schema = AGENT_OUTPUT_SCHEMAS.get(role)
+    if schema is None:
+        raise ModelError(f"unsupported agent role: {role}")
+    error = _schema_error(output, schema)
+    if error:
+        raise ModelError(f"{role} {error}")
+
+    if not context:
+        return
+    evidence = context.get("evidence", {})
+    if role == "worker":
+        supplied_ids = {item.get("id") for item in evidence.get("options", [])}
+        evaluated_ids = {item.get("option_id") for item in output["evaluated_options"]}
+        if evaluated_ids != supplied_ids:
+            raise ModelError("worker must evaluate every supplied option exactly once")
+        selected_id = output["proposed_solution"]["selected_option_id"]
+        if selected_id is not None and selected_id not in supplied_ids:
+            raise ModelError("worker selected_option_id is not in supplied evidence")
+        if output["status"] == "proposal_ready" and selected_id is None:
+            raise ModelError("worker proposal_ready requires a selected option")
+    if role == "reviewer":
+        approval_required = any(
+            item.get("type") == "approval"
+            for item in evidence.get("constraints", [])
+        )
+        if approval_required and output["human_approval_required"] is not True:
+            raise ModelError("reviewer must preserve the supplied human approval constraint")
+
+
+# Backward-compatible test/import name from Phase 1.
+_validate_output = validate_agent_output
+
+
+_JSON_FENCE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.IGNORECASE | re.DOTALL)
+
+
+def parse_json_object(raw: str) -> tuple[Dict[str, Any], str]:
+    """Parse one object with conservative fence/prose normalisation."""
+
+    if not isinstance(raw, str) or not raw.strip():
+        raise ModelError("model response was empty")
+    text = raw.strip()
+    candidates: list[tuple[str, str]] = [(text, "none")]
+    fenced = _JSON_FENCE.fullmatch(text)
+    if fenced:
+        candidates.append((fenced.group(1).strip(), "json_code_fence_removed"))
+    first, last = text.find("{"), text.rfind("}")
+    if first >= 0 and last > first and (first > 0 or last < len(text) - 1):
+        prefix, suffix = text[:first].strip(), text[last + 1 :].strip()
+        if len(prefix) <= 200 and len(suffix) <= 200:
+            candidates.append((text[first : last + 1], "json_object_extracted"))
+
+    last_error = "invalid JSON"
+    seen = set()
+    for candidate, normalisation in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError as error:
+            last_error = f"invalid JSON at line {error.lineno} column {error.colno}: {error.msg}"
+            continue
+        if not isinstance(parsed, dict):
+            raise ModelError("model output must be one JSON object")
+        return parsed, normalisation
+    raise ModelError(last_error)
 
 
 class ModelClient(Protocol):
@@ -326,24 +402,32 @@ class DeterministicModelClient:
         }
 
 
-class OllamaModelClient:
-    """Small JSON-only Ollama client matching the existing R1 convention."""
+OllamaTransport = Callable[[Dict[str, Any], float], Dict[str, Any]]
 
-    def __init__(self, *, model: str, base_url: str, timeout: float):
+
+class OllamaModelClient:
+    """Schema-constrained Ollama client with bounded corrective retries."""
+
+    provider = "live_ollama"
+
+    def __init__(
+        self,
+        *,
+        model: str,
+        base_url: str,
+        timeout: float,
+        max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+        transport: Optional[OllamaTransport] = None,
+    ):
+        if not 1 <= max_attempts <= 5:
+            raise ValueError("max_attempts must be between 1 and 5")
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
+        self.max_attempts = max_attempts
+        self.transport = transport or self._post_generate
 
-    def generate(
-        self, *, role: str, prompt: str, context: Dict[str, Any]
-    ) -> GenerationResult:
-        payload = {
-            "model": self.model,
-            "prompt": f"{prompt}\n\nWorkflow context:\n{json.dumps(context, indent=2)}",
-            "stream": False,
-            "format": "json",
-            "options": {"temperature": 0},
-        }
+    def _post_generate(self, payload: Dict[str, Any], timeout: float) -> Dict[str, Any]:
         request = urllib.request.Request(
             f"{self.base_url}/api/generate",
             data=json.dumps(payload).encode("utf-8"),
@@ -351,18 +435,125 @@ class OllamaModelClient:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
                 envelope = json.loads(response.read().decode("utf-8"))
-            output = json.loads(envelope.get("response", ""))
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace").strip()
+            raise ModelError(
+                f"Ollama returned HTTP {error.code}: {detail or error.reason}",
+                provider=self.provider,
+                model=self.model,
+            ) from error
         except (urllib.error.URLError, TimeoutError, OSError) as error:
-            raise ModelError(f"Ollama request failed: {error}") from error
+            raise ModelError(
+                f"Ollama request failed: {error}",
+                provider=self.provider,
+                model=self.model,
+            ) from error
         except (json.JSONDecodeError, TypeError) as error:
-            raise ModelError("Ollama did not return a valid JSON object") from error
-        if not isinstance(output, dict):
-            raise ModelError("Ollama output was not a JSON object")
-        _validate_output(role, output)
-        return GenerationResult(
-            output=output, provider="ollama", model=self.model
+            raise ModelError(
+                "Ollama returned an invalid response envelope",
+                provider=self.provider,
+                model=self.model,
+            ) from error
+        if not isinstance(envelope, dict):
+            raise ModelError(
+                "Ollama response envelope was not an object",
+                provider=self.provider,
+                model=self.model,
+            )
+        return envelope
+
+    @staticmethod
+    def _correction_prompt(
+        *, base_prompt: str, raw_response: str, error: str, schema: Dict[str, Any]
+    ) -> str:
+        return (
+            f"{base_prompt}\n\nCORRECTION REQUIRED. Your previous response was invalid.\n"
+            f"Validation error: {error}\n"
+            f"Required JSON Schema:\n{json.dumps(schema, indent=2)}\n"
+            "Previous invalid response:\n"
+            f"{raw_response[:MAX_CAPTURED_RESPONSE_CHARS]}\n\n"
+            "Return one corrected JSON object only. Do not use Markdown fences or "
+            "include explanatory prose. Do not change facts to bypass validation."
+        )
+
+    def generate(
+        self, *, role: str, prompt: str, context: Dict[str, Any]
+    ) -> GenerationResult:
+        schema = AGENT_OUTPUT_SCHEMAS.get(role)
+        if schema is None:
+            raise ModelError(f"unsupported agent role: {role}")
+        base_prompt = (
+            f"{prompt}\n\nRequired JSON Schema:\n{json.dumps(schema, indent=2)}\n\n"
+            f"Workflow context:\n{json.dumps(context, indent=2)}"
+        )
+        request_prompt = base_prompt
+        attempts: list[Dict[str, Any]] = []
+
+        for attempt_number in range(1, self.max_attempts + 1):
+            payload = {
+                "model": self.model,
+                "prompt": request_prompt,
+                "stream": False,
+                "format": schema,
+                "keep_alive": "10m",
+                "options": {"temperature": 0, "num_predict": 1600},
+            }
+            try:
+                envelope = self.transport(payload, self.timeout)
+            except ModelError as error:
+                raise ModelError(
+                    str(error),
+                    attempts=tuple(attempts),
+                    provider=self.provider,
+                    model=self.model,
+                ) from error
+
+            raw = envelope.get("response") if isinstance(envelope, dict) else None
+            raw_text = raw if isinstance(raw, str) else ""
+            normalisation = "none"
+            validation_error: Optional[str] = None
+            output: Optional[Dict[str, Any]] = None
+            try:
+                output, normalisation = parse_json_object(raw_text)
+                validate_agent_output(role, output, context)
+            except ModelError as error:
+                validation_error = str(error)
+
+            attempts.append(
+                {
+                    "attempt": attempt_number,
+                    "provider": self.provider,
+                    "model": self.model,
+                    "raw_response": raw_text[:MAX_CAPTURED_RESPONSE_CHARS],
+                    "raw_response_truncated": len(raw_text) > MAX_CAPTURED_RESPONSE_CHARS,
+                    "normalisation": normalisation,
+                    "validation_error": validation_error,
+                    "valid": validation_error is None,
+                }
+            )
+            if validation_error is None and output is not None:
+                return GenerationResult(
+                    output=output,
+                    provider=self.provider,
+                    model=self.model,
+                    attempts=tuple(attempts),
+                )
+            if attempt_number < self.max_attempts:
+                request_prompt = self._correction_prompt(
+                    base_prompt=base_prompt,
+                    raw_response=raw_text,
+                    error=validation_error or "unknown validation error",
+                    schema=schema,
+                )
+
+        last_error = attempts[-1]["validation_error"] if attempts else "no response"
+        raise ModelError(
+            f"{role} output remained invalid after {self.max_attempts} attempts: {last_error}",
+            attempts=tuple(attempts),
+            provider=self.provider,
+            model=self.model,
         )
 
 
@@ -386,4 +577,5 @@ class FallbackModelClient:
                 model=result.model,
                 fallback_used=True,
                 fallback_reason=str(error),
+                attempts=error.attempts,
             )

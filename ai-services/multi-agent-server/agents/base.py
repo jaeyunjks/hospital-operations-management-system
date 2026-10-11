@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Dict, Iterable
 
-from model_client import ModelClient, ModelError
+from model_client import ModelClient, ModelError, validate_agent_output
 from models import GenerationResult
 
 
@@ -25,6 +25,15 @@ class StructuredAgent:
         result = self.model_client.generate(
             role=self.role, prompt=prompt, context=context
         )
+        try:
+            validate_agent_output(self.role, result.output, context)
+        except ModelError as error:
+            raise ModelError(
+                str(error),
+                attempts=result.attempts,
+                provider=result.provider,
+                model=result.model,
+            ) from error
         missing = [field for field in self.required_fields if field not in result.output]
         if missing:
             raise ModelError(

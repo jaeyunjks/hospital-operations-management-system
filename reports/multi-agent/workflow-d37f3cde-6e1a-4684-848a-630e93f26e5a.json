@@ -1,0 +1,480 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "d37f3cde-6e1a-4684-848a-630e93f26e5a",
+  "timestamp": "2026-10-11T06:39:27.063Z",
+  "task": "Resolve a staffing shortage for the Emergency evening shift.",
+  "input_evidence": {
+    "scenario": "Staff/Shift Management validation example",
+    "current_state": {
+      "department": "Emergency",
+      "shift": "evening",
+      "occupancy_percent": 92
+    },
+    "objective": {
+      "metric": "assigned_staff",
+      "current": 4,
+      "target": 5,
+      "unit": "staff member"
+    },
+    "options": [
+      {
+        "id": "john",
+        "label": "John",
+        "attributes": {
+          "qualified": true,
+          "available": true,
+          "direct_conflict": false
+        },
+        "outcomes": {
+          "metric_delta": 1
+        },
+        "risk_indicators": []
+      },
+      {
+        "id": "sarah",
+        "label": "Sarah",
+        "attributes": {
+          "qualified": true,
+          "available": true,
+          "direct_conflict": false
+        },
+        "outcomes": {
+          "metric_delta": 1
+        },
+        "risk_indicators": [
+          "Already working a morning shift; total hours and fatigue need review."
+        ]
+      }
+    ],
+    "constraints": [
+      {
+        "id": "qualified",
+        "scope": "option",
+        "type": "hard",
+        "field": "qualified",
+        "operator": "equals",
+        "value": true,
+        "description": "The selected person must be qualified."
+      },
+      {
+        "id": "available",
+        "scope": "option",
+        "type": "hard",
+        "field": "available",
+        "operator": "equals",
+        "value": true,
+        "description": "The selected person must be available."
+      },
+      {
+        "id": "no_direct_conflict",
+        "scope": "option",
+        "type": "hard",
+        "field": "direct_conflict",
+        "operator": "equals",
+        "value": false,
+        "description": "The selected person must have no direct scheduling conflict."
+      },
+      {
+        "id": "avoid_excessive_hours",
+        "scope": "workflow",
+        "type": "policy",
+        "description": "Avoid excessive working hours and review fatigue risk."
+      },
+      {
+        "id": "human_approval",
+        "scope": "workflow",
+        "type": "approval",
+        "description": "Human approval is required before assignment changes."
+      }
+    ],
+    "unknowns": [
+      "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+    ],
+    "evidence_mode": "mock_sample"
+  },
+  "planner": {
+    "started_at": "2026-10-11T06:39:27.064Z",
+    "completed_at": "2026-10-11T06:39:55.804Z",
+    "input": {
+      "task": "Resolve a staffing shortage for the Emergency evening shift.",
+      "evidence": {
+        "scenario": "Staff/Shift Management validation example",
+        "current_state": {
+          "department": "Emergency",
+          "shift": "evening",
+          "occupancy_percent": 92
+        },
+        "objective": {
+          "metric": "assigned_staff",
+          "current": 4,
+          "target": 5,
+          "unit": "staff member"
+        },
+        "options": [
+          {
+            "id": "john",
+            "label": "John",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          },
+          {
+            "id": "sarah",
+            "label": "Sarah",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": [
+              "Already working a morning shift; total hours and fatigue need review."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "qualified",
+            "scope": "option",
+            "type": "hard",
+            "field": "qualified",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be qualified."
+          },
+          {
+            "id": "available",
+            "scope": "option",
+            "type": "hard",
+            "field": "available",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be available."
+          },
+          {
+            "id": "no_direct_conflict",
+            "scope": "option",
+            "type": "hard",
+            "field": "direct_conflict",
+            "operator": "equals",
+            "value": false,
+            "description": "The selected person must have no direct scheduling conflict."
+          },
+          {
+            "id": "avoid_excessive_hours",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Avoid excessive working hours and review fatigue risk."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before assignment changes."
+          }
+        ],
+        "unknowns": [
+          "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+        ],
+        "evidence_mode": "mock_sample"
+      }
+    },
+    "output": {
+      "goal": "Resolve a staffing shortage for the Emergency evening shift.",
+      "required_evidence": [
+        "qualified",
+        "available",
+        "no_direct_conflict",
+        "avoid_excessive_hours",
+        "human_approval"
+      ],
+      "planned_steps": [
+        "Select a qualified and available staff member",
+        "Verify no direct scheduling conflict",
+        "Review excessive working hours and fatigue risk",
+        "Obtain human approval for assignment changes"
+      ],
+      "constraints": [
+        {
+          "id": "qualified",
+          "scope": "option",
+          "type": "hard",
+          "field": "qualified",
+          "operator": "equals",
+          "value": true,
+          "description": "The selected person must be qualified."
+        },
+        {
+          "id": "available",
+          "scope": "option",
+          "type": "hard",
+          "field": "available",
+          "operator": "equals",
+          "value": true,
+          "description": "The selected person must be available."
+        },
+        {
+          "id": "no_direct_conflict",
+          "scope": "option",
+          "type": "hard",
+          "field": "direct_conflict",
+          "operator": "equals",
+          "value": false,
+          "description": "The selected person must have no direct scheduling conflict."
+        },
+        {
+          "id": "avoid_excessive_hours",
+          "scope": "workflow",
+          "type": "policy",
+          "description": "Avoid excessive working hours and review fatigue risk."
+        },
+        {
+          "id": "human_approval",
+          "scope": "workflow",
+          "type": "approval",
+          "description": "Human approval is required before assignment changes."
+        }
+      ],
+      "expected_result": "A qualified and available staff member is assigned to the Emergency evening shift, with no direct scheduling conflict and minimal excessive working hours and fatigue risk."
+    },
+    "execution": {
+      "provider": "ollama",
+      "model": "llama3.1:8b",
+      "fallback_used": false,
+      "fallback_reason": null
+    }
+  },
+  "worker": {
+    "started_at": "2026-10-11T06:39:55.806Z",
+    "completed_at": "2026-10-11T06:40:13.713Z",
+    "input": {
+      "task": "Resolve a staffing shortage for the Emergency evening shift.",
+      "planner_output": {
+        "goal": "Resolve a staffing shortage for the Emergency evening shift.",
+        "required_evidence": [
+          "qualified",
+          "available",
+          "no_direct_conflict",
+          "avoid_excessive_hours",
+          "human_approval"
+        ],
+        "planned_steps": [
+          "Select a qualified and available staff member",
+          "Verify no direct scheduling conflict",
+          "Review excessive working hours and fatigue risk",
+          "Obtain human approval for assignment changes"
+        ],
+        "constraints": [
+          {
+            "id": "qualified",
+            "scope": "option",
+            "type": "hard",
+            "field": "qualified",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be qualified."
+          },
+          {
+            "id": "available",
+            "scope": "option",
+            "type": "hard",
+            "field": "available",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be available."
+          },
+          {
+            "id": "no_direct_conflict",
+            "scope": "option",
+            "type": "hard",
+            "field": "direct_conflict",
+            "operator": "equals",
+            "value": false,
+            "description": "The selected person must have no direct scheduling conflict."
+          },
+          {
+            "id": "avoid_excessive_hours",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Avoid excessive working hours and review fatigue risk."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before assignment changes."
+          }
+        ],
+        "expected_result": "A qualified and available staff member is assigned to the Emergency evening shift, with no direct scheduling conflict and minimal excessive working hours and fatigue risk."
+      },
+      "evidence": {
+        "scenario": "Staff/Shift Management validation example",
+        "current_state": {
+          "department": "Emergency",
+          "shift": "evening",
+          "occupancy_percent": 92
+        },
+        "objective": {
+          "metric": "assigned_staff",
+          "current": 4,
+          "target": 5,
+          "unit": "staff member"
+        },
+        "options": [
+          {
+            "id": "john",
+            "label": "John",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          },
+          {
+            "id": "sarah",
+            "label": "Sarah",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": [
+              "Already working a morning shift; total hours and fatigue need review."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "qualified",
+            "scope": "option",
+            "type": "hard",
+            "field": "qualified",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be qualified."
+          },
+          {
+            "id": "available",
+            "scope": "option",
+            "type": "hard",
+            "field": "available",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be available."
+          },
+          {
+            "id": "no_direct_conflict",
+            "scope": "option",
+            "type": "hard",
+            "field": "direct_conflict",
+            "operator": "equals",
+            "value": false,
+            "description": "The selected person must have no direct scheduling conflict."
+          },
+          {
+            "id": "avoid_excessive_hours",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Avoid excessive working hours and review fatigue risk."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before assignment changes."
+          }
+        ],
+        "unknowns": [
+          "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+        ],
+        "evidence_mode": "mock_sample"
+      }
+    },
+    "output": {
+      "status": "proposed",
+      "gap": {
+        "metric": "assigned_staff",
+        "current": 4,
+        "target": 5,
+        "unit": "staff member"
+      },
+      "evaluated_options": [
+        {
+          "id": "john",
+          "label": "John",
+          "attributes": {
+            "qualified": true,
+            "available": true,
+            "direct_conflict": false
+          },
+          "outcomes": {
+            "metric_delta": 1
+          },
+          "risk_indicators": []
+        },
+        {
+          "id": "sarah",
+          "label": "Sarah",
+          "attributes": {
+            "qualified": true,
+            "available": true,
+            "direct_conflict": false
+          },
+          "outcomes": {
+            "metric_delta": 1
+          },
+          "risk_indicators": [
+            "Already working a morning shift; total hours and fatigue need review."
+          ]
+        }
+      ],
+      "proposed_solution": {
+        "id": "john",
+        "label": "John",
+        "attributes": {
+          "qualified": true,
+          "available": true,
+          "direct_conflict": false
+        },
+        "outcomes": {
+          "metric_delta": 1
+        },
+        "risk_indicators": []
+      },
+      "limitations": [
+        "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+      ],
+      "mutation_executed": false
+    },
+    "execution": {
+      "provider": "ollama",
+      "model": "llama3.1:8b",
+      "fallback_used": false,
+      "fallback_reason": null
+    }
+  },
+  "reviewer": null,
+  "human_review": null,
+  "final_status": "failed",
+  "final_result": {
+    "status": "failed",
+    "error": "reviewer must verify that no mutation occurred in Phase 1",
+    "mutation_executed": false
+  },
+  "completed_at": "2026-10-11T06:40:27.784Z"
+}

@@ -11,6 +11,178 @@ from typing import Any, Dict, Optional
 SCHEMA_VERSION = "1.0"
 
 
+AGENT_OUTPUT_SCHEMAS: Dict[str, Dict[str, Any]] = {
+    "planner": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "goal",
+            "required_evidence",
+            "constraints",
+            "planned_steps",
+            "expected_result",
+        ],
+        "properties": {
+            "goal": {"type": "string", "minLength": 1},
+            "required_evidence": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+            },
+            "constraints": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+            },
+            "planned_steps": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+            },
+            "expected_result": {"type": "string", "minLength": 1},
+        },
+    },
+    "worker": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "status",
+            "plan_steps_followed",
+            "missing_planner_evidence",
+            "gap",
+            "evaluated_options",
+            "proposed_solution",
+            "limitations",
+            "mutation_executed",
+        ],
+        "properties": {
+            "status": {
+                "type": "string",
+                "enum": [
+                    "proposal_ready",
+                    "no_eligible_option",
+                    "insufficient_evidence",
+                ],
+            },
+            "plan_steps_followed": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+            },
+            "missing_planner_evidence": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+            },
+            "gap": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["metric", "current", "target", "deficit"],
+                "properties": {
+                    "metric": {"type": "string", "minLength": 1},
+                    "current": {"type": ["number", "null"]},
+                    "target": {"type": ["number", "null"]},
+                    "deficit": {"type": ["number", "null"]},
+                },
+            },
+            "evaluated_options": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "option_id",
+                        "label",
+                        "hard_constraint_checks",
+                        "eligible",
+                        "risk_indicators",
+                    ],
+                    "properties": {
+                        "option_id": {"type": "string", "minLength": 1},
+                        "label": {"type": "string", "minLength": 1},
+                        "hard_constraint_checks": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["constraint_id", "passed"],
+                                "properties": {
+                                    "constraint_id": {
+                                        "type": "string",
+                                        "minLength": 1,
+                                    },
+                                    "passed": {"type": "boolean"},
+                                },
+                            },
+                        },
+                        "eligible": {"type": "boolean"},
+                        "risk_indicators": {
+                            "type": "array",
+                            "items": {"type": "string", "minLength": 1},
+                        },
+                    },
+                },
+            },
+            "proposed_solution": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "selected_option_id",
+                    "selected_option",
+                    "metric_delta",
+                    "projected_value",
+                    "reasoning",
+                ],
+                "properties": {
+                    "selected_option_id": {"type": ["string", "null"]},
+                    "selected_option": {"type": ["string", "null"]},
+                    "metric_delta": {"type": "number"},
+                    "projected_value": {"type": ["number", "null"]},
+                    "reasoning": {
+                        "type": "array",
+                        "items": {"type": "string", "minLength": 1},
+                    },
+                },
+            },
+            "limitations": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+            },
+            "mutation_executed": {"type": "boolean", "const": False},
+        },
+    },
+    "reviewer": {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "review_status",
+            "validated_findings",
+            "risks",
+            "unsupported_claims",
+            "recommendation",
+            "human_approval_required",
+            "mutation_verified_absent",
+        ],
+        "properties": {
+            "review_status": {
+                "type": "string",
+                "enum": ["validated_with_risks", "changes_required"],
+            },
+            "validated_findings": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+            },
+            "risks": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+            },
+            "unsupported_claims": {
+                "type": "array",
+                "items": {"type": "string", "minLength": 1},
+            },
+            "recommendation": {"type": "string", "minLength": 1},
+            "human_approval_required": {"type": "boolean"},
+            "mutation_verified_absent": {"type": "boolean", "const": True},
+        },
+    },
+}
+
+
 def utc_now() -> str:
     """Return a millisecond-precision UTC timestamp for audit records."""
 
@@ -56,10 +228,12 @@ class GenerationResult:
     model: Optional[str] = None
     fallback_used: bool = False
     fallback_reason: Optional[str] = None
+    attempts: tuple[Dict[str, Any], ...] = ()
 
     def execution(self) -> Dict[str, Any]:
         data = asdict(self)
         data.pop("output")
+        data["attempt_count"] = len(self.attempts)
         return data
 
 

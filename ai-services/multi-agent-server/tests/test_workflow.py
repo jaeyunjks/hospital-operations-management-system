@@ -9,8 +9,13 @@ from agents.planner import Planner
 from agents.reviewer import Reviewer
 from agents.worker import Worker
 from audit import AuditStore
-from model_client import DeterministicModelClient, ModelError, _validate_output
-from models import HumanDecision, HumanReview, utc_now
+from model_client import (
+    DeterministicModelClient,
+    ModelError,
+    OllamaModelClient,
+    _validate_output,
+)
+from models import GenerationResult, HumanDecision, HumanReview, utc_now
 from orchestrator import MultiAgentOrchestrator
 
 
@@ -149,11 +154,180 @@ def test_live_model_contract_rejects_unstructured_worker_proposal():
         _validate_output(
             "worker",
             {
-                "status": "proposed",
-                "gap": {},
+                "status": "proposal_ready",
+                "plan_steps_followed": [],
+                "missing_planner_evidence": [],
+                "gap": {
+                    "metric": "assigned_staff",
+                    "current": 4,
+                    "target": 5,
+                    "deficit": 1,
+                },
                 "evaluated_options": [],
                 "proposed_solution": "Assign somebody",
                 "limitations": [],
                 "mutation_executed": False,
             },
         )
+
+
+def test_orchestrator_refuses_invalid_worker_handoff(tmp_path, sample_evidence):
+    deterministic = DeterministicModelClient()
+
+    class InvalidWorkerClient:
+        def __init__(self):
+            self.roles = []
+
+        def generate(self, *, role, prompt, context):
+            self.roles.append(role)
+            if role == "planner":
+                return deterministic.generate(role=role, prompt=prompt, context=context)
+            return GenerationResult(
+                output={
+                    "status": "proposal_ready",
+                    "plan_steps_followed": context["planner_output"]["planned_steps"],
+                    "missing_planner_evidence": [],
+                    "gap": {
+                        "metric": "assigned_staff",
+                        "current": 4,
+                        "target": 5,
+                        "deficit": 1,
+                    },
+                    "evaluated_options": [],
+                    "proposed_solution": {
+                        "selected_option_id": "john",
+                        "selected_option": "John",
+                        "metric_delta": 1,
+                        "projected_value": 5,
+                        "reasoning": ["evidence"],
+                    },
+                    "limitations": [],
+                    "mutation_executed": False,
+                },
+                provider="live_ollama",
+                model="test-model",
+            )
+
+    client = InvalidWorkerClient()
+    orchestrator = MultiAgentOrchestrator(
+        planner=Planner(client),
+        worker=Worker(client),
+        reviewer=Reviewer(client),
+        audit_store=AuditStore(tmp_path),
+    )
+
+    with pytest.raises(ModelError, match="evaluate every supplied option"):
+        orchestrator.run(
+            task=TASK,
+            evidence=sample_evidence,
+            request_human_review=lambda _record: pytest.fail(
+                "human review must not run after an invalid Worker output"
+            ),
+        )
+
+    audit = json.loads(next(tmp_path.glob("workflow-*.json")).read_text())
+    assert client.roles == ["planner", "worker"]
+    assert audit["worker"]["output"] is None
+    assert audit["reviewer"] is None
+    assert audit["human_review"] is None
+    assert audit["final_status"] == "failed"
+
+
+def test_live_provenance_and_human_gate_are_audited(tmp_path, sample_evidence):
+    deterministic = DeterministicModelClient()
+    planner_context = {"task": TASK, "evidence": sample_evidence}
+    plan = deterministic.generate(
+        role="planner", prompt="", context=planner_context
+    ).output
+    worker_context = {
+        "task": TASK,
+        "planner_output": plan,
+        "evidence": sample_evidence,
+    }
+    work = deterministic.generate(role="worker", prompt="", context=worker_context).output
+    review = deterministic.generate(
+        role="reviewer",
+        prompt="",
+        context={
+            "task": TASK,
+            "planner_output": plan,
+            "worker_output": work,
+            "evidence": sample_evidence,
+        },
+    ).output
+    responses = iter([json.dumps(plan), json.dumps(work), json.dumps(review)])
+    client = OllamaModelClient(
+        model="test-model",
+        base_url="http://ollama.invalid",
+        timeout=5,
+        transport=lambda _payload, _timeout: {"response": next(responses)},
+    )
+    human_gate_reached = []
+    orchestrator = MultiAgentOrchestrator(
+        planner=Planner(client),
+        worker=Worker(client),
+        reviewer=Reviewer(client),
+        audit_store=AuditStore(tmp_path),
+    )
+
+    record, _path = orchestrator.run(
+        task=TASK,
+        evidence=sample_evidence,
+        request_human_review=lambda _record: (
+            human_gate_reached.append(True) or decision()
+        ),
+    )
+
+    assert human_gate_reached == [True]
+    assert record["final_status"] == "approved"
+    for role in ("planner", "worker", "reviewer"):
+        assert record[role]["execution"]["provider"] == "live_ollama"
+        assert record[role]["execution"]["fallback_used"] is False
+        assert record[role]["execution"]["attempt_count"] == 1
+
+
+def test_exhausted_live_attempts_are_retained_in_failed_audit(
+    tmp_path, sample_evidence
+):
+    class ExhaustedClient:
+        def generate(self, *, role, prompt, context):
+            raise ModelError(
+                "planner output remained invalid after 1 attempt",
+                provider="live_ollama",
+                model="test-model",
+                attempts=(
+                    {
+                        "attempt": 1,
+                        "provider": "live_ollama",
+                        "model": "test-model",
+                        "raw_response": '{"goal": 7}',
+                        "normalisation": "none",
+                        "validation_error": "planner output.goal must be string",
+                        "valid": False,
+                    },
+                ),
+            )
+
+    client = ExhaustedClient()
+    orchestrator = MultiAgentOrchestrator(
+        planner=Planner(client),
+        worker=Worker(client),
+        reviewer=Reviewer(client),
+        audit_store=AuditStore(tmp_path),
+    )
+
+    with pytest.raises(ModelError, match="remained invalid"):
+        orchestrator.run(
+            task=TASK,
+            evidence=sample_evidence,
+            request_human_review=lambda _record: pytest.fail(
+                "human review must not run after retry exhaustion"
+            ),
+        )
+
+    audit = json.loads(next(tmp_path.glob("workflow-*.json")).read_text())
+    assert audit["planner"]["execution"]["provider"] == "live_ollama"
+    assert audit["planner"]["execution"]["attempt_count"] == 1
+    assert audit["planner"]["execution"]["attempts"][0]["raw_response"] == '{"goal": 7}'
+    assert audit["planner"]["execution"]["attempts"][0]["valid"] is False
+    assert audit["final_status"] == "failed"

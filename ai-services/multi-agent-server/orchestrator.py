@@ -43,7 +43,28 @@ class MultiAgentOrchestrator:
         record: Dict[str, Any],
     ) -> Dict[str, Any]:
         started_at = utc_now()
-        result = agent.run(agent_input)
+        try:
+            result = agent.run(agent_input)
+        except (RuntimeError, ValueError) as error:
+            attempts = list(getattr(error, "attempts", ()))
+            record[name] = {
+                "started_at": started_at,
+                "completed_at": utc_now(),
+                "input": agent_input,
+                "output": None,
+                "execution": {
+                    "provider": getattr(error, "provider", None),
+                    "model": getattr(error, "model", None),
+                    "fallback_used": False,
+                    "fallback_reason": None,
+                    "attempts": attempts,
+                    "attempt_count": len(attempts),
+                    "error": str(error),
+                },
+            }
+            self.audit_store.update(record)
+            self.on_stage(name, record[name])
+            raise
         record[name] = {
             "started_at": started_at,
             "completed_at": utc_now(),
