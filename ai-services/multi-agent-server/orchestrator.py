@@ -16,6 +16,10 @@ HumanReviewFn = Callable[[Dict[str, Any]], HumanReview]
 StageEventFn = Callable[[str, Dict[str, Any]], None]
 
 
+class InvalidWorkflowStateError(RuntimeError):
+    """Raised when a lifecycle action is invalid for the persisted state."""
+
+
 class MultiAgentOrchestrator:
     """Own the workflow order and preserve every hand-off in the audit record."""
 
@@ -76,13 +80,11 @@ class MultiAgentOrchestrator:
         self.on_stage(name, record[name])
         return result.output
 
-    def run(
-        self,
-        *,
-        task: str,
-        evidence: Dict[str, Any],
-        request_human_review: HumanReviewFn,
+    def start(
+        self, *, task: str, evidence: Dict[str, Any]
     ) -> tuple[Dict[str, Any], str]:
+        """Run all model stages and persist the Human Review checkpoint."""
+
         if not task.strip():
             raise ValueError("task must not be blank")
         if not isinstance(evidence, dict) or not evidence:
@@ -145,29 +147,75 @@ class MultiAgentOrchestrator:
             record["completed_at"] = utc_now()
             self.audit_store.update(record)
             self.on_stage("workflow_failed", record["final_result"])
+            error.workflow_id = workflow_id
+            error.audit_path = str(audit_path)
             raise
 
         record["final_status"] = "awaiting_human_review"
         self.audit_store.update(record)
         self.on_stage("human_review_required", {"audit_path": str(audit_path)})
+        return record, str(audit_path)
 
-        human_review = request_human_review(record)
-        record["human_review"] = human_review.to_dict()
-        record["final_status"] = {
-            "approve": "approved",
-            "correct": "corrected",
-            "reject": "rejected",
-            "partially_accept": "partially_accepted",
-        }[human_review.decision.value]
-        record["final_result"] = {
-            "status": record["final_status"],
-            "proposal": work.get("proposed_solution"),
-            "review": review,
-            "human_decision": human_review.decision.value,
-            "human_comments_or_correction": human_review.comments,
-            "mutation_executed": False,
-        }
-        record["completed_at"] = utc_now()
-        self.audit_store.update(record)
+    def submit_human_review(
+        self, *, workflow_id: str, human_review: HumanReview
+    ) -> tuple[Dict[str, Any], str]:
+        """Finalise one persisted workflow that is waiting for Human Review."""
+
+        if (
+            human_review.decision.value == "correct"
+            and not human_review.comments.strip()
+        ):
+            raise ValueError("correction details are required for Correct")
+
+        def finalise(record: Dict[str, Any]) -> Dict[str, Any]:
+            if record.get("final_status") != "awaiting_human_review":
+                raise InvalidWorkflowStateError(
+                    "workflow is not awaiting Human Review"
+                )
+            if not all(
+                isinstance(record.get(role), dict)
+                and isinstance(record[role].get("output"), dict)
+                for role in ("planner", "worker", "reviewer")
+            ):
+                raise InvalidWorkflowStateError(
+                    "Planner, Worker, and Reviewer must complete before Human Review"
+                )
+
+            work = record["worker"]["output"]
+            review = record["reviewer"]["output"]
+            record["human_review"] = human_review.to_dict()
+            record["final_status"] = {
+                "approve": "approved",
+                "correct": "corrected",
+                "reject": "rejected",
+                "partially_accept": "partially_accepted",
+            }[human_review.decision.value]
+            record["final_result"] = {
+                "status": record["final_status"],
+                "proposal": work.get("proposed_solution"),
+                "review": review,
+                "human_decision": human_review.decision.value,
+                "human_comments_or_correction": human_review.comments,
+                "mutation_executed": False,
+            }
+            record["completed_at"] = utc_now()
+            return record
+
+        record, audit_path = self.audit_store.update_existing(workflow_id, finalise)
         self.on_stage("workflow_completed", record["final_result"])
         return record, str(audit_path)
+
+    def run(
+        self,
+        *,
+        task: str,
+        evidence: Dict[str, Any],
+        request_human_review: HumanReviewFn,
+    ) -> tuple[Dict[str, Any], str]:
+        """CLI-compatible start, blocking Human Review, and finalisation wrapper."""
+
+        record, _audit_path = self.start(task=task, evidence=evidence)
+        human_review = request_human_review(record)
+        return self.submit_human_review(
+            workflow_id=record["workflow_id"], human_review=human_review
+        )

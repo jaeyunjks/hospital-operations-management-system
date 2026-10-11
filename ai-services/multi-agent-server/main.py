@@ -91,6 +91,24 @@ def build_model_client(args: argparse.Namespace) -> ModelClient:
     return RoleModelClient(clients)
 
 
+def build_orchestrator(
+    args: argparse.Namespace,
+    *,
+    reports_dir: Path,
+    on_stage=None,
+) -> MultiAgentOrchestrator:
+    """Build the shared workflow engine used by both CLI and HTTP interfaces."""
+
+    client = build_model_client(args)
+    return MultiAgentOrchestrator(
+        planner=Planner(client),
+        worker=Worker(client),
+        reviewer=Reviewer(client),
+        audit_store=AuditStore(reports_dir.resolve()),
+        on_stage=on_stage,
+    )
+
+
 def request_human_review(_record: Dict[str, Any]) -> HumanReview:
     print("\n[HUMAN REVIEW]")
     print("A decision is required. No operational mutation has been performed.")
@@ -134,12 +152,9 @@ def print_stage(stage: str, payload: Dict[str, Any]) -> None:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
 
 
-def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Run Planner -> Worker -> Reviewer -> Human Review locally."
-    )
-    parser.add_argument("--task", default=DEFAULT_TASK)
-    parser.add_argument("--evidence", type=Path, default=DEFAULT_EVIDENCE)
+def add_model_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add the shared model execution options to a CLI or HTTP parser."""
+
     parser.add_argument(
         "--model-mode",
         choices=("deterministic", "ollama", "auto"),
@@ -188,6 +203,15 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
         default=3,
         help="Maximum live Ollama attempts per agent (1-5; default: 3)",
     )
+
+
+def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run Planner -> Worker -> Reviewer -> Human Review locally."
+    )
+    parser.add_argument("--task", default=DEFAULT_TASK)
+    parser.add_argument("--evidence", type=Path, default=DEFAULT_EVIDENCE)
+    add_model_arguments(parser)
     parser.add_argument("--reports-dir", type=Path, default=DEFAULT_REPORTS_DIR)
     return parser.parse_args(argv)
 
@@ -196,12 +220,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     try:
         evidence = load_evidence(args.evidence.resolve())
-        client = build_model_client(args)
-        orchestrator = MultiAgentOrchestrator(
-            planner=Planner(client),
-            worker=Worker(client),
-            reviewer=Reviewer(client),
-            audit_store=AuditStore(args.reports_dir.resolve()),
+        orchestrator = build_orchestrator(
+            args,
+            reports_dir=args.reports_dir,
             on_stage=print_stage,
         )
         _record, audit_path = orchestrator.run(
