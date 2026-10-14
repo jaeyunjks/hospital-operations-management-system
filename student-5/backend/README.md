@@ -49,9 +49,11 @@ SQLite file** — every read and write crosses the HTTP boundary in
 | `routes/shift_routes.py` | Shift endpoints |
 | `routes/assignment_routes.py` | Assignment endpoints |
 | `routes/coverage_routes.py` | Staffing coverage endpoint |
+| `routes/recovery_routes.py` | Read-only Staffing Recovery evidence endpoint |
 | `routes/ai_routes.py` | AI-ready endpoints (structure only) |
 | `routes/mcp_routes.py` | Manager-only ward occupancy MCP gateway |
 | `services/mcp_client.py` | Narrow shared-MCP adapter |
+| `services/recovery_service.py` | Privacy-safe evidence assembler over existing deterministic services |
 | `services/*.py` | Application logic, separated from routing and storage |
 
 ## Endpoints
@@ -73,6 +75,7 @@ SQLite file** — every read and write crosses the HTTP boundary in
 | GET | `/api/shifts/<id>` | Retrieve one shift |
 | PUT | `/api/shifts/<id>` | Update a shift |
 | DELETE | `/api/shifts/<id>` | Delete a shift (assignments cascade) |
+| GET | `/api/shifts/<id>/recovery-evidence` | Assemble read-only Staffing Recovery evidence (Staff Manager only) |
 
 ### Assignment
 
@@ -135,6 +138,30 @@ POSITIONS.
 
 The frontend consumes these fields rather than recomputing them, so a KPI tile,
 a planner roll-up and the API cannot disagree about the same roster.
+
+### Staffing Recovery evidence
+
+`GET /api/shifts/<id>/recovery-evidence` is the Student 5 integration boundary
+for a later shared Multi-Agent workflow. It is manager-only and read-only:
+
+```
+selected shift
+      -> existing shift, coverage, assignment and eligibility services
+      -> privacy-safe generic evidence JSON
+```
+
+The response contains `schema_version`, `evidence_type`, `evidence_mode`,
+`current_state`, `objective`, `options`, `constraints`, `unknowns`, and
+`provenance`. The objective uses the existing per-shift coverage arithmetic.
+Candidate options project the existing deterministic eligibility result; this
+endpoint does not reimplement its hard rules or use Suggest Staff/LLM output.
+
+Staff identifiers are emitted as `staff-<id>`. Names, staff and shift notes,
+and absence reasons are excluded. Approved unavailability is represented only
+by its dates and status. `provenance.mutation_allowed` is always `false`, and
+the endpoint neither calls MCP/RAG/Multi-Agent/Ollama services nor changes an
+assignment. It returns the existing JSON 404, 403, 503, or 500 error contracts
+instead of constructing evidence when an authoritative source is unavailable.
 
 ### AI-ready (structure only)
 
