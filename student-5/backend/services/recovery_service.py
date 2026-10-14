@@ -16,7 +16,7 @@ from services import (assignment_service, coverage_service,
 
 
 SCHEMA_VERSION = "1.0"
-EVIDENCE_TYPE = "staffing_recovery"
+EVIDENCE_TYPE = "student5_staffing_recovery"
 EVIDENCE_MODE = "live_api"
 
 UNKNOWNS = [

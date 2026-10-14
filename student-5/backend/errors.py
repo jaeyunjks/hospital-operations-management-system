@@ -100,6 +100,34 @@ class RAGBadGatewayError(ApiError):
     error_code = "rag_invalid_response"
 
 
+class MultiAgentUnavailableError(ApiError):
+    """The shared Multi-Agent Server cannot currently be reached."""
+
+    status_code = 503
+    error_code = "multi_agent_unavailable"
+
+
+class MultiAgentTimeoutError(ApiError):
+    """The bounded shared workflow request exceeded its deadline."""
+
+    status_code = 504
+    error_code = "multi_agent_timeout"
+
+
+class MultiAgentUpstreamError(ApiError):
+    """The shared server rejected the workflow request."""
+
+    status_code = 502
+    error_code = "multi_agent_upstream_error"
+
+
+class MultiAgentBadGatewayError(ApiError):
+    """The shared server returned an invalid workflow contract."""
+
+    status_code = 502
+    error_code = "multi_agent_invalid_response"
+
+
 def register_error_handlers(app: Flask) -> None:
     """Attach JSON error handling to the application."""
 

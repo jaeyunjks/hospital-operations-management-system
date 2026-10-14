@@ -54,6 +54,7 @@ SQLite file** — every read and write crosses the HTTP boundary in
 | `routes/mcp_routes.py` | Manager-only ward occupancy MCP gateway |
 | `services/mcp_client.py` | Narrow shared-MCP adapter |
 | `services/recovery_service.py` | Privacy-safe evidence assembler over existing deterministic services |
+| `services/multi_agent_client.py` | Bounded HTTP adapter for the shared Multi-Agent lifecycle |
 | `services/*.py` | Application logic, separated from routing and storage |
 
 ## Endpoints
@@ -76,6 +77,7 @@ SQLite file** — every read and write crosses the HTTP boundary in
 | PUT | `/api/shifts/<id>` | Update a shift |
 | DELETE | `/api/shifts/<id>` | Delete a shift (assignments cascade) |
 | GET | `/api/shifts/<id>/recovery-evidence` | Assemble read-only Staffing Recovery evidence (Staff Manager only) |
+| POST | `/api/shifts/<id>/recovery-workflow` | Start a shared advisory workflow and stop at Human Review |
 
 ### Assignment
 
@@ -162,6 +164,27 @@ by its dates and status. `provenance.mutation_allowed` is always `false`, and
 the endpoint neither calls MCP/RAG/Multi-Agent/Ollama services nor changes an
 assignment. It returns the existing JSON 404, 403, 503, or 500 error contracts
 instead of constructing evidence when an authoritative source is unavailable.
+
+### Shared Multi-Agent workflow integration
+
+`POST /api/shifts/<id>/recovery-workflow` builds fresh evidence by calling the
+same `recovery_service` directly, then sends one generic `task` plus that
+evidence to the separately running shared `POST /workflows` API. Student 5 does
+not implement or duplicate Planner, Worker, Reviewer, audit, or Human Review
+logic.
+
+The request returns the validated shared response, including its real
+`workflow_id`, only when the shared status is `awaiting_human_review`. It never
+submits a review or changes a roster. Connection failure returns
+`503 multi_agent_unavailable`, timeout returns `504 multi_agent_timeout`, and
+an upstream failure or invalid workflow contract returns a safe `502` response.
+The shared service is not part of Docker Compose and is not included in the
+backend health check.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8200` | Local shared Multi-Agent API base URL |
+| `MULTI_AGENT_TIMEOUT` | `600` | Overall deadline for all three sequential model stages |
 
 ### AI-ready (structure only)
 
@@ -289,7 +312,9 @@ pip install -r requirements.txt
 
 ## Running locally
 
-Two processes are needed. **Start the database service first.**
+Two processes are needed for the baseline backend. **Start the database
+service first.** The recovery-workflow endpoint additionally requires the
+separate shared Multi-Agent Server.
 
 Terminal 1 — database microservice:
 
@@ -306,6 +331,15 @@ Terminal 2 — backend/API microservice:
 ```bash
 cd student-5/backend && python3 app.py
 ```
+
+Terminal 3 — shared Multi-Agent Server (deterministic local validation):
+
+```bash
+python3 ai-services/multi-agent-server/api.py --model-mode deterministic
+```
+
+For live Ollama validation, replace `deterministic` with `ollama` and ensure
+the configured Planner, Worker, and Reviewer models are available locally.
 
 Confirm both are up:
 
@@ -324,6 +358,8 @@ curl -s http://127.0.0.1:5500/health
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama runtime base URL |
 | `OLLAMA_MODEL` | `llama3` | Model used to rank staff and narrate coverage |
 | `OLLAMA_TIMEOUT` | `8` | Seconds before abandoning the model and serving deterministic output |
+| `MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8200` | Shared local Multi-Agent API |
+| `MULTI_AGENT_TIMEOUT` | `600` | Bounded end-to-end workflow deadline in seconds |
 
 ## Error responses
 
@@ -336,6 +372,10 @@ Every failure returns JSON: `{"error": "<code>", "message": "<description>"}`.
 | 405 | `method_not_allowed` | Wrong HTTP method for the path |
 | 409 | `conflict` | Duplicate assignment |
 | 503 | `database_service_unavailable` | Database microservice unreachable |
+| 502 | `multi_agent_upstream_error` | Shared server rejected the request |
+| 502 | `multi_agent_invalid_response` | Shared server response failed validation |
+| 503 | `multi_agent_unavailable` | Shared server cannot be reached |
+| 504 | `multi_agent_timeout` | Shared workflow exceeded its deadline |
 
 ## Testing
 
@@ -364,8 +404,15 @@ curl -s -X POST http://127.0.0.1:5500/api/shifts/1/assign -H 'Content-Type: appl
 curl -s http://127.0.0.1:5500/api/shifts/coverage
 ```
 
+```bash
+curl --fail-with-body -X POST \
+  -H 'X-HOMS-Role: Staff Manager' \
+  http://127.0.0.1:5500/api/shifts/11/recovery-workflow
+```
+
 ## Scope
 
-No frontend code, no authentication, no LLM integration, and no direct SQLite
-access. The service reads and writes only Staff & Shift Management data via the
-database microservice.
+No frontend workflow UI, Human Review route, assignment execution, in-service
+Planner/Worker/Reviewer implementation, or direct SQLite access. The advisory
+workflow integration calls the separate shared service; operational Staff &
+Shift data still crosses only the database microservice boundary.

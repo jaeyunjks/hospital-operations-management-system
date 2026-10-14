@@ -29,7 +29,7 @@ class TestRecoveryEvidenceContract:
         assert response.status_code == 200
         body = response.get_json()
         assert body["schema_version"] == "1.0"
-        assert body["evidence_type"] == "staffing_recovery"
+        assert body["evidence_type"] == "student5_staffing_recovery"
         assert body["evidence_mode"] == "live_api"
         assert set(body) == {
             "schema_version", "evidence_type", "evidence_mode",

@@ -98,6 +98,7 @@ def create_app(config_object: type = Config) -> Flask:
                     "POST   /api/shifts",
                     "GET    /api/shifts/<shift_id>",
                     "GET    /api/shifts/<shift_id>/recovery-evidence",
+                    "POST   /api/shifts/<shift_id>/recovery-workflow",
                     "PUT    /api/shifts/<shift_id>",
                     "DELETE /api/shifts/<shift_id>",
                 ],

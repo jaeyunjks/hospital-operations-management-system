@@ -2,14 +2,35 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, current_app, jsonify
 
 from authorization import require_manager
+from errors import (
+    MultiAgentBadGatewayError,
+    MultiAgentTimeoutError,
+    MultiAgentUnavailableError,
+    MultiAgentUpstreamError,
+)
 from services import recovery_service
+from services.multi_agent_client import (
+    MultiAgentClient,
+    MultiAgentHTTPError,
+    MultiAgentInvalidResponse,
+    MultiAgentTimeout,
+    MultiAgentUnavailable,
+)
 
 
 recovery_blueprint = Blueprint(
     "recovery", __name__, url_prefix="/api/shifts")
+
+RECOVERY_WORKFLOW_TASK = (
+    "Review the selected hospital shift for staffing coverage problems. "
+    "Evaluate the supplied candidates and operational constraints. "
+    "Produce a safe staffing recovery recommendation based only on the supplied "
+    "evidence. Identify risks, limitations, and missing information. "
+    "Do not execute any staffing assignment or operational mutation."
+)
 
 
 @recovery_blueprint.get("/<int:shift_id>/recovery-evidence")
@@ -17,3 +38,33 @@ def recovery_evidence(shift_id: int):
     """Return authoritative evidence for a later Multi-Agent workflow."""
     require_manager()
     return jsonify(recovery_service.build_recovery_evidence(shift_id))
+
+
+@recovery_blueprint.post("/<int:shift_id>/recovery-workflow")
+def start_recovery_workflow(shift_id: int):
+    """Start the shared workflow using freshly assembled Student 5 evidence."""
+    require_manager()
+    evidence = recovery_service.build_recovery_evidence(shift_id)
+    client = MultiAgentClient(
+        base_url=current_app.config["MULTI_AGENT_BASE_URL"],
+        timeout=current_app.config["MULTI_AGENT_TIMEOUT"],
+    )
+    try:
+        workflow = client.start_workflow(RECOVERY_WORKFLOW_TASK, evidence)
+    except MultiAgentUnavailable as error:
+        raise MultiAgentUnavailableError(
+            "The shared Multi-Agent workflow service is temporarily unavailable."
+        ) from error
+    except MultiAgentTimeout as error:
+        raise MultiAgentTimeoutError(
+            "The shared Multi-Agent workflow request timed out."
+        ) from error
+    except MultiAgentHTTPError as error:
+        raise MultiAgentUpstreamError(
+            "The shared Multi-Agent workflow request failed."
+        ) from error
+    except MultiAgentInvalidResponse as error:
+        raise MultiAgentBadGatewayError(
+            "The shared Multi-Agent workflow service returned an invalid response."
+        ) from error
+    return jsonify(workflow), 201
