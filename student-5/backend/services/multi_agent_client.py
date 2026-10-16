@@ -23,6 +23,7 @@ SCHEMA_VERSION = "1.0"
 WORKFLOWS_PATH = "/workflows"
 MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_TASK_LENGTH = 2_000
+MAX_COMMENT_LENGTH = 10_000
 WORKFLOW_FIELDS = {
     "schema_version", "workflow_id", "status", "task", "planner", "worker",
     "reviewer", "human_review", "final_result",
@@ -31,7 +32,16 @@ WORKFLOW_STATUSES = {
     "in_progress", "awaiting_human_review", "approved", "corrected",
     "rejected", "partially_accepted", "failed",
 }
-REVIEW_DECISIONS = {"approve", "correct", "reject", "partially_accept"}
+FINAL_STATUS_DECISIONS = {
+    "approved": "approve",
+    "corrected": "correct",
+    "rejected": "reject",
+    "partially_accepted": "partially_accept",
+}
+REVIEW_DECISION_VALUES = (
+    "approve", "correct", "reject", "partially_accept",
+)
+REVIEW_DECISIONS = set(REVIEW_DECISION_VALUES)
 
 
 class MultiAgentClientError(Exception):
@@ -48,6 +58,18 @@ class MultiAgentTimeout(MultiAgentClientError):
 
 class MultiAgentHTTPError(MultiAgentClientError):
     pass
+
+
+class MultiAgentInputError(MultiAgentClientError):
+    """Student 5 supplied an invalid workflow identifier or review body."""
+
+
+class MultiAgentNotFound(MultiAgentClientError):
+    """The shared service has no audit record for the workflow identifier."""
+
+
+class MultiAgentConflict(MultiAgentClientError):
+    """The workflow is not in a lifecycle state that accepts Human Review."""
 
 
 class MultiAgentInvalidResponse(MultiAgentClientError):
@@ -70,13 +92,87 @@ def _canonical_workflow_id(value: Any) -> str:
     return str(parsed)
 
 
+def _validated_workflow_id(value: Any) -> str:
+    """Validate caller input separately from an invalid upstream response."""
+
+    try:
+        return _canonical_workflow_id(value)
+    except MultiAgentInvalidResponse as error:
+        raise MultiAgentInputError() from error
+
+
+def _shared_error_code(error: urllib.error.HTTPError) -> Optional[str]:
+    """Read only the bounded public error code from a shared API response."""
+
+    try:
+        raw = error.read(MAX_RESPONSE_BYTES + 1)
+    except (AttributeError, OSError, ValueError):
+        return None
+    if len(raw) > MAX_RESPONSE_BYTES:
+        return None
+    try:
+        body = json.loads(raw.decode("utf-8"))
+    except (AttributeError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if (
+        not isinstance(body, dict)
+        or body.get("schema_version") != SCHEMA_VERSION
+        or not isinstance(body.get("error"), dict)
+        or not _nonblank(body["error"].get("message"))
+    ):
+        return None
+    code = body["error"].get("code")
+    return code if _nonblank(code) else None
+
+
 def _validated_stage(value: Any) -> None:
-    if not isinstance(value, dict):
+    if not isinstance(value, dict) or set(value) != {
+        "started_at", "completed_at", "output", "execution",
+    }:
+        raise MultiAgentInvalidResponse()
+    if not _nonblank(value.get("started_at")) or not _nonblank(
+            value.get("completed_at")):
         raise MultiAgentInvalidResponse()
     if not isinstance(value.get("output"), dict):
         raise MultiAgentInvalidResponse()
     execution = value.get("execution")
     if execution is not None and not isinstance(execution, dict):
+        raise MultiAgentInvalidResponse()
+    if isinstance(execution, dict) and not set(execution) <= {
+        "provider", "model", "fallback_used", "fallback_reason",
+        "attempt_count", "error",
+    }:
+        raise MultiAgentInvalidResponse()
+
+
+def _validated_human_review(value: Any, expected_decision: str) -> None:
+    if not isinstance(value, dict) or set(value) != {
+        "decision", "comments", "timestamp",
+    }:
+        raise MultiAgentInvalidResponse()
+    if (
+        value.get("decision") != expected_decision
+        or not isinstance(value.get("comments"), str)
+        or not _nonblank(value.get("timestamp"))
+    ):
+        raise MultiAgentInvalidResponse()
+
+
+def _validated_final_result(
+    value: Any, status: str, expected_decision: str, comments: str
+) -> None:
+    if not isinstance(value, dict) or set(value) != {
+        "status", "proposal", "review", "human_decision",
+        "human_comments_or_correction", "mutation_executed",
+    }:
+        raise MultiAgentInvalidResponse()
+    if (
+        value.get("status") != status
+        or value.get("human_decision") != expected_decision
+        or value.get("human_comments_or_correction") != comments
+        or value.get("mutation_executed") is not False
+        or not isinstance(value.get("review"), dict)
+    ):
         raise MultiAgentInvalidResponse()
 
 
@@ -104,17 +200,33 @@ def _validated_workflow(
         if stage is None and not require_completed_stages:
             continue
         _validated_stage(stage)
-    if body.get("human_review") is not None and not isinstance(
-            body["human_review"], dict):
-        raise MultiAgentInvalidResponse()
-    if body.get("final_result") is not None and not isinstance(
-            body["final_result"], dict):
-        raise MultiAgentInvalidResponse()
-
-    if expected_status == "awaiting_human_review" and (
-        body["human_review"] is not None or body["final_result"] is not None
-    ):
-        raise MultiAgentInvalidResponse()
+    status = body["status"]
+    if status in {"in_progress", "awaiting_human_review"}:
+        if body["human_review"] is not None or body["final_result"] is not None:
+            raise MultiAgentInvalidResponse()
+        if status == "awaiting_human_review":
+            for role in ("planner", "worker", "reviewer"):
+                _validated_stage(body[role])
+    elif status in FINAL_STATUS_DECISIONS:
+        expected_decision = FINAL_STATUS_DECISIONS[status]
+        for role in ("planner", "worker", "reviewer"):
+            _validated_stage(body[role])
+        _validated_human_review(body["human_review"], expected_decision)
+        _validated_final_result(
+            body["final_result"],
+            status,
+            expected_decision,
+            body["human_review"]["comments"],
+        )
+    elif status == "failed":
+        final_result = body["final_result"]
+        if (
+            body["human_review"] is not None
+            or not isinstance(final_result, dict)
+            or final_result.get("status") != "failed"
+            or final_result.get("mutation_executed") is not False
+        ):
+            raise MultiAgentInvalidResponse()
     return body
 
 
@@ -163,6 +275,14 @@ class MultiAgentClient:
                 raise MultiAgentTimeout() from error
             if error.code in {502, 503}:
                 raise MultiAgentUnavailable() from error
+            if error.code == 404:
+                if _shared_error_code(error) == "not_found":
+                    raise MultiAgentNotFound() from error
+                raise MultiAgentInvalidResponse() from error
+            if error.code == 409:
+                if _shared_error_code(error) == "invalid_workflow_state":
+                    raise MultiAgentConflict() from error
+                raise MultiAgentInvalidResponse() from error
             raise MultiAgentHTTPError() from error
         except (socket.timeout, TimeoutError) as error:
             raise MultiAgentTimeout() from error
@@ -198,7 +318,7 @@ class MultiAgentClient:
         )
 
     def get_workflow(self, workflow_id: str) -> Dict[str, Any]:
-        workflow_id = _canonical_workflow_id(workflow_id)
+        workflow_id = _validated_workflow_id(workflow_id)
         body = self._request(
             f"{WORKFLOWS_PATH}/{workflow_id}", method="GET")
         return _validated_workflow(body)
@@ -206,12 +326,14 @@ class MultiAgentClient:
     def submit_review(
         self, workflow_id: str, decision: str, comment: str = ""
     ) -> Dict[str, Any]:
-        workflow_id = _canonical_workflow_id(workflow_id)
+        workflow_id = _validated_workflow_id(workflow_id)
         if decision not in REVIEW_DECISIONS or not isinstance(comment, str):
-            raise MultiAgentInvalidResponse()
+            raise MultiAgentInputError()
         comment = comment.strip()
+        if len(comment) > MAX_COMMENT_LENGTH:
+            raise MultiAgentInputError()
         if decision == "correct" and not comment:
-            raise MultiAgentInvalidResponse()
+            raise MultiAgentInputError()
         body = self._request(
             f"{WORKFLOWS_PATH}/{workflow_id}/review",
             method="POST",

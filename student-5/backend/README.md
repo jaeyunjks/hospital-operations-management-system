@@ -78,6 +78,8 @@ SQLite file** — every read and write crosses the HTTP boundary in
 | DELETE | `/api/shifts/<id>` | Delete a shift (assignments cascade) |
 | GET | `/api/shifts/<id>/recovery-evidence` | Assemble read-only Staffing Recovery evidence (Staff Manager only) |
 | POST | `/api/shifts/<id>/recovery-workflow` | Start a shared advisory workflow and stop at Human Review |
+| GET | `/api/recovery-workflows/<workflow_id>` | Retrieve validated Planner, Worker, Reviewer and lifecycle state |
+| POST | `/api/recovery-workflows/<workflow_id>/review` | Record advisory Human Review without changing the roster |
 
 ### Assignment
 
@@ -180,6 +182,24 @@ submits a review or changes a roster. Connection failure returns
 an upstream failure or invalid workflow contract returns a safe `502` response.
 The shared service is not part of Docker Compose and is not included in the
 backend health check.
+
+`GET /api/recovery-workflows/<workflow_id>` and
+`POST /api/recovery-workflows/<workflow_id>/review` proxy the remaining shared
+lifecycle for Staff Managers. The review body mirrors the shared API exactly:
+
+```json
+{"decision": "approve", "comment": "Accepted as an advisory recommendation."}
+```
+
+Accepted decisions are `approve`, `correct`, `reject`, and
+`partially_accept`. A non-blank `comment` is required for `correct`; it is
+optional for the other decisions. The Student 5 backend returns the shared
+workflow envelope (`planner`, `worker`, `reviewer`, `human_review`, and
+`final_result`) after validating it. A completed Human Review records whether
+the manager accepted the recommendation, but it never calls an assignment
+route or writes staff, shift, assignment, availability, or unavailability
+data. The shared final result must continue to report
+`mutation_executed: false`.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -370,7 +390,7 @@ Every failure returns JSON: `{"error": "<code>", "message": "<description>"}`.
 | 400 | `validation_error` | Malformed or missing request data |
 | 404 | `not_found` | Unknown staff, shift, assignment, or endpoint |
 | 405 | `method_not_allowed` | Wrong HTTP method for the path |
-| 409 | `conflict` | Duplicate assignment |
+| 409 | `conflict` | Duplicate assignment or workflow not awaiting Human Review |
 | 503 | `database_service_unavailable` | Database microservice unreachable |
 | 502 | `multi_agent_upstream_error` | Shared server rejected the request |
 | 502 | `multi_agent_invalid_response` | Shared server response failed validation |
@@ -410,9 +430,25 @@ curl --fail-with-body -X POST \
   http://127.0.0.1:5500/api/shifts/11/recovery-workflow
 ```
 
+Use the returned UUID to inspect and review the advisory workflow:
+
+```bash
+curl --fail-with-body \
+  -H 'X-HOMS-Role: Staff Manager' \
+  http://127.0.0.1:5500/api/recovery-workflows/<workflow_id>
+```
+
+```bash
+curl --fail-with-body -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'X-HOMS-Role: Staff Manager' \
+  -d '{"decision":"reject","comment":"Operational risk remains unresolved."}' \
+  http://127.0.0.1:5500/api/recovery-workflows/<workflow_id>/review
+```
+
 ## Scope
 
-No frontend workflow UI, Human Review route, assignment execution, in-service
-Planner/Worker/Reviewer implementation, or direct SQLite access. The advisory
-workflow integration calls the separate shared service; operational Staff &
-Shift data still crosses only the database microservice boundary.
+No frontend workflow UI, assignment execution, in-service Planner/Worker/
+Reviewer implementation, or direct SQLite access. The advisory workflow
+integration calls the separate shared service; operational Staff & Shift data
+still crosses only the database microservice boundary.
