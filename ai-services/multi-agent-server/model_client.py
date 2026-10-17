@@ -14,6 +14,12 @@ import urllib.request
 from typing import Any, Callable, Dict, Mapping, Optional, Protocol
 
 from models import AGENT_OUTPUT_SCHEMAS, GenerationResult
+from semantic_validation import (
+    authoritative_option_evaluations,
+    evaluate_hard_constraint,
+    option_hard_constraints,
+    validate_semantics,
+)
 
 
 ROLE_NAMES = ("planner", "worker", "reviewer")
@@ -39,11 +45,15 @@ class ModelError(RuntimeError):
         attempts: tuple[Dict[str, Any], ...] = (),
         provider: Optional[str] = None,
         model: Optional[str] = None,
+        validation_type: Optional[str] = None,
+        semantic_validation: Optional[Dict[str, Any]] = None,
     ):
         super().__init__(message)
         self.attempts = attempts
         self.provider = provider
         self.model = model
+        self.validation_type = validation_type
+        self.semantic_validation = semantic_validation
 
 
 def _matches_json_type(value: Any, expected: str) -> bool:
@@ -97,36 +107,30 @@ def _schema_error(value: Any, schema: Dict[str, Any], path: str = "output") -> O
 
 def validate_agent_output(
     role: str, output: Dict[str, Any], context: Optional[Dict[str, Any]] = None
-) -> None:
-    """Validate structure and Phase 2A safety invariants without coercion."""
+) -> Dict[str, Any]:
+    """Validate schema then deterministic cross-stage semantics without coercion."""
 
     schema = AGENT_OUTPUT_SCHEMAS.get(role)
     if schema is None:
-        raise ModelError(f"unsupported agent role: {role}")
+        raise ModelError(f"unsupported agent role: {role}", validation_type="schema_invalid")
     error = _schema_error(output, schema)
     if error:
-        raise ModelError(f"{role} {error}")
-
-    if not context:
-        return
-    evidence = context.get("evidence", {})
-    if role == "worker":
-        supplied_ids = {item.get("id") for item in evidence.get("options", [])}
-        evaluated_ids = {item.get("option_id") for item in output["evaluated_options"]}
-        if evaluated_ids != supplied_ids:
-            raise ModelError("worker must evaluate every supplied option exactly once")
-        selected_id = output["proposed_solution"]["selected_option_id"]
-        if selected_id is not None and selected_id not in supplied_ids:
-            raise ModelError("worker selected_option_id is not in supplied evidence")
-        if output["status"] == "proposal_ready" and selected_id is None:
-            raise ModelError("worker proposal_ready requires a selected option")
-    if role == "reviewer":
-        approval_required = any(
-            item.get("type") == "approval"
-            for item in evidence.get("constraints", [])
+        raise ModelError(
+            f"{role} {error}",
+            validation_type="schema_invalid",
         )
-        if approval_required and output["human_approval_required"] is not True:
-            raise ModelError("reviewer must preserve the supplied human approval constraint")
+
+    report = validate_semantics(role, output, context)
+    if not report["valid"]:
+        summary = "; ".join(
+            f"{item['code']}: {item['reason']}" for item in report["issues"]
+        )
+        raise ModelError(
+            f"{role} semantic validation failed: {summary}",
+            validation_type="semantic_invalid",
+            semantic_validation=report,
+        )
+    return report
 
 
 # Backward-compatible test/import name from Phase 1.
@@ -201,25 +205,6 @@ class RoleModelClient:
         return client.generate(role=role, prompt=prompt, context=context)
 
 
-def _option_constraints(evidence: Dict[str, Any]) -> list[Dict[str, Any]]:
-    return [
-        item
-        for item in evidence.get("constraints", [])
-        if item.get("scope") == "option" and item.get("type") == "hard"
-    ]
-
-
-def _constraint_passes(option: Dict[str, Any], constraint: Dict[str, Any]) -> bool:
-    actual = option.get("attributes", {}).get(constraint.get("field"))
-    operator = constraint.get("operator", "equals")
-    expected = constraint.get("value")
-    if operator == "equals":
-        return actual == expected
-    if operator == "not_equals":
-        return actual != expected
-    return False
-
-
 class DeterministicModelClient:
     """No-network fallback for repeatable Phase 1 validation."""
 
@@ -281,14 +266,15 @@ class DeterministicModelClient:
         gap = target - current if isinstance(current, (int, float)) and isinstance(
             target, (int, float)
         ) else None
-        constraints = _option_constraints(evidence)
+        constraints = option_hard_constraints(evidence)
+        authoritative = authoritative_option_evaluations(evidence)
         evaluations = []
         eligible = []
         for option in evidence.get("options", []):
             checks = [
                 {
                     "constraint_id": rule.get("id"),
-                    "passed": _constraint_passes(option, rule),
+                    "passed": evaluate_hard_constraint(option, rule) is True,
                 }
                 for rule in constraints
             ]
@@ -297,7 +283,9 @@ class DeterministicModelClient:
                 "option_id": option.get("id"),
                 "label": option.get("label", option.get("id")),
                 "hard_constraint_checks": checks,
-                "eligible": all(check["passed"] for check in checks),
+                "eligible": authoritative.get(option.get("id"), {}).get(
+                    "eligible", False
+                ),
                 "risk_indicators": risks,
             }
             evaluations.append(result)
@@ -359,7 +347,7 @@ class DeterministicModelClient:
             (item for item in evidence.get("options", []) if item.get("id") == selected_id),
             None,
         )
-        validated = []
+        validated_refs = []
         unsupported = []
         risks = list(evidence.get("unknowns", []))
 
@@ -372,26 +360,18 @@ class DeterministicModelClient:
                 + ", ".join(missing_plan_evidence)
                 + "."
             )
-        else:
-            validated.append("All evidence categories required by the Planner are present.")
         evaluated_ids = {
             item.get("option_id") for item in worker.get("evaluated_options", [])
         }
         supplied_ids = {item.get("id") for item in evidence.get("options", [])}
-        if evaluated_ids == supplied_ids:
-            validated.append("The Worker evaluated every supplied option as planned.")
-        else:
+        if evaluated_ids != supplied_ids:
             unsupported.append("The Worker did not evaluate every supplied option.")
 
-        if selected is None:
+        if selected_id is not None and selected is None:
             unsupported.append("The selected option does not exist in the supplied evidence.")
-        else:
-            for rule in _option_constraints(evidence):
-                if _constraint_passes(selected, rule):
-                    validated.append(
-                        f"{selected.get('label', selected_id)} satisfies {rule.get('id')}."
-                    )
-                else:
+        elif selected is not None:
+            for rule in option_hard_constraints(evidence):
+                if evaluate_hard_constraint(selected, rule) is not True:
                     unsupported.append(
                         f"{selected.get('label', selected_id)} does not satisfy {rule.get('id')}."
                     )
@@ -406,9 +386,12 @@ class DeterministicModelClient:
             if proposal.get("projected_value") != independently_projected:
                 unsupported.append("The Worker's projected value does not match the evidence.")
             elif independently_projected is not None:
-                validated.append(
-                    f"Independent calculation projects {independently_projected}/{target} "
-                    f"for {objective.get('metric', 'the objective metric')}."
+                validated_refs.append(
+                    {
+                        "source": "worker_output",
+                        "path": "proposed_solution.projected_value",
+                        "value": independently_projected,
+                    }
                 )
             if isinstance(target, (int, float)) and independently_projected < target:
                 risks.append("The proposal does not fully reach the target state.")
@@ -417,17 +400,32 @@ class DeterministicModelClient:
         approval_required = any(
             item.get("type") == "approval" for item in evidence.get("constraints", [])
         )
-        if approval_required:
-            validated.append("The supplied constraints require human approval.")
 
         accepted = selected is not None and not unsupported
+        worker_execution = context.get("worker_execution", {})
+        worker_fallback = (
+            isinstance(worker_execution, dict)
+            and worker_execution.get("fallback_used") is True
+        )
+        reviewer_fallback = context.get("_fallback_invoked") is True
         return {
-            "review_status": "validated_with_risks" if accepted else "changes_required",
-            "validated_findings": validated,
+            "review_status": (
+                "validated_with_risks"
+                if accepted and not worker_fallback and not reviewer_fallback
+                else "changes_required"
+            ),
+            "validated_findings": [],
+            "validated_evidence_refs": validated_refs,
             "risks": list(dict.fromkeys(risks)),
             "unsupported_claims": unsupported,
+            "recommended_option_id": selected_id if accepted else None,
             "recommendation": (
-                "The proposal is generally valid, but identified risks require human review."
+                "Review the validated Worker proposal and authoritative evidence before action."
+                if worker_fallback or reviewer_fallback
+                else (
+                    "The proposal is evidence-consistent, but identified risks "
+                    "require human review."
+                )
                 if accepted
                 else "Do not approve the proposal until the unsupported claims are corrected."
             ),
@@ -548,12 +546,18 @@ class OllamaModelClient:
             raw_text = raw if isinstance(raw, str) else ""
             normalisation = "none"
             validation_error: Optional[str] = None
+            validation_type: Optional[str] = None
+            semantic_validation: Optional[Dict[str, Any]] = None
             output: Optional[Dict[str, Any]] = None
             try:
                 output, normalisation = parse_json_object(raw_text)
-                validate_agent_output(role, output, context)
+                semantic_validation = validate_agent_output(role, output, context)
             except ModelError as error:
                 validation_error = str(error)
+                validation_type = error.validation_type or (
+                    "malformed_json" if output is None else "schema_invalid"
+                )
+                semantic_validation = error.semantic_validation
 
             attempts.append(
                 {
@@ -564,6 +568,8 @@ class OllamaModelClient:
                     "raw_response_truncated": len(raw_text) > MAX_CAPTURED_RESPONSE_CHARS,
                     "normalisation": normalisation,
                     "validation_error": validation_error,
+                    "validation_type": validation_type,
+                    "semantic_validation": semantic_validation,
                     "valid": validation_error is None,
                 }
             )
@@ -573,6 +579,7 @@ class OllamaModelClient:
                     provider=self.provider,
                     model=self.model,
                     attempts=tuple(attempts),
+                    semantic_validation=semantic_validation,
                 )
             if attempt_number < self.max_attempts:
                 request_prompt = self._correction_prompt(
@@ -588,6 +595,10 @@ class OllamaModelClient:
             attempts=tuple(attempts),
             provider=self.provider,
             model=self.model,
+            validation_type=attempts[-1].get("validation_type") if attempts else None,
+            semantic_validation=(
+                attempts[-1].get("semantic_validation") if attempts else None
+            ),
         )
 
 
@@ -604,7 +615,10 @@ class FallbackModelClient:
         try:
             return self.primary.generate(role=role, prompt=prompt, context=context)
         except ModelError as error:
-            result = self.fallback.generate(role=role, prompt=prompt, context=context)
+            fallback_context = {**context, "_fallback_invoked": True}
+            result = self.fallback.generate(
+                role=role, prompt=prompt, context=fallback_context
+            )
             return GenerationResult(
                 output=result.output,
                 provider=result.provider,
@@ -612,4 +626,5 @@ class FallbackModelClient:
                 fallback_used=True,
                 fallback_reason=str(error),
                 attempts=error.attempts,
+                semantic_validation=result.semantic_validation,
             )

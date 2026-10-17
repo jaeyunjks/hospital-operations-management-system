@@ -6,8 +6,9 @@ feature areas. It exposes `homs_echo` for connectivity,
 published backend API, and `homs_pharmacy_stock_alerts` and
 `homs_pharmacy_order_alerts` for read-only access to Student 3's published
 backend API. It also exposes `homs_open_care_tasks` for read-only access to
-Student 2's published clinical-record and care-task APIs. It never accesses
-student databases, Ollama, or RAG.
+Student 2's published clinical-record and care-task APIs, and
+`homs_staffing_recovery_context` for one validated Student 5 recovery-evidence
+snapshot. It never accesses student databases, Ollama, or RAG.
 
 ## Runtime
 
@@ -45,6 +46,8 @@ Configuration is read from the environment:
 | `HOMS_STUDENT3_API_TIMEOUT` | `10` | Same deadline rules as the Student 4 timeout |
 | `HOMS_STUDENT2_API_URL` | `http://127.0.0.1:5200/api` | Student 2 backend API base URL, including `/api`; not the database service |
 | `HOMS_STUDENT2_API_TIMEOUT` | `10` | Same deadline rules as the Student 3 and Student 4 timeouts |
+| `HOMS_STUDENT5_API_URL` | `http://127.0.0.1:5500/api` | Student 5 backend API base URL, including `/api`; not the database service |
+| `HOMS_STUDENT5_API_TIMEOUT` | `10` | Same bounded 0.1–30 second deadline rules as other upstream APIs |
 
 Each upstream URL must use HTTP(S), with no credentials, query or fragment.
 Its destination is operator-configured, never supplied as a tool argument.
@@ -104,15 +107,19 @@ The tests exercise tool discovery and calls through the SDK's in-memory MCP
 transport. They cover valid, missing, blank, wrong-type, and oversized input,
 plus deterministic output. Ward-tool tests mock the Student 4 HTTP boundary,
 including timeout/unavailability, malformed aggregates, exact filtering,
-unexpected arguments and privacy projection. No Student 4 service is needed.
+unexpected arguments and privacy projection. Staffing-recovery tests similarly
+mock Student 5 and prove the tool uses one fixed GET, rejects malformed or
+expanded evidence, and cannot accept an arbitrary URL or operation. No live
+feature service is needed for these tests.
 
 ## Terminal validation
 
-With the server (and the Student 3 backend on port 5300) running:
+With the server and relevant feature backend running:
 
 ```bash
 python3 ai-services/mcp-server/cli.py tools
 python3 ai-services/mcp-server/cli.py call homs_pharmacy_order_alerts '{"alert_type": "overdue"}' --expect ok
+python3 ai-services/mcp-server/cli.py call homs_staffing_recovery_context '{"shift_id": 11}' --expect ok --json
 bash ai-services/mcp-server/validate.sh
 ```
 
@@ -321,3 +328,48 @@ Validation rejects wrong types, orders in the wrong list, overdue orders that
 are not overdue, lists longer than their counts or than 10, and counts that
 contradict each other. Staff names, AI reasoning and decision notes are never
 returned. Failures use the same error codes as the other tools.
+
+## Staffing recovery context tool
+
+`homs_staffing_recovery_context` accepts exactly one positive integer:
+
+```json
+{"shift_id": 11}
+```
+
+It performs one fixed, read-only request to
+`GET /api/shifts/11/recovery-evidence` on the operator-configured Student 5
+backend. The tool cannot accept a URL, HTTP method, SQL, tool name, assignment
+operation, or Human Review decision. It sends the fixed simulated Staff Manager
+role required by the existing local Student 5 authorization convention.
+
+The successful shared envelope contains:
+
+```json
+{
+  "schema_version": "1.0",
+  "ok": true,
+  "tool": "homs_staffing_recovery_context",
+  "data": {
+    "shift_id": 11,
+    "evidence": {"evidence_type": "student5_staffing_recovery"},
+    "source": "student-5-recovery-evidence-api",
+    "mutation_allowed": false
+  },
+  "error": null
+}
+```
+
+The abbreviated `evidence` above represents the complete explicit output schema:
+selected shift, coverage, privacy-safe assignments, deterministic candidate
+eligibility and schedules, outcomes, constraints, unknowns, and provenance.
+The implementation validates exact nested field allowlists, cross-checks shift
+identity and coverage arithmetic, requires the Human Review constraint, and
+requires `provenance.mutation_allowed: false`. Names, notes, absence reasons,
+credentials, raw upstream failures, and unrecognised fields are rejected.
+
+Failures set MCP `isError`, return `data: null`, and use `invalid_input`,
+`not_found`, `upstream_unavailable`, `upstream_timeout`, or
+`upstream_invalid_response`. Redirects and environment proxies are disabled.
+The tool never imports Student 5 business services or opens its database; the
+published recovery-evidence endpoint remains authoritative for all rules.

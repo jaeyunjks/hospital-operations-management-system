@@ -217,7 +217,7 @@ def test_orchestrator_refuses_invalid_worker_handoff(tmp_path, sample_evidence):
         audit_store=AuditStore(tmp_path),
     )
 
-    with pytest.raises(ModelError, match="evaluate every supplied option"):
+    with pytest.raises(ModelError, match="worker_missing_option"):
         orchestrator.run(
             task=TASK,
             evidence=sample_evidence,

@@ -21,10 +21,13 @@ Database Microservice      <- student-5/database/service.py (port 6500)
 SQLite
 ```
 
-The optional Release 1 path is read-only and crosses the shared MCP boundary:
+The optional Release 1 paths are read-only and cross the shared MCP boundary:
 
 ```
 Student 5 backend -> shared local MCP -> Student 4 Room & Bed API
+Student 5 recovery workflow -> shared local MCP
+                            -> homs_staffing_recovery_context
+                            -> Student 5 recovery-evidence API
 ```
 
 It never calls Student 4 directly or reads Student 4 data files. The shared
@@ -52,8 +55,10 @@ SQLite file** — every read and write crosses the HTTP boundary in
 | `routes/recovery_routes.py` | Read-only Staffing Recovery evidence endpoint |
 | `routes/ai_routes.py` | AI-ready endpoints (structure only) |
 | `routes/mcp_routes.py` | Manager-only ward occupancy MCP gateway |
-| `services/mcp_client.py` | Narrow shared-MCP adapter |
+| `services/mcp_client.py` | Narrow shared-MCP adapters with fixed tool names and arguments |
 | `services/recovery_service.py` | Privacy-safe evidence assembler over existing deterministic services |
+| `services/recovery_policy_service.py` | Separately labelled advisory RAG policy enrichment |
+| `services/recovery_mcp_service.py` | Controlled MCP evidence enrichment and consistency check |
 | `services/multi_agent_client.py` | Bounded HTTP adapter for the shared Multi-Agent lifecycle |
 | `services/*.py` | Application logic, separated from routing and storage |
 
@@ -77,8 +82,8 @@ SQLite file** — every read and write crosses the HTTP boundary in
 | PUT | `/api/shifts/<id>` | Update a shift |
 | DELETE | `/api/shifts/<id>` | Delete a shift (assignments cascade) |
 | GET | `/api/shifts/<id>/recovery-evidence` | Assemble read-only Staffing Recovery evidence (Staff Manager only) |
-| POST | `/api/shifts/<id>/recovery-workflow` | Start a shared advisory workflow and stop at Human Review |
-| GET | `/api/recovery-workflows/<workflow_id>` | Retrieve validated Planner, Worker, Reviewer and lifecycle state |
+| POST | `/api/shifts/<id>/recovery-workflow` | Return a new shared workflow ID with `in_progress` status |
+| GET | `/api/recovery-workflows/<workflow_id>` | Poll Planner, Worker, Reviewer and lifecycle state |
 | POST | `/api/recovery-workflows/<workflow_id>/review` | Record advisory Human Review without changing the roster |
 
 ### Assignment
@@ -170,11 +175,13 @@ instead of constructing evidence when an authoritative source is unavailable.
 ### Shared Multi-Agent workflow integration
 
 `POST /api/shifts/<id>/recovery-workflow` builds fresh evidence by calling the
-same `recovery_service` directly. It then uses the existing Release 1
-`StaffShiftRAGClient` to request documented Student 5 policy guidance before
-sending one generic `task` plus the enriched evidence to the separately running
-shared `POST /workflows` API. Student 5 does not implement or duplicate RAG,
-Planner, Worker, Reviewer, audit, or Human Review logic.
+same `recovery_service` directly. It uses the existing Release 1
+`StaffShiftRAGClient` to request documented Student 5 policy guidance, then the
+fixed `StaffingRecoveryMCPClient` operation to call the registered
+`homs_staffing_recovery_context` tool with only `{"shift_id": <id>}`. It sends
+one generic `task` plus the enriched evidence to the separately running shared
+`POST /workflows` API. Student 5 does not implement or duplicate RAG, MCP
+transport, Planner, Worker, Reviewer, audit, or Human Review logic.
 
 The fixed, privacy-safe RAG question is:
 
@@ -197,6 +204,13 @@ explicit:
 - `policy_context` records `retrieval_status`, the fixed `query`, grounded
   `answer`, `confidence`, validated `citations`, safe `reason`, and limitations.
 
+Phase 3E adds a third separate field, `mcp_context`. It records the fixed tool
+name, bounded `shift_id` input, validated tool result and source, retrieval
+status, safe error code, and a consistency status. The MCP snapshot must exactly
+match the freshly built operational evidence before its result is retained. A
+mismatch is recorded as `inconsistent` and the tool result is withheld; it can
+never replace backend coverage, eligibility, assignments, or unknowns.
+
 Citation objects retain only metadata validated by the R1 adapter: citation
 ID, source document, title, section, retrieval score, and source snippet. RAG
 text cannot change `backend_eligible`, coverage, assignments, availability,
@@ -210,9 +224,18 @@ operational evidence and records an explicit `rag_disabled`, `rag_unavailable`,
 `rag_timeout`, `rag_invalid_response`, or `insufficient_context` policy status.
 It never fabricates substitute guidance.
 
-The request returns the validated shared response, including its real
-`workflow_id`, only when the shared status is `awaiting_human_review`. It never
-submits a review or changes a roster. Connection failure returns
+MCP is likewise optional and degrades explicitly as `mcp_disabled`,
+`mcp_unavailable`, `mcp_timeout`, `mcp_invalid_response`, or `mcp_tool_error`.
+The workflow still uses authoritative operational evidence and separately
+retrieved RAG policy context. The staffing tool performs only a fixed GET to
+the manager-only recovery-evidence endpoint; it cannot accept a URL, select a
+different tool, or invoke assignment/staff/shift/availability mutations.
+
+The request returns HTTP `202` with the validated shared `in_progress`
+response, real `workflow_id`, polling `Location`, and `Retry-After: 1`. Clients
+poll `GET /api/recovery-workflows/<workflow_id>` until the workflow reaches
+`awaiting_human_review` or `failed`; completed agent stages appear in the same
+response contract. It never submits a review or changes a roster. Connection failure returns
 `503 multi_agent_unavailable`, timeout returns `504 multi_agent_timeout`, and
 an upstream failure or invalid workflow contract returns a safe `502` response.
 The shared service is not part of Docker Compose and is not included in the
@@ -239,10 +262,13 @@ data. The shared final result must continue to report
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8200` | Local shared Multi-Agent API base URL |
-| `MULTI_AGENT_TIMEOUT` | `600` | Overall deadline for all three sequential model stages |
+| `MULTI_AGENT_TIMEOUT` | `600` | Deadline for each short shared API request; model stages run asynchronously |
 | `RAG_ENABLED` | `false` | Enables shared policy enrichment; failure degrades explicitly |
 | `RAG_SERVER_URL` | `http://127.0.0.1:8100` | Local shared Release 1 RAG API |
 | `RAG_TIMEOUT` | `100` | Bounded policy-query deadline in seconds |
+| `MCP_ENABLED` | `false` | Enables controlled workflow MCP enrichment; failure degrades explicitly |
+| `MCP_SERVER_URL` | `http://127.0.0.1:8000/mcp` | Shared local MCP Streamable HTTP endpoint |
+| `MCP_TIMEOUT` | `15` | Bounded MCP operation deadline in seconds |
 
 ### AI-ready (structure only)
 
@@ -350,7 +376,10 @@ service, so it is reviewable and citable as an artefact in its own right.
 `GET /api/mcp/ward-occupancy` calls only
 `homs_ward_occupancy_status`. Its optional `ward` query parameter is an exact
 Student 4 ward name; Student 5 does not infer department-to-ward mappings.
-MCP availability is intentionally excluded from `/health`.
+The recovery workflow separately calls only `homs_staffing_recovery_context`
+with its server-selected tool name and one positive `shift_id`. Neither adapter
+allows a route or user to supply a tool name or upstream URL. MCP availability
+is intentionally excluded from `/health`.
 
 For Docker development, start the shared MCP separately on the host with
 `HOMS_MCP_HOST=0.0.0.0` and `HOMS_MCP_ALLOW_DOCKER_HOST=true`, then start
@@ -372,8 +401,9 @@ pip install -r requirements.txt
 
 Two processes are needed for the baseline backend. **Start the database
 service first.** The recovery-workflow endpoint additionally requires the
-separate shared Multi-Agent Server. Enable and start RAG to add policy context;
-otherwise the workflow records an explicit degraded policy status.
+separate shared Multi-Agent Server. Enable and start RAG and MCP to add their
+separately labelled contexts; either optional service records an explicit
+degraded status when disabled or unavailable.
 
 Terminal 1 — database microservice:
 
@@ -407,10 +437,17 @@ python3 ai-services/rag-server/ingest.py
 python3 ai-services/rag-server/server.py
 ```
 
-Enable enrichment when starting the backend:
+Terminal 5 — optional shared MCP service, configured to call this backend:
 
 ```bash
-RAG_ENABLED=true python3 app.py
+HOMS_STUDENT5_API_URL=http://127.0.0.1:5500/api \
+python3 ai-services/mcp-server/server.py
+```
+
+Enable both enrichments when starting the backend:
+
+```bash
+RAG_ENABLED=true MCP_ENABLED=true python3 app.py
 ```
 
 Confirm both are up:
@@ -450,7 +487,7 @@ Every failure returns JSON: `{"error": "<code>", "message": "<description>"}`.
 | 502 | `multi_agent_upstream_error` | Shared server rejected the request |
 | 502 | `multi_agent_invalid_response` | Shared server response failed validation |
 | 503 | `multi_agent_unavailable` | Shared server cannot be reached |
-| 504 | `multi_agent_timeout` | Shared workflow exceeded its deadline |
+| 504 | `multi_agent_timeout` | A shared workflow API request exceeded its deadline |
 
 ## Testing
 

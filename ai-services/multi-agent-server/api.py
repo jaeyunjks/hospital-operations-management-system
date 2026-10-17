@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
@@ -205,7 +206,11 @@ def _human_review_request() -> HumanReview:
     return HumanReview(decision=decision, comments=comment, timestamp=utc_now())
 
 
-def create_app(orchestrator: MultiAgentOrchestrator, config: ServerConfig) -> Flask:
+def create_app(
+    orchestrator: MultiAgentOrchestrator,
+    config: ServerConfig,
+    workflow_executor: Optional[Any] = None,
+) -> Flask:
     """Create an HTTP adapter over the shared persisted orchestrator."""
 
     app = Flask(__name__)
@@ -215,6 +220,38 @@ def create_app(orchestrator: MultiAgentOrchestrator, config: ServerConfig) -> Fl
     browser_origins = {
         f"http://{host}" for host in hosts if not host.startswith("host.docker.internal")
     }
+    executor = workflow_executor or ThreadPoolExecutor(
+        max_workers=1, thread_name_prefix="homs-multi-agent"
+    )
+    app.extensions["multi_agent_workflow_executor"] = executor
+
+    def process_workflow(workflow_id: str) -> None:
+        try:
+            orchestrator.process(workflow_id)
+        except Exception:  # Background boundary must always reach a terminal state.
+            def fail_if_still_running(record: Dict[str, Any]) -> Dict[str, Any]:
+                if record.get("final_status") == "in_progress":
+                    record["final_status"] = "failed"
+                    record["final_result"] = {
+                        "status": "failed",
+                        "error": "workflow execution failed",
+                        "mutation_executed": False,
+                    }
+                    record["completed_at"] = utc_now()
+                return record
+
+            try:
+                orchestrator.audit_store.update_existing(
+                    workflow_id, fail_if_still_running
+                )
+            except (RuntimeError, OSError):
+                pass
+            return
+
+    for pending_workflow_id in orchestrator.audit_store.workflow_ids_with_status(
+        "in_progress"
+    ):
+        executor.submit(process_workflow, pending_workflow_id)
 
     @app.before_request
     def enforce_local_access():
@@ -253,22 +290,35 @@ def create_app(orchestrator: MultiAgentOrchestrator, config: ServerConfig) -> Fl
     def create_workflow():
         task, evidence = _workflow_request()
         try:
-            record, _audit_path = orchestrator.start(task=task, evidence=evidence)
+            record, _audit_path = orchestrator.create(task=task, evidence=evidence)
         except (RuntimeError, ValueError) as error:
-            workflow_id = getattr(error, "workflow_id", None)
-            body: Dict[str, Any] = {
-                "schema_version": SCHEMA_VERSION,
-                "error": {
-                    "code": "workflow_execution_failed",
-                    "message": str(error),
-                },
+            raise ApiError(
+                "workflow_creation_failed",
+                "Workflow could not be created",
+                503,
+            ) from error
+        try:
+            executor.submit(process_workflow, record["workflow_id"])
+        except RuntimeError as error:
+            record["final_status"] = "failed"
+            record["final_result"] = {
+                "status": "failed",
+                "error": "workflow execution could not be scheduled",
+                "mutation_executed": False,
             }
-            if workflow_id:
-                body["workflow"] = workflow_view(
-                    orchestrator.audit_store.read(workflow_id)
-                )
-            return jsonify(body), 503
-        return jsonify(workflow_view(record)), 201
+            record["completed_at"] = utc_now()
+            orchestrator.audit_store.update(record)
+            raise ApiError(
+                "workflow_execution_unavailable",
+                "Workflow execution is temporarily unavailable",
+                503,
+            ) from error
+        location = f"/workflows/{record['workflow_id']}"
+        return (
+            jsonify(workflow_view(record)),
+            202,
+            {"Location": location, "Retry-After": "1"},
+        )
 
     @app.get("/workflows/<workflow_id>")
     def get_workflow(workflow_id: str):

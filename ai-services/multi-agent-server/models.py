@@ -152,8 +152,10 @@ AGENT_OUTPUT_SCHEMAS: Dict[str, Dict[str, Any]] = {
         "required": [
             "review_status",
             "validated_findings",
+            "validated_evidence_refs",
             "risks",
             "unsupported_claims",
+            "recommended_option_id",
             "recommendation",
             "human_approval_required",
             "mutation_verified_absent",
@@ -167,6 +169,22 @@ AGENT_OUTPUT_SCHEMAS: Dict[str, Dict[str, Any]] = {
                 "type": "array",
                 "items": {"type": "string", "minLength": 1},
             },
+            "validated_evidence_refs": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": ["source", "path", "value"],
+                    "properties": {
+                        "source": {
+                            "type": "string",
+                            "enum": ["evidence", "planner_output", "worker_output"],
+                        },
+                        "path": {"type": "string", "minLength": 1},
+                        "value": {},
+                    },
+                },
+            },
             "risks": {
                 "type": "array",
                 "items": {"type": "string", "minLength": 1},
@@ -175,6 +193,7 @@ AGENT_OUTPUT_SCHEMAS: Dict[str, Dict[str, Any]] = {
                 "type": "array",
                 "items": {"type": "string", "minLength": 1},
             },
+            "recommended_option_id": {"type": ["string", "null"]},
             "recommendation": {"type": "string", "minLength": 1},
             "human_approval_required": {"type": "boolean"},
             "mutation_verified_absent": {"type": "boolean", "const": True},
@@ -229,6 +248,7 @@ class GenerationResult:
     fallback_used: bool = False
     fallback_reason: Optional[str] = None
     attempts: tuple[Dict[str, Any], ...] = ()
+    semantic_validation: Optional[Dict[str, Any]] = None
 
     def execution(self) -> Dict[str, Any]:
         data = asdict(self)

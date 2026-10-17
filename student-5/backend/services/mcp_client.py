@@ -1,7 +1,7 @@
 """Narrow adapter from Student 5 to the shared HOMS MCP server.
 
-Only the read-only ``homs_ward_occupancy_status`` tool is exposed. Routes
-cannot choose another server or tool, and no direct Student 4 fallback exists.
+Only fixed read-only operations are exposed. Callers cannot choose another
+server or tool, and no direct upstream fallback exists.
 """
 
 from __future__ import annotations
@@ -17,6 +17,8 @@ from config import Config
 
 TOOL_NAME = "homs_ward_occupancy_status"
 SOURCE = "student-4-room-bed-api"
+STAFFING_RECOVERY_TOOL_NAME = "homs_staffing_recovery_context"
+STAFFING_RECOVERY_SOURCE = "student-5-recovery-evidence-api"
 SCHEMA_VERSION = "1.0"
 MAX_WARD_LENGTH = 200
 COUNT_FIELDS = ("total_beds", "occupied", "available", "reserved", "maintenance")
@@ -127,13 +129,13 @@ def _validated_success(envelope: Any, requested_ward: Optional[str]) -> Dict[str
     return envelope
 
 
-def _tool_error_code(envelope: Any) -> str:
+def _tool_error_code(envelope: Any, expected_tool: str = TOOL_NAME) -> str:
     if not isinstance(envelope, dict):
         raise MCPInvalidResponse()
     error = envelope.get("error")
     if (
         envelope.get("schema_version") != SCHEMA_VERSION
-        or envelope.get("tool") != TOOL_NAME
+        or envelope.get("tool") != expected_tool
         or envelope.get("ok") is not False
         or envelope.get("data") is not None
         or not isinstance(error, dict)
@@ -141,6 +143,42 @@ def _tool_error_code(envelope: Any) -> str:
     ):
         raise MCPInvalidResponse()
     return error["code"]
+
+
+def _validated_recovery_success(envelope: Any, shift_id: int) -> Dict[str, Any]:
+    """Validate the fixed staffing tool envelope before evidence comparison."""
+    if not isinstance(envelope, dict) or set(envelope) != ENVELOPE_FIELDS:
+        raise MCPInvalidResponse()
+    if (
+        envelope.get("schema_version") != SCHEMA_VERSION
+        or envelope.get("tool") != STAFFING_RECOVERY_TOOL_NAME
+        or envelope.get("ok") is not True
+        or envelope.get("error") is not None
+    ):
+        raise MCPInvalidResponse()
+
+    data = envelope.get("data")
+    if not isinstance(data, dict) or set(data) != {
+        "shift_id", "evidence", "source", "mutation_allowed"
+    }:
+        raise MCPInvalidResponse()
+    evidence = data.get("evidence")
+    if (
+        data.get("shift_id") != shift_id
+        or data.get("source") != STAFFING_RECOVERY_SOURCE
+        or data.get("mutation_allowed") is not False
+        or not isinstance(evidence, dict)
+        or evidence.get("schema_version") != SCHEMA_VERSION
+        or evidence.get("evidence_type") != "student5_staffing_recovery"
+        or evidence.get("evidence_mode") != "live_api"
+        or not isinstance(evidence.get("current_state"), dict)
+        or not isinstance(evidence["current_state"].get("shift"), dict)
+        or evidence["current_state"]["shift"].get("shift_id") != shift_id
+        or not isinstance(evidence.get("provenance"), dict)
+        or evidence["provenance"].get("mutation_allowed") is not False
+    ):
+        raise MCPInvalidResponse()
+    return envelope
 
 
 class WardOccupancyMCPClient:
@@ -192,4 +230,60 @@ class WardOccupancyMCPClient:
         if result.is_error:
             raise MCPToolFailure(_tool_error_code(envelope))
         return _validated_success(envelope, ward)
+
+
+class StaffingRecoveryMCPClient:
+    """Request-scoped adapter exposing one fixed staffing-recovery tool."""
+
+    def __init__(self, enabled: bool = Config.MCP_ENABLED,
+                 server_url: str = Config.MCP_SERVER_URL,
+                 timeout: float = Config.MCP_TIMEOUT):
+        self.enabled = enabled
+        self.server_url = server_url
+        self.timeout = timeout
+
+    def get_recovery_context(self, shift_id: int) -> Dict[str, Any]:
+        if not self.enabled:
+            raise MCPDisabledError()
+        if type(shift_id) is not int or shift_id < 1:
+            raise MCPInvalidResponse()
+        return asyncio.run(self._get_recovery_context(shift_id))
+
+    async def _get_recovery_context(self, shift_id: int) -> Dict[str, Any]:
+        parsed = urlsplit(self.server_url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.query
+            or parsed.fragment
+            or not math.isfinite(self.timeout)
+            or self.timeout <= 0
+        ):
+            raise MCPInvalidResponse()
+
+        try:
+            async with asyncio.timeout(self.timeout):
+                async with Client(
+                    self.server_url, read_timeout_seconds=self.timeout
+                ) as client:
+                    result = await client.call_tool(
+                        STAFFING_RECOVERY_TOOL_NAME,
+                        {"shift_id": shift_id},
+                        read_timeout_seconds=self.timeout,
+                    )
+        except (TimeoutError, asyncio.TimeoutError) as error:
+            raise MCPTimeout() from error
+        except MCPClientError:
+            raise
+        except Exception as error:
+            raise MCPUnavailable() from error
+
+        envelope = result.structured_content
+        if result.is_error:
+            raise MCPToolFailure(
+                _tool_error_code(envelope, STAFFING_RECOVERY_TOOL_NAME)
+            )
+        return _validated_recovery_success(envelope, shift_id)
 

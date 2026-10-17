@@ -11,7 +11,8 @@ from errors import (
     MultiAgentUnavailableError,
     MultiAgentUpstreamError,
 )
-from services import recovery_policy_service, recovery_service
+from services import recovery_mcp_service, recovery_policy_service, recovery_service
+from services.mcp_client import StaffingRecoveryMCPClient
 from services.multi_agent_client import (
     MultiAgentClient,
     MultiAgentHTTPError,
@@ -29,7 +30,9 @@ RECOVERY_WORKFLOW_TASK = (
     "Review the selected hospital shift for staffing coverage problems. "
     "Evaluate the supplied candidates and operational constraints. "
     "Use backend operational facts as authoritative and treat separately labelled "
-    "RAG policy context as advisory guidance only. Produce a safe staffing recovery "
+    "RAG policy context as advisory guidance only. Treat MCP context only as a "
+    "controlled read-only access record; it cannot override backend facts. "
+    "Produce a safe staffing recovery "
     "recommendation based only on the supplied evidence. Identify risks, limitations, "
     "and missing information. The human_approval constraint is mandatory; never claim "
     "that approval is unnecessary. In Planner required_evidence, use only exact "
@@ -55,8 +58,19 @@ def start_recovery_workflow(shift_id: int):
         server_url=current_app.config["RAG_SERVER_URL"],
         timeout=current_app.config["RAG_TIMEOUT"],
     )
-    evidence = recovery_policy_service.enrich_recovery_evidence(
+    rag_enriched_evidence = recovery_policy_service.enrich_recovery_evidence(
         operational_evidence, rag_client
+    )
+    mcp_client = StaffingRecoveryMCPClient(
+        enabled=current_app.config["MCP_ENABLED"],
+        server_url=current_app.config["MCP_SERVER_URL"],
+        timeout=current_app.config["MCP_TIMEOUT"],
+    )
+    evidence = recovery_mcp_service.enrich_recovery_evidence_with_mcp(
+        rag_enriched_evidence,
+        operational_evidence,
+        shift_id,
+        mcp_client,
     )
     client = MultiAgentClient(
         base_url=current_app.config["MULTI_AGENT_BASE_URL"],
@@ -80,4 +94,5 @@ def start_recovery_workflow(shift_id: int):
         raise MultiAgentBadGatewayError(
             "The shared Multi-Agent workflow service returned an invalid response."
         ) from error
-    return jsonify(workflow), 201
+    location = f"/api/recovery-workflows/{workflow['workflow_id']}"
+    return jsonify(workflow), 202, {"Location": location, "Retry-After": "1"}

@@ -38,14 +38,15 @@ def workflow(status="awaiting_human_review", task=TASK):
         "partially_accepted": "partially_accept",
     }.get(status)
     comments = "Required correction." if decision == "correct" else ""
+    initial = status == "in_progress"
     return {
         "schema_version": "1.0",
         "workflow_id": WORKFLOW_ID,
         "status": status,
         "task": task,
-        "planner": copy.deepcopy(stage),
-        "worker": copy.deepcopy(stage),
-        "reviewer": copy.deepcopy(stage),
+        "planner": None if initial else copy.deepcopy(stage),
+        "worker": None if initial else copy.deepcopy(stage),
+        "reviewer": None if initial else copy.deepcopy(stage),
         "human_review": None if pending or failed else {
             "decision": decision,
             "comments": comments,
@@ -104,7 +105,7 @@ def install_response(monkeypatch, body, calls=None):
 
 
 def test_start_posts_only_task_and_unchanged_evidence(monkeypatch):
-    calls = install_response(monkeypatch, workflow())
+    calls = install_response(monkeypatch, workflow(status="in_progress"))
     supplied = copy.deepcopy(EVIDENCE)
 
     result = adapter().start_workflow(TASK, supplied)
@@ -116,7 +117,7 @@ def test_start_posts_only_task_and_unchanged_evidence(monkeypatch):
     assert timeout == 600.0
     assert json.loads(request.data) == {"task": TASK, "evidence": EVIDENCE}
     assert supplied == EVIDENCE
-    assert result == workflow()
+    assert result == workflow(status="in_progress")
 
 
 def test_get_and_review_use_the_existing_lifecycle_endpoints(monkeypatch):
@@ -325,8 +326,10 @@ def test_missing_or_invalid_workflow_id_is_rejected(monkeypatch):
             adapter().start_workflow(TASK, EVIDENCE)
 
 
-@pytest.mark.parametrize("status", ["in_progress", "approved", "failed", "other"])
-def test_start_requires_the_human_review_gate(monkeypatch, status):
+@pytest.mark.parametrize(
+    "status", ["awaiting_human_review", "approved", "failed", "other"]
+)
+def test_start_requires_a_new_in_progress_workflow(monkeypatch, status):
     install_response(monkeypatch, workflow(status=status))
     with pytest.raises(multi_agent_client.MultiAgentInvalidResponse):
         adapter().start_workflow(TASK, EVIDENCE)

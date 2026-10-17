@@ -231,7 +231,7 @@ def _validated_workflow(
 
 
 class MultiAgentClient:
-    """Synchronous, bounded adapter for the shared workflow lifecycle."""
+    """Bounded HTTP adapter for creating, polling, and reviewing workflows."""
 
     def __init__(self, base_url: str = Config.MULTI_AGENT_BASE_URL,
                  timeout: float = Config.MULTI_AGENT_TIMEOUT):
@@ -313,8 +313,7 @@ class MultiAgentClient:
         return _validated_workflow(
             body,
             expected_task=task,
-            expected_status="awaiting_human_review",
-            require_completed_stages=True,
+            expected_status="in_progress",
         )
 
     def get_workflow(self, workflow_id: str) -> Dict[str, Any]:

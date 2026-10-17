@@ -7,7 +7,8 @@ import json
 
 import pytest
 
-from services import (multi_agent_client, rag_client, recovery_policy_service,
+from services import (mcp_client, multi_agent_client, rag_client,
+                      recovery_mcp_service, recovery_policy_service,
                       recovery_service)
 
 
@@ -17,15 +18,14 @@ WORKFLOW_ID = "12345678-1234-4678-9234-567812345678"
 
 
 def shared_result():
-    stage = {"output": {"complete": True}, "execution": {"provider": "test"}}
     return {
         "schema_version": "1.0",
         "workflow_id": WORKFLOW_ID,
-        "status": "awaiting_human_review",
+        "status": "in_progress",
         "task": "shared task",
-        "planner": copy.deepcopy(stage),
-        "worker": copy.deepcopy(stage),
-        "reviewer": copy.deepcopy(stage),
+        "planner": None,
+        "worker": None,
+        "reviewer": None,
         "human_review": None,
         "final_result": None,
     }
@@ -81,6 +81,39 @@ def install_rag_adapter(monkeypatch, *, result=None, error=None, calls=None):
     return calls
 
 
+def mcp_result(evidence, shift_id=2):
+    return {
+        "schema_version": "1.0",
+        "ok": True,
+        "tool": mcp_client.STAFFING_RECOVERY_TOOL_NAME,
+        "data": {
+            "shift_id": shift_id,
+            "evidence": copy.deepcopy(evidence),
+            "source": mcp_client.STAFFING_RECOVERY_SOURCE,
+            "mutation_allowed": False,
+        },
+        "error": None,
+    }
+
+
+def install_mcp_adapter(monkeypatch, *, result=None, error=None, calls=None):
+    calls = calls if calls is not None else []
+
+    class FakeMCPClient:
+        def __init__(self, **configuration):
+            calls.append(("mcp_config", configuration))
+
+        def get_recovery_context(self, shift_id):
+            calls.append(("mcp_call", shift_id))
+            if error:
+                raise error
+            return result
+
+    import routes.recovery_routes as routes
+    monkeypatch.setattr(routes, "StaffingRecoveryMCPClient", FakeMCPClient)
+    return calls
+
+
 def post(client, shift_id=2, headers=MANAGER):
     return client.post(
         f"/api/shifts/{shift_id}/recovery-workflow", headers=headers)
@@ -101,11 +134,19 @@ def test_manager_starts_workflow_with_fresh_enriched_evidence(
     monkeypatch.setattr(routes.recovery_service, "build_recovery_evidence", build)
     calls = install_adapter(monkeypatch)
     rag_calls = install_rag_adapter(monkeypatch)
+    mcp_calls = install_mcp_adapter(
+        monkeypatch, result=mcp_result(expected)
+    )
     client.application.config["RAG_ENABLED"] = True
+    client.application.config["MCP_ENABLED"] = True
     response = post(client)
 
-    assert response.status_code == 201
+    assert response.status_code == 202
     assert response.get_json() == shared_result()
+    assert response.headers["Location"] == (
+        f"/api/recovery-workflows/{WORKFLOW_ID}"
+    )
+    assert response.headers["Retry-After"] == "1"
     assert builds == [2]
     assert rag_calls == [
         ("rag_config", {
@@ -123,6 +164,7 @@ def test_manager_starts_workflow_with_fresh_enriched_evidence(
     assert task == routes.RECOVERY_WORKFLOW_TASK
     assert "human_approval constraint is mandatory" in task
     assert "exact top-level evidence category names" in task
+    assert "MCP context only as a controlled read-only access record" in task
     assert expected == expected_before
     for field in recovery_policy_service.OPERATIONAL_FACT_FIELDS:
         assert submitted[field] == expected[field]
@@ -135,6 +177,23 @@ def test_manager_starts_workflow_with_fresh_enriched_evidence(
     assert submitted["evidence_separation"][
         "operational_rules_remain_authoritative"
     ] is True
+    assert mcp_calls == [
+        ("mcp_config", {
+            "enabled": True,
+            "server_url": "http://127.0.0.1:8000/mcp",
+            "timeout": 15.0,
+        }),
+        ("mcp_call", 2),
+    ]
+    assert submitted["mcp_context"]["retrieval_status"] == "available"
+    assert submitted["mcp_context"]["tool_name"] == (
+        mcp_client.STAFFING_RECOVERY_TOOL_NAME
+    )
+    assert submitted["mcp_context"]["tool_input"] == {"shift_id": 2}
+    assert submitted["mcp_context"]["tool_result"]["evidence"] == expected
+    assert submitted["mcp_context"]["consistency_status"] == (
+        "matched_authoritative_backend_evidence"
+    )
 
 
 def test_shared_workflow_identity_and_review_gate_are_preserved(client, monkeypatch):
@@ -144,14 +203,14 @@ def test_shared_workflow_identity_and_review_gate_are_preserved(client, monkeypa
     body = post(client).get_json()
 
     assert body["workflow_id"] == WORKFLOW_ID
-    assert body["status"] == "awaiting_human_review"
+    assert body["status"] == "in_progress"
     assert body["human_review"] is None
     assert body["final_result"] is None
 
 
 def test_privacy_safe_recovery_evidence_reaches_client(client, monkeypatch):
     calls = install_adapter(monkeypatch)
-    assert post(client, 1).status_code == 201
+    assert post(client, 1).status_code == 202
 
     evidence = calls[1][2]
     serialised = json.dumps({
@@ -184,7 +243,7 @@ def test_rag_failure_degrades_but_workflow_still_reaches_multi_agent(
 
     response = post(client)
 
-    assert response.status_code == 201
+    assert response.status_code == 202
     submitted = calls[-1][2]
     assert submitted["policy_context"]["retrieval_status"] == "unavailable"
     assert submitted["policy_context"]["reason"] == reason
@@ -208,11 +267,37 @@ def test_insufficient_rag_context_is_recorded_and_workflow_continues(
 
     response = post(client)
 
-    assert response.status_code == 201
+    assert response.status_code == 202
     policy = calls[-1][2]["policy_context"]
     assert policy["retrieval_status"] == "insufficient_context"
     assert policy["reason"] == "no_relevant_context"
     assert policy["citations"] == []
+
+
+@pytest.mark.parametrize("failure,reason", [
+    (mcp_client.MCPDisabledError(), "mcp_disabled"),
+    (mcp_client.MCPUnavailable("private http://127.0.0.1 detail"), "mcp_unavailable"),
+    (mcp_client.MCPTimeout(), "mcp_timeout"),
+    (mcp_client.MCPInvalidResponse(), "mcp_invalid_response"),
+    (mcp_client.MCPToolFailure("upstream_invalid_response"), "mcp_invalid_response"),
+])
+def test_mcp_failure_degrades_but_rag_and_workflow_continue(
+        client, monkeypatch, failure, reason):
+    calls = install_adapter(monkeypatch)
+    install_rag_adapter(monkeypatch)
+    mcp_calls = install_mcp_adapter(monkeypatch, error=failure)
+    client.application.config.update(RAG_ENABLED=True, MCP_ENABLED=True)
+
+    response = post(client)
+
+    assert response.status_code == 202
+    submitted = calls[-1][2]
+    assert submitted["policy_context"]["retrieval_status"] == "answered"
+    assert submitted["mcp_context"]["retrieval_status"] == "unavailable"
+    assert submitted["mcp_context"]["reason"] == reason
+    assert submitted["current_state"]["shift"]["shift_id"] == 2
+    assert mcp_calls[-1] == ("mcp_call", 2)
+    assert "127.0.0.1" not in json.dumps(submitted["mcp_context"])
 
 
 def test_manager_guard_runs_before_evidence_or_shared_client(client, monkeypatch):
@@ -276,6 +361,7 @@ def test_starting_workflow_performs_no_student5_mutation(
     before = copy.deepcopy({
         field: getattr(stub_database, field) for field in state_fields
     })
+    expected_evidence = recovery_service.build_recovery_evidence(2)
 
     def mutation_forbidden(*args, **kwargs):
         raise AssertionError("workflow start attempted a Student 5 mutation")
@@ -288,8 +374,12 @@ def test_starting_workflow_performs_no_student5_mutation(
     ):
         monkeypatch.setattr(stub_database, method, mutation_forbidden)
     install_adapter(monkeypatch)
+    install_mcp_adapter(
+        monkeypatch, result=mcp_result(expected_evidence)
+    )
+    client.application.config["MCP_ENABLED"] = True
 
-    assert post(client).status_code == 201
+    assert post(client).status_code == 202
     after = {field: getattr(stub_database, field) for field in state_fields}
     assert after == before
 

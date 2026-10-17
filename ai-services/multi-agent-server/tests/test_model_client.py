@@ -147,6 +147,7 @@ def test_malformed_json_triggers_corrective_retry(sample_evidence):
 
     assert len(result.attempts) == 2
     assert "invalid JSON" in result.attempts[0]["validation_error"]
+    assert result.attempts[0]["validation_type"] == "malformed_json"
     assert result.attempts[1]["valid"] is True
     retry_prompt = transport.calls[1]["payload"]["prompt"]
     assert "CORRECTION REQUIRED" in retry_prompt
@@ -245,3 +246,4 @@ def test_fallback_provenance_never_claims_live_output(sample_evidence):
     assert "remained invalid" in result.fallback_reason
     assert len(result.attempts) == 1
     assert result.attempts[0]["model"] == "llama3.1:8b"
+    assert result.attempts[0]["validation_type"] == "schema_invalid"
