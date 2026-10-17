@@ -170,10 +170,45 @@ instead of constructing evidence when an authoritative source is unavailable.
 ### Shared Multi-Agent workflow integration
 
 `POST /api/shifts/<id>/recovery-workflow` builds fresh evidence by calling the
-same `recovery_service` directly, then sends one generic `task` plus that
-evidence to the separately running shared `POST /workflows` API. Student 5 does
-not implement or duplicate Planner, Worker, Reviewer, audit, or Human Review
-logic.
+same `recovery_service` directly. It then uses the existing Release 1
+`StaffShiftRAGClient` to request documented Student 5 policy guidance before
+sending one generic `task` plus the enriched evidence to the separately running
+shared `POST /workflows` API. Student 5 does not implement or duplicate RAG,
+Planner, Worker, Reviewer, audit, or Human Review logic.
+
+The fixed, privacy-safe RAG question is:
+
+> What documented Student 5 rules govern an understaffed shift: per-shift
+> coverage, deterministic eligibility blockers, availability and approved
+> unavailability, assignment authority, and the Staff Manager human-approval
+> decision boundary?
+
+It contains policy concepts only—no shift ID, staff reference, name,
+department, notes, or absence reason. The RAG client fixes the shared request to
+`POST /query`, `feature: student-5`, and `top_k: 4`; callers cannot redirect the
+query to another feature or endpoint.
+
+The existing operational evidence fields remain at the top level for shared
+Multi-Agent compatibility. Two additional fields make the trust boundary
+explicit:
+
+- `evidence_separation` identifies the authoritative operational fields and
+  labels policy as advisory;
+- `policy_context` records `retrieval_status`, the fixed `query`, grounded
+  `answer`, `confidence`, validated `citations`, safe `reason`, and limitations.
+
+Citation objects retain only metadata validated by the R1 adapter: citation
+ID, source document, title, section, retrieval score, and source snippet. RAG
+text cannot change `backend_eligible`, coverage, assignments, availability,
+constraints, or unknowns. In particular, absent fatigue, overtime, rest,
+consecutive-shift, staffing-ratio, patient-load, and acuity policies remain
+explicitly unknown.
+
+RAG is optional in the existing architecture. When disabled, unavailable,
+timed out, invalid, or insufficient, Staffing Recovery continues from
+operational evidence and records an explicit `rag_disabled`, `rag_unavailable`,
+`rag_timeout`, `rag_invalid_response`, or `insufficient_context` policy status.
+It never fabricates substitute guidance.
 
 The request returns the validated shared response, including its real
 `workflow_id`, only when the shared status is `awaiting_human_review`. It never
@@ -205,6 +240,9 @@ data. The shared final result must continue to report
 |----------|---------|---------|
 | `MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8200` | Local shared Multi-Agent API base URL |
 | `MULTI_AGENT_TIMEOUT` | `600` | Overall deadline for all three sequential model stages |
+| `RAG_ENABLED` | `false` | Enables shared policy enrichment; failure degrades explicitly |
+| `RAG_SERVER_URL` | `http://127.0.0.1:8100` | Local shared Release 1 RAG API |
+| `RAG_TIMEOUT` | `100` | Bounded policy-query deadline in seconds |
 
 ### AI-ready (structure only)
 
@@ -334,7 +372,8 @@ pip install -r requirements.txt
 
 Two processes are needed for the baseline backend. **Start the database
 service first.** The recovery-workflow endpoint additionally requires the
-separate shared Multi-Agent Server.
+separate shared Multi-Agent Server. Enable and start RAG to add policy context;
+otherwise the workflow records an explicit degraded policy status.
 
 Terminal 1 — database microservice:
 
@@ -361,6 +400,19 @@ python3 ai-services/multi-agent-server/api.py --model-mode deterministic
 For live Ollama validation, replace `deterministic` with `ollama` and ensure
 the configured Planner, Worker, and Reviewer models are available locally.
 
+Terminal 4 — optional shared RAG policy service:
+
+```bash
+python3 ai-services/rag-server/ingest.py
+python3 ai-services/rag-server/server.py
+```
+
+Enable enrichment when starting the backend:
+
+```bash
+RAG_ENABLED=true python3 app.py
+```
+
 Confirm both are up:
 
 ```bash
@@ -378,6 +430,9 @@ curl -s http://127.0.0.1:5500/health
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama runtime base URL |
 | `OLLAMA_MODEL` | `llama3` | Model used to rank staff and narrate coverage |
 | `OLLAMA_TIMEOUT` | `8` | Seconds before abandoning the model and serving deterministic output |
+| `RAG_ENABLED` | `false` | Enables shared policy enrichment and `/api/rag/ask` |
+| `RAG_SERVER_URL` | `http://127.0.0.1:8100` | Shared local RAG API |
+| `RAG_TIMEOUT` | `100` | RAG request deadline in seconds |
 | `MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8200` | Shared local Multi-Agent API |
 | `MULTI_AGENT_TIMEOUT` | `600` | Bounded end-to-end workflow deadline in seconds |
 

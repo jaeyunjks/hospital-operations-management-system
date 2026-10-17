@@ -7,7 +7,8 @@ import json
 
 import pytest
 
-from services import multi_agent_client, recovery_service
+from services import (multi_agent_client, rag_client, recovery_policy_service,
+                      recovery_service)
 
 
 MANAGER = {"X-HOMS-Role": "Staff Manager"}
@@ -48,12 +49,44 @@ def install_adapter(monkeypatch, *, result=None, error=None, calls=None):
     return calls
 
 
+def install_rag_adapter(monkeypatch, *, result=None, error=None, calls=None):
+    calls = calls if calls is not None else []
+
+    class FakeRAGClient:
+        def __init__(self, **configuration):
+            calls.append(("rag_config", configuration))
+
+        def ask(self, question):
+            calls.append(("rag_ask", question))
+            if error:
+                raise error
+            return result or {
+                "schema_version": "1.0",
+                "status": "answered",
+                "answer": "Assignments require a manager decision [S1].",
+                "confidence": "high",
+                "citations": [{
+                    "id": "S1",
+                    "source": "student-5/staff-eligibility-and-assignments.md",
+                    "title": "Staff Eligibility and Assignments",
+                    "section": "Assignment creation boundary",
+                    "score": 0.86,
+                    "snippet": "Only a Staff Manager can create an assignment.",
+                }],
+                "reason": None,
+            }
+
+    import routes.recovery_routes as routes
+    monkeypatch.setattr(routes, "StaffShiftRAGClient", FakeRAGClient)
+    return calls
+
+
 def post(client, shift_id=2, headers=MANAGER):
     return client.post(
         f"/api/shifts/{shift_id}/recovery-workflow", headers=headers)
 
 
-def test_manager_starts_workflow_with_fresh_unchanged_evidence(
+def test_manager_starts_workflow_with_fresh_enriched_evidence(
         client, monkeypatch):
     import routes.recovery_routes as routes
 
@@ -67,28 +100,41 @@ def test_manager_starts_workflow_with_fresh_unchanged_evidence(
 
     monkeypatch.setattr(routes.recovery_service, "build_recovery_evidence", build)
     calls = install_adapter(monkeypatch)
+    rag_calls = install_rag_adapter(monkeypatch)
+    client.application.config["RAG_ENABLED"] = True
     response = post(client)
 
     assert response.status_code == 201
     assert response.get_json() == shared_result()
     assert builds == [2]
+    assert rag_calls == [
+        ("rag_config", {
+            "enabled": True,
+            "server_url": "http://127.0.0.1:8100",
+            "timeout": 100.0,
+        }),
+        ("rag_ask", recovery_policy_service.POLICY_QUERY),
+    ]
     assert calls[0] == ("config", {
         "base_url": "http://127.0.0.1:8200",
         "timeout": 600.0,
     })
     _, task, submitted = calls[1]
     assert task == routes.RECOVERY_WORKFLOW_TASK
-    assert task == (
-        "Review the selected hospital shift for staffing coverage problems. "
-        "Evaluate the supplied candidates and operational constraints. "
-        "Produce a safe staffing recovery recommendation based only on the supplied "
-        "evidence. Identify risks, limitations, and missing information. "
-        "Do not execute any staffing assignment or operational mutation."
-    )
-    assert submitted is expected
-    assert submitted == expected_before
+    assert "human_approval constraint is mandatory" in task
+    assert "exact top-level evidence category names" in task
+    assert expected == expected_before
+    for field in recovery_policy_service.OPERATIONAL_FACT_FIELDS:
+        assert submitted[field] == expected[field]
     assert submitted["evidence_type"] == "student5_staffing_recovery"
     assert submitted["unknowns"] == recovery_service.UNKNOWNS
+    assert submitted["policy_context"]["retrieval_status"] == "answered"
+    assert submitted["policy_context"]["citations"][0]["source"] == (
+        "student-5/staff-eligibility-and-assignments.md"
+    )
+    assert submitted["evidence_separation"][
+        "operational_rules_remain_authoritative"
+    ] is True
 
 
 def test_shared_workflow_identity_and_review_gate_are_preserved(client, monkeypatch):
@@ -108,7 +154,10 @@ def test_privacy_safe_recovery_evidence_reaches_client(client, monkeypatch):
     assert post(client, 1).status_code == 201
 
     evidence = calls[1][2]
-    serialised = json.dumps(evidence)
+    serialised = json.dumps({
+        field: evidence[field]
+        for field in recovery_policy_service.OPERATIONAL_FACT_FIELDS
+    })
     for private_value in (
         "Amara Okafor", "Daniel Reyes", "Mei Lin Tan", "Personal",
         "Vacation", "Study leave",
@@ -118,6 +167,52 @@ def test_privacy_safe_recovery_evidence_reaches_client(client, monkeypatch):
     assert '"notes"' not in serialised
     assert '"reason"' not in serialised
     assert evidence["provenance"]["mutation_allowed"] is False
+    assert "staff-" not in evidence["policy_context"]["query"]
+    assert "shift 1" not in evidence["policy_context"]["query"]
+
+
+@pytest.mark.parametrize("failure,reason", [
+    (rag_client.RAGUnavailable("private http://127.0.0.1 detail"), "rag_unavailable"),
+    (rag_client.RAGTimeout(), "rag_timeout"),
+    (rag_client.RAGInvalidResponse(), "rag_invalid_response"),
+])
+def test_rag_failure_degrades_but_workflow_still_reaches_multi_agent(
+        client, monkeypatch, failure, reason):
+    calls = install_adapter(monkeypatch)
+    rag_calls = install_rag_adapter(monkeypatch, error=failure)
+    client.application.config["RAG_ENABLED"] = True
+
+    response = post(client)
+
+    assert response.status_code == 201
+    submitted = calls[-1][2]
+    assert submitted["policy_context"]["retrieval_status"] == "unavailable"
+    assert submitted["policy_context"]["reason"] == reason
+    assert submitted["current_state"]["shift"]["shift_id"] == 2
+    assert rag_calls[-1] == ("rag_ask", recovery_policy_service.POLICY_QUERY)
+    assert "127.0.0.1" not in json.dumps(submitted["policy_context"])
+
+
+def test_insufficient_rag_context_is_recorded_and_workflow_continues(
+        client, monkeypatch):
+    calls = install_adapter(monkeypatch)
+    install_rag_adapter(monkeypatch, result={
+        "schema_version": "1.0",
+        "status": "insufficient_context",
+        "answer": "The knowledge base does not contain enough relevant information.",
+        "confidence": "none",
+        "citations": [],
+        "reason": "no_relevant_context",
+    })
+    client.application.config["RAG_ENABLED"] = True
+
+    response = post(client)
+
+    assert response.status_code == 201
+    policy = calls[-1][2]["policy_context"]
+    assert policy["retrieval_status"] == "insufficient_context"
+    assert policy["reason"] == "no_relevant_context"
+    assert policy["citations"] == []
 
 
 def test_manager_guard_runs_before_evidence_or_shared_client(client, monkeypatch):

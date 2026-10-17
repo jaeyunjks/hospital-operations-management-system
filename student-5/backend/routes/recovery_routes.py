@@ -11,7 +11,7 @@ from errors import (
     MultiAgentUnavailableError,
     MultiAgentUpstreamError,
 )
-from services import recovery_service
+from services import recovery_policy_service, recovery_service
 from services.multi_agent_client import (
     MultiAgentClient,
     MultiAgentHTTPError,
@@ -19,6 +19,7 @@ from services.multi_agent_client import (
     MultiAgentTimeout,
     MultiAgentUnavailable,
 )
+from services.rag_client import StaffShiftRAGClient
 
 
 recovery_blueprint = Blueprint(
@@ -27,8 +28,12 @@ recovery_blueprint = Blueprint(
 RECOVERY_WORKFLOW_TASK = (
     "Review the selected hospital shift for staffing coverage problems. "
     "Evaluate the supplied candidates and operational constraints. "
-    "Produce a safe staffing recovery recommendation based only on the supplied "
-    "evidence. Identify risks, limitations, and missing information. "
+    "Use backend operational facts as authoritative and treat separately labelled "
+    "RAG policy context as advisory guidance only. Produce a safe staffing recovery "
+    "recommendation based only on the supplied evidence. Identify risks, limitations, "
+    "and missing information. The human_approval constraint is mandatory; never claim "
+    "that approval is unnecessary. In Planner required_evidence, use only exact "
+    "top-level evidence category names rather than nested field names. "
     "Do not execute any staffing assignment or operational mutation."
 )
 
@@ -44,7 +49,15 @@ def recovery_evidence(shift_id: int):
 def start_recovery_workflow(shift_id: int):
     """Start the shared workflow using freshly assembled Student 5 evidence."""
     require_manager()
-    evidence = recovery_service.build_recovery_evidence(shift_id)
+    operational_evidence = recovery_service.build_recovery_evidence(shift_id)
+    rag_client = StaffShiftRAGClient(
+        enabled=current_app.config["RAG_ENABLED"],
+        server_url=current_app.config["RAG_SERVER_URL"],
+        timeout=current_app.config["RAG_TIMEOUT"],
+    )
+    evidence = recovery_policy_service.enrich_recovery_evidence(
+        operational_evidence, rag_client
+    )
     client = MultiAgentClient(
         base_url=current_app.config["MULTI_AGENT_BASE_URL"],
         timeout=current_app.config["MULTI_AGENT_TIMEOUT"],
