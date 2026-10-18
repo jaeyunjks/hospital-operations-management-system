@@ -3148,3 +3148,342 @@
      demanding 640px and re-create the inner scrollbar. */
   .department-summary { min-width: 0; }
 }
+
+/* ==========================================================================
+   12. Staffing Recovery workflow
+   --------------------------------------------------------------------------
+   A restrained operational review surface: facts, policy, tool provenance,
+   agent reasoning and Human Review remain visually distinct.
+   ========================================================================== */
+
+.recovery-entry {
+  display: grid;
+  gap: var(--space-4);
+  background: var(--color-info-soft);
+  border-left: 3px solid var(--color-info-mark);
+}
+
+.recovery-entry h3,
+.recovery-start-panel h2,
+.recovery-state h2,
+.recovery-agent-card h3,
+.recovery-human-review h3,
+.recovery-final h3,
+.recovery-evidence__body h3 { margin: 0; }
+
+.recovery-entry .btn-primary { justify-self: start; }
+
+.recovery-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
+}
+
+.recovery-shift-card { margin-bottom: var(--space-5); }
+
+.recovery-shift-card__identity,
+.recovery-state__header,
+.recovery-agent-card__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.recovery-shift-card__identity {
+  padding: var(--space-5);
+  border-bottom: var(--border-hair);
+}
+
+.recovery-shift-card__identity h2 { margin: var(--space-1) 0 var(--space-2); }
+
+.recovery-shift-card__identity p {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.recovery-coverage-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.recovery-coverage-metrics > div {
+  padding: var(--space-4) var(--space-5);
+  border-right: var(--border-hair);
+}
+
+.recovery-coverage-metrics > div:last-child { border-right: none; }
+
+.recovery-coverage-metrics dt,
+.recovery-provenance-list dt {
+  font-family: var(--font-mono);
+  font-size: var(--size-label);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--color-text-label);
+}
+
+.recovery-coverage-metrics dd {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-mono);
+  font-size: var(--size-data);
+  color: var(--color-text-data);
+}
+
+.recovery-start-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-6);
+}
+
+.recovery-start-panel p { max-width: 72ch; }
+
+.recovery-start-panel form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+
+.recovery-starting {
+  max-width: 28ch;
+  text-align: right;
+  color: var(--color-text-muted);
+}
+
+.recovery-safety-note {
+  padding: var(--space-4);
+  background: var(--color-success-soft);
+  border-left: 3px solid var(--color-success-mark);
+  color: var(--color-text-secondary);
+}
+
+.recovery-safety-note strong { color: var(--color-success); }
+
+.recovery-start-panel > .recovery-safety-note { grid-column: 1 / -1; }
+
+.recovery-safety-note--prominent {
+  margin-bottom: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+}
+
+.recovery-state { margin-bottom: var(--space-5); }
+
+.recovery-restored-note {
+  padding: var(--space-4) var(--space-5);
+  color: var(--color-text-muted);
+}
+
+.recovery-state__header {
+  padding: var(--space-5);
+  background: var(--color-surface-band);
+  border-bottom: var(--border-hair);
+}
+
+.recovery-workflow-id {
+  max-width: 100%;
+  margin-top: var(--space-2);
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+}
+
+.recovery-progress {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-bottom: var(--border-hair);
+}
+
+.recovery-progress__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-right: var(--border-hair);
+}
+
+.recovery-progress__item:last-child { border-right: none; }
+
+.recovery-progress__item span:last-child {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.recovery-progress__item small { color: var(--color-text-muted); }
+.recovery-progress__marker { color: var(--color-neutral-mark); }
+.recovery-progress__item--complete .recovery-progress__marker { color: var(--color-success-mark); }
+.recovery-progress__item--running .recovery-progress__marker { color: var(--color-info-mark); }
+
+.recovery-running,
+.recovery-no-mutation,
+.recovery-fallback,
+.recovery-boundary-copy {
+  margin: 0;
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--size-ui-sm);
+}
+
+.recovery-running { color: var(--color-info); background: var(--color-info-soft); }
+.recovery-no-mutation { color: var(--color-success); background: var(--color-success-soft); }
+.recovery-fallback { color: var(--color-text-secondary); background: var(--color-neutral-soft); }
+.recovery-boundary-copy { color: var(--color-info); background: var(--color-info-soft); }
+
+.recovery-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.recovery-agent-card {
+  min-width: 0;
+  padding: var(--space-5);
+  border-right: var(--border-hair);
+}
+
+.recovery-agent-card:last-child { border-right: none; }
+.recovery-agent-card p { overflow-wrap: anywhere; }
+.recovery-agent-card ul,
+.recovery-agent-card ol { padding-left: var(--space-6); }
+
+.recovery-human-review,
+.recovery-final {
+  display: grid;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  border-top: var(--border-hair);
+}
+
+.recovery-human-review form { display: grid; gap: var(--space-4); }
+
+.recovery-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.recovery-evidence-grid {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.recovery-evidence { overflow: hidden; }
+
+.recovery-evidence > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  cursor: pointer;
+  background: var(--color-surface-band);
+  list-style-position: inside;
+}
+
+.recovery-evidence > summary > span:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-weight: var(--weight-semibold);
+}
+
+.recovery-evidence__body {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-top: var(--border-hair);
+}
+
+.recovery-coverage-metrics--compact { border: var(--border-hair); }
+
+.recovery-candidates,
+.recovery-citations {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recovery-candidates > li,
+.recovery-citations > article {
+  padding: var(--space-4);
+  background: var(--color-surface-muted);
+  border: var(--border-hair);
+}
+
+.recovery-candidates__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.recovery-risk { color: var(--color-danger); }
+.recovery-policy-answer { white-space: pre-line; }
+.recovery-citations h3 { margin: var(--space-2) 0; }
+
+.recovery-provenance-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.recovery-provenance-list > div {
+  min-width: 0;
+  padding: var(--space-3);
+  border: var(--border-hair);
+}
+
+.recovery-provenance-list dd {
+  margin: var(--space-2) 0 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text-data);
+}
+
+.recovery-error,
+.recovery-page-error {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.recovery-error .recovery-no-mutation { margin: 0 calc(-1 * var(--space-5)) calc(-1 * var(--space-5)); }
+
+@media (max-width: 900px) {
+  .recovery-agent-grid { grid-template-columns: minmax(0, 1fr); }
+  .recovery-agent-card { border-right: none; border-bottom: var(--border-hair); }
+  .recovery-agent-card:last-child { border-bottom: none; }
+}
+
+@media (max-width: 700px) {
+  .recovery-page-header,
+  .recovery-shift-card__identity,
+  .recovery-state__header { align-items: flex-start; flex-direction: column; }
+  .recovery-start-panel { grid-template-columns: minmax(0, 1fr); }
+  .recovery-start-panel form { align-items: stretch; }
+  .recovery-starting { text-align: left; }
+  .recovery-coverage-metrics,
+  .recovery-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .recovery-coverage-metrics > div:nth-child(2),
+  .recovery-progress__item:nth-child(2) { border-right: none; }
+  .recovery-coverage-metrics > div:nth-child(-n+2),
+  .recovery-progress__item:nth-child(-n+2) { border-bottom: var(--border-hair); }
+}
+
+@media (max-width: 430px) {
+  .recovery-coverage-metrics,
+  .recovery-progress { grid-template-columns: minmax(0, 1fr); }
+  .recovery-coverage-metrics > div,
+  .recovery-progress__item { border-right: none; border-bottom: var(--border-hair); }
+  .recovery-coverage-metrics > div:last-child,
+  .recovery-progress__item:last-child { border-bottom: none; }
+}

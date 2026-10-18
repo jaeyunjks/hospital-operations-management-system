@@ -94,5 +94,12 @@ def start_recovery_workflow(shift_id: int):
         raise MultiAgentBadGatewayError(
             "The shared Multi-Agent workflow service returned an invalid response."
         ) from error
+    # The shared workflow response intentionally stays generic and therefore
+    # does not echo its potentially large evidence payload.  Student 5's
+    # manager UI does need the exact evidence submitted here so it can keep
+    # authoritative operational facts, advisory RAG policy, and MCP access
+    # provenance visibly separate.  Add it only at this Student 5 boundary;
+    # subsequent polling continues to mirror the shared workflow contract.
+    response = {**workflow, "submitted_evidence": evidence}
     location = f"/api/recovery-workflows/{workflow['workflow_id']}"
-    return jsonify(workflow), 202, {"Location": location, "Retry-After": "1"}
+    return jsonify(response), 202, {"Location": location, "Retry-After": "1"}

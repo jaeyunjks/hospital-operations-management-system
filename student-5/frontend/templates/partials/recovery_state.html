@@ -1,0 +1,138 @@
+{% set status = workflow.status %}
+{% set planner = workflow.planner %}
+{% set worker = workflow.worker %}
+{% set reviewer = workflow.reviewer %}
+<section id="recovery-state" class="panel recovery-state"
+         {% if poll %}hx-get="{{ url_for('recovery_workflow_state_partial', workflow_id=workflow.workflow_id) }}"
+         hx-trigger="load delay:1.5s" hx-target="this" hx-swap="outerHTML"{% endif %}>
+  <div class="recovery-state__header">
+    <div>
+      <span class="u-label">Workflow status</span>
+      <h2>{{ recovery_status_label(status) }}</h2>
+      <p class="u-mono recovery-workflow-id">{{ workflow.workflow_id }}</p>
+    </div>
+    <span class="badge-{{ 'danger' if status == 'failed' or status == 'rejected' else 'success' if status in ('approved', 'corrected', 'partially_accepted') else 'info' }}">
+      {{ recovery_status_label(status) }}
+    </span>
+  </div>
+
+  <ol class="recovery-progress" aria-label="Workflow stage progress">
+    {% for stage in stage_states %}
+    <li class="recovery-progress__item recovery-progress__item--{{ stage.state }}">
+      <span class="recovery-progress__marker" aria-hidden="true">
+        {{ '✓' if stage.state == 'complete' else '●' if stage.state == 'running' else '○' }}
+      </span>
+      <span><strong>{{ stage.label }}</strong><small>{{ stage.state_label }}</small></span>
+    </li>
+    {% endfor %}
+  </ol>
+
+  {% if status == 'in_progress' %}
+  <p class="recovery-running" role="status">
+    Analysis is continuing in the background. This page refreshes progress every 1.5 seconds.
+  </p>
+  {% endif %}
+
+  {% if planner or worker or reviewer %}
+  <div class="recovery-agent-grid">
+    {% if planner %}
+    <article class="recovery-agent-card">
+      <div class="recovery-agent-card__heading"><h3>Planner</h3>
+        {% if planner.execution and planner.execution.fallback_used %}<span class="badge-neutral">Safety fallback</span>{% endif %}
+      </div>
+      {% if planner.execution and planner.execution.fallback_used %}<p class="recovery-fallback">Completed using deterministic safety fallback.</p>{% endif %}
+      <p><strong>Goal</strong><br>{{ planner.output.goal or 'No goal summary supplied.' }}</p>
+      {% if planner.output.planned_steps %}<ol>{% for step in planner.output.planned_steps %}<li>{{ step }}</li>{% endfor %}</ol>{% endif %}
+      {% if planner.output.expected_result %}<p><strong>Expected result</strong><br>{{ planner.output.expected_result }}</p>{% endif %}
+    </article>
+    {% endif %}
+
+    {% if worker %}
+    <article class="recovery-agent-card">
+      <div class="recovery-agent-card__heading"><h3>Worker</h3>
+        {% if worker.execution and worker.execution.fallback_used %}<span class="badge-neutral">Safety fallback</span>{% endif %}
+      </div>
+      {% if worker.execution and worker.execution.fallback_used %}<p class="recovery-fallback">Completed using deterministic safety fallback.</p>{% endif %}
+      {% if worker.output.gap %}
+      <p><strong>Coverage finding</strong><br>Current {{ worker.output.gap.current }} / target {{ worker.output.gap.target }} · deficit {{ worker.output.gap.deficit }}</p>
+      {% endif %}
+      {% if worker.output.proposed_solution %}
+      <p><strong>Proposed option</strong><br><span class="u-mono">{{ worker.output.proposed_solution.selected_option_id or worker.output.proposed_solution.selected_option }}</span></p>
+      <p>Projected coverage: {{ worker.output.proposed_solution.projected_value }} / {{ worker.output.gap.target if worker.output.gap else '—' }}</p>
+      {% if worker.output.proposed_solution.reasoning %}<ul>{% for reason in worker.output.proposed_solution.reasoning %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
+      {% else %}<p>No assignment option was proposed.</p>{% endif %}
+      {% if worker.output.limitations %}<p><strong>Limitations</strong></p><ul>{% for item in worker.output.limitations %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+      <p class="recovery-no-mutation">{{ 'No mutation executed.' if worker.output.mutation_executed is sameas false else 'Mutation status was not supplied.' }}</p>
+    </article>
+    {% endif %}
+
+    {% if reviewer %}
+    <article class="recovery-agent-card recovery-agent-card--reviewer">
+      <div class="recovery-agent-card__heading"><h3>Reviewer</h3>
+        {% if reviewer.execution and reviewer.execution.fallback_used %}<span class="badge-neutral">Safety fallback</span>{% endif %}
+      </div>
+      {% if reviewer.execution and reviewer.execution.fallback_used %}<p class="recovery-fallback">Safety validation corrected an inconsistent model response using deterministic fallback.</p>{% endif %}
+      <p><strong>Review status</strong><br>{{ reviewer.output.review_status|replace('_', ' ')|title }}</p>
+      <p><strong>Recommendation</strong><br>{{ reviewer.output.recommendation }}</p>
+      {% if reviewer.output.recommended_option_id %}<p><strong>Reviewed option</strong><br><span class="u-mono">{{ reviewer.output.recommended_option_id }}</span></p>{% endif %}
+      {% if reviewer.output.risks %}<p><strong>Risks</strong></p><ul>{% for risk in reviewer.output.risks %}<li>{{ risk }}</li>{% endfor %}</ul>{% endif %}
+      {% if reviewer.output.unsupported_claims %}<p><strong>Unsupported claims</strong></p><ul>{% for claim in reviewer.output.unsupported_claims %}<li>{{ claim }}</li>{% endfor %}</ul>{% endif %}
+      <p class="recovery-no-mutation">
+        Human approval {{ 'is required' if reviewer.output.human_approval_required else 'was not confirmed' }}.
+        {{ 'No mutation verified.' if reviewer.output.mutation_verified_absent else '' }}
+      </p>
+    </article>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if status == 'awaiting_human_review' %}
+  <section class="recovery-human-review" aria-labelledby="human-review-heading">
+    <div>
+      <span class="u-label">Required manager decision</span>
+      <h3 id="human-review-heading">Human Review</h3>
+      <p>Accept or reject the AI recommendation, or record a correction/partial acceptance.</p>
+    </div>
+    <div class="recovery-safety-note">
+      <strong>Human Review records your decision on this recommendation.</strong>
+      It does not automatically change the roster.
+    </div>
+    <form hx-post="{{ url_for('recovery_workflow_review_partial', workflow_id=workflow.workflow_id) }}"
+          hx-target="#recovery-state" hx-swap="outerHTML"
+          hx-disabled-elt="find button, find textarea">
+      <label class="field" for="recovery-review-comment">
+        <span class="field__label">Manager comment or correction</span>
+        <textarea class="textarea" id="recovery-review-comment" name="comment"
+                  maxlength="{{ max_comment_length }}" rows="4"
+                  placeholder="Required when requesting a correction; optional for other decisions."></textarea>
+        <span class="field__hint">Maximum {{ '{:,}'.format(max_comment_length) }} characters.</span>
+      </label>
+      <div class="recovery-review-actions">
+        <button class="btn-primary" type="submit" name="decision" value="approve">Approve</button>
+        <button class="btn-secondary" type="submit" name="decision" value="correct">Request Correction</button>
+        <button class="btn-secondary" type="submit" name="decision" value="partially_accept">Partially Accept</button>
+        <button class="btn-danger" type="submit" name="decision" value="reject">Reject</button>
+      </div>
+    </form>
+  </section>
+  {% elif status in ('approved', 'corrected', 'rejected', 'partially_accepted') %}
+  <section class="recovery-final" aria-labelledby="recovery-final-heading">
+    <span class="u-label">Human Review recorded</span>
+    <h3 id="recovery-final-heading">{{ recovery_status_label(status) }}</h3>
+    <dl class="recovery-provenance-list">
+      <div><dt>Decision</dt><dd>{{ workflow.human_review.decision|replace('_', ' ')|title }}</dd></div>
+      <div><dt>Manager comment</dt><dd>{{ workflow.human_review.comments or 'No comment supplied.' }}</dd></div>
+      <div><dt>Recorded</dt><dd>{{ format_timestamp(workflow.human_review.timestamp) }}</dd></div>
+      <div><dt>Roster mutation</dt><dd>{{ 'None' if workflow.final_result.mutation_executed is sameas false else 'Not confirmed' }}</dd></div>
+    </dl>
+    <div class="recovery-safety-note recovery-safety-note--prominent">
+      <strong>No roster changes have been made.</strong>
+                    Human Review records a decision on the recommendation only; any later roster action remains separate.
+    </div>
+  </section>
+  {% elif status == 'failed' %}
+  <div class="alert alert--danger" role="alert">
+    <div><p class="alert__title">Workflow failed safely</p><p class="alert__body">The analysis did not reach Human Review. No roster changes were made.</p></div>
+  </div>
+  {% endif %}
+</section>

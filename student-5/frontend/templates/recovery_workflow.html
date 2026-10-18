@@ -1,0 +1,102 @@
+{% extends "layout.html" %}
+{% block title %}Staffing Recovery{% endblock %}
+{% block content %}
+
+  <div class="page-header recovery-page-header">
+    <div>
+      <span class="page-header__eyebrow">Staff &amp; Shift Management</span>
+      <h1 class="page-header__title">Staffing Recovery</h1>
+      <p class="page-header__description">
+        Evidence-backed coverage review with independent agent checks and an
+        explicit manager decision.
+      </p>
+    </div>
+    <a class="btn-secondary" href="{{ url_for('shift_planner',
+       date=shift.shift_date if shift else none,
+       department=shift.department if shift else none,
+       selected_shift_id=shift.shift_id if shift else none) }}">Back to Shift Planner</a>
+  </div>
+
+  {% if error %}
+  <section class="panel recovery-page-error">
+    <div class="alert alert--danger" role="alert">
+      <div>
+        <p class="alert__title">Staffing Recovery unavailable</p>
+        <p class="alert__body">{{ error }}</p>
+      </div>
+    </div>
+  </section>
+  {% else %}
+  {% set coverage = evidence.current_state.coverage %}
+  <section class="panel recovery-shift-card" aria-labelledby="recovery-shift-heading">
+    <div class="recovery-shift-card__identity">
+      <div>
+        <span class="page-header__eyebrow">Selected shift</span>
+        <h2 id="recovery-shift-heading">
+          {{ shift.department }} · {{ shift.required_role }}
+        </h2>
+        <p>
+          <span class="u-mono">{{ shift_display_id(shift.shift_id) }}</span>
+          · <time datetime="{{ shift.shift_date }}">{{ date_long(shift.shift_date) }}</time>
+          · <span class="u-mono">{{ shift.start_time }}–{{ shift.end_time }}</span>
+        </p>
+      </div>
+      <span class="coverage-status coverage-status--{{ 'short-many' if coverage.shortfall > 1 else 'short-one' if coverage.shortfall else 'covered' }}">
+        {{ coverage.coverage_status }}
+      </span>
+    </div>
+    <dl class="recovery-coverage-metrics">
+      <div><dt>Required</dt><dd>{{ coverage.required_staff_count }}</dd></div>
+      <div><dt>Assigned</dt><dd>{{ coverage.assigned_staff_count }}</dd></div>
+      <div><dt>Shortfall</dt><dd>{{ coverage.shortfall }}</dd></div>
+      <div><dt>Eligible options</dt><dd>{{ evidence.options|selectattr('attributes.backend_eligible')|list|length }}</dd></div>
+    </dl>
+  </section>
+
+  <div id="recovery-workspace" aria-live="polite">
+    {% if initial_workflow %}
+    <div class="recovery-safety-note recovery-safety-note--prominent" role="status">
+      <strong>No roster changes have been made.</strong>
+      This persisted workflow state was retrieved through the manager-only Student 5 backend proxy.
+    </div>
+    {% with workflow=initial_workflow %}
+      {% include "partials/recovery_state.html" %}
+    {% endwith %}
+    <section class="panel recovery-restored-note">
+      <p>
+        Authoritative shift coverage is shown above. Detailed RAG and MCP
+        provenance is presented from the exact submitted evidence during the
+        live workflow view; the generic workflow GET contract does not repeat
+        that evidence payload.
+      </p>
+    </section>
+    {% else %}
+    <section class="panel recovery-start-panel">
+      <div>
+        <span class="u-label">Manager action</span>
+        <h2>Run recovery analysis</h2>
+        <p>
+          The backend will prepare authoritative operational evidence, retrieve
+          advisory policy guidance, use the registered read-only MCP tool, and
+          submit the case to Planner → Worker → Reviewer.
+        </p>
+      </div>
+      <form hx-post="{{ url_for('start_recovery_workflow_partial', shift_id=shift.shift_id) }}"
+            hx-target="#recovery-workspace" hx-swap="innerHTML"
+            hx-indicator="#recovery-starting"
+            hx-disabled-elt="find button">
+        <button class="btn-primary" type="submit">Run Staffing Recovery</button>
+        <span class="htmx-indicator recovery-starting" id="recovery-starting" role="status">
+          Preparing evidence and starting workflow…
+        </span>
+      </form>
+      <div class="recovery-safety-note" role="note">
+        <strong>No roster changes will be made.</strong>
+        This workflow produces an advisory recommendation for Human Review only.
+      </div>
+    </section>
+    {% endif %}
+  </div>
+  {% endif %}
+
+{% endblock %}

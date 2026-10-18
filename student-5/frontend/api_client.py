@@ -42,6 +42,20 @@ MCP_API_TIMEOUT = float(os.environ.get("STAFF_SHIFT_MCP_API_TIMEOUT", "20"))
 #: 100-second upstream window without slowing ordinary frontend requests.
 RAG_API_TIMEOUT = float(os.environ.get("STAFF_SHIFT_RAG_API_TIMEOUT", "105"))
 
+# Starting Staffing Recovery performs the existing bounded RAG and MCP
+# enrichment before the shared server returns its asynchronous workflow ID.
+# Keep that allowance isolated from ordinary roster reads.  Polling and Human
+# Review are quick shared-lifecycle calls and use their own smaller window.
+RECOVERY_START_API_TIMEOUT = float(os.environ.get(
+    "STAFF_SHIFT_RECOVERY_START_API_TIMEOUT", "125"))
+RECOVERY_WORKFLOW_API_TIMEOUT = float(os.environ.get(
+    "STAFF_SHIFT_RECOVERY_WORKFLOW_API_TIMEOUT", str(max(API_TIMEOUT, 15.0))))
+
+RECOVERY_REVIEW_DECISIONS = (
+    "approve", "correct", "reject", "partially_accept",
+)
+RECOVERY_REVIEW_COMMENT_MAX_LENGTH = 10_000
+
 
 class BackendUnavailableError(Exception):
     """The backend/API microservice could not be reached at all."""
@@ -244,6 +258,43 @@ def list_shifts(department: Optional[str] = None,
 def get_shift(shift_id: int) -> Dict[str, Any]:
     """GET /api/shifts/<id> — one shift."""
     return _request("GET", f"/api/shifts/{shift_id}")
+
+
+def get_recovery_evidence(shift_id: int) -> Dict[str, Any]:
+    """GET authoritative read-only Staffing Recovery evidence."""
+    return _request("GET", f"/api/shifts/{shift_id}/recovery-evidence")
+
+
+def start_recovery_workflow(shift_id: int) -> Dict[str, Any]:
+    """POST a selected shift to the Student 5 workflow adapter.
+
+    The backend, not this client, owns RAG/MCP enrichment and submission to
+    the shared Multi-Agent service.  The returned ``submitted_evidence`` is
+    the exact privacy-safe payload used for this workflow.
+    """
+    return _request(
+        "POST", f"/api/shifts/{shift_id}/recovery-workflow",
+        timeout=RECOVERY_START_API_TIMEOUT,
+    )
+
+
+def get_recovery_workflow(workflow_id: str) -> Dict[str, Any]:
+    """GET one shared workflow through the manager-only Student 5 proxy."""
+    return _request(
+        "GET", f"/api/recovery-workflows/{workflow_id}",
+        timeout=RECOVERY_WORKFLOW_API_TIMEOUT,
+    )
+
+
+def submit_recovery_review(
+    workflow_id: str, decision: str, comment: str = ""
+) -> Dict[str, Any]:
+    """Record advisory Human Review; this never calls an assignment route."""
+    return _request(
+        "POST", f"/api/recovery-workflows/{workflow_id}/review",
+        payload={"decision": decision, "comment": comment},
+        timeout=RECOVERY_WORKFLOW_API_TIMEOUT,
+    )
 
 
 def create_shift(payload: Dict[str, Any]) -> Dict[str, Any]:

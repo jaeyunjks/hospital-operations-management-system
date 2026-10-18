@@ -142,7 +142,12 @@ def test_manager_starts_workflow_with_fresh_enriched_evidence(
     response = post(client)
 
     assert response.status_code == 202
-    assert response.get_json() == shared_result()
+    response_body = response.get_json()
+    assert {
+        key: value for key, value in response_body.items()
+        if key != "submitted_evidence"
+    } == shared_result()
+    assert response_body["submitted_evidence"] == calls[1][2]
     assert response.headers["Location"] == (
         f"/api/recovery-workflows/{WORKFLOW_ID}"
     )
@@ -206,6 +211,7 @@ def test_shared_workflow_identity_and_review_gate_are_preserved(client, monkeypa
     assert body["status"] == "in_progress"
     assert body["human_review"] is None
     assert body["final_result"] is None
+    assert body["submitted_evidence"]["provenance"]["mutation_allowed"] is False
 
 
 def test_privacy_safe_recovery_evidence_reaches_client(client, monkeypatch):

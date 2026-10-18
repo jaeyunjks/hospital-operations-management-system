@@ -232,7 +232,11 @@ the manager-only recovery-evidence endpoint; it cannot accept a URL, select a
 different tool, or invoke assignment/staff/shift/availability mutations.
 
 The request returns HTTP `202` with the validated shared `in_progress`
-response, real `workflow_id`, polling `Location`, and `Retry-After: 1`. Clients
+response, real `workflow_id`, polling `Location`, and `Retry-After: 1`. At the
+Student 5 boundary only, the response also includes `submitted_evidence`: the
+exact privacy-safe operational, RAG, and MCP evidence sent to the shared
+workflow. The shared API itself remains generic and unchanged, and later GET
+responses continue to mirror its workflow envelope exactly. Clients
 poll `GET /api/recovery-workflows/<workflow_id>` until the workflow reaches
 `awaiting_human_review` or `failed`; completed agent stages appear in the same
 response contract. It never submits a review or changes a roster. Connection failure returns
@@ -258,6 +262,31 @@ the manager accepted the recommendation, but it never calls an assignment
 route or writes staff, shift, assignment, availability, or unavailability
 data. The shared final result must continue to report
 `mutation_executed: false`.
+
+### Staffing Recovery frontend
+
+The manager-facing entry point is the existing Shift Planner detail for an
+understaffed shift. `Run Staffing Recovery` opens
+`/shifts/<shift_id>/recovery`; the browser then talks only to the Student 5
+frontend's HTMX partial routes. Server-side `api_client.py` calls the Student 5
+backend to start the workflow, polls its status every 1.5 seconds, and submits
+one of the four existing Human Review decisions. It never calls the shared RAG,
+MCP, or Multi-Agent services directly from the browser.
+
+The page presents authoritative operational evidence separately from advisory
+RAG policy citations and compact MCP registered-tool provenance. Planner,
+Worker, and Reviewer cards appear only after those stages exist in the public
+workflow response. Deterministic fallback is labelled neutrally. Polling stops
+at `awaiting_human_review`, any final state, or `failed`. Human Review accepts
+or rejects the recommendation only: no frontend path invokes an assignment
+mutation, and the final state continues to show `mutation_executed: false`.
+
+Frontend-specific timeout overrides are optional:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `STAFF_SHIFT_RECOVERY_START_API_TIMEOUT` | `125` | Allows bounded RAG/MCP enrichment before the asynchronous workflow ID is returned |
+| `STAFF_SHIFT_RECOVERY_WORKFLOW_API_TIMEOUT` | `15` | Bounds workflow polling and Human Review proxy calls |
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
@@ -540,7 +569,7 @@ curl --fail-with-body -X POST \
 
 ## Scope
 
-No frontend workflow UI, assignment execution, in-service Planner/Worker/
-Reviewer implementation, or direct SQLite access. The advisory workflow
-integration calls the separate shared service; operational Staff & Shift data
-still crosses only the database microservice boundary.
+No assignment execution, in-service Planner/Worker/Reviewer implementation,
+or direct SQLite access. The advisory workflow integration calls the separate
+shared service; operational Staff & Shift data still crosses only the database
+microservice boundary.

@@ -37,7 +37,8 @@ import demo_identity  # noqa: E402
 from api_client import (BackendBadGatewayError, BackendError,  # noqa: E402
                         BackendServiceUnavailableError,
                         BackendTimeoutError, BackendUnavailableError,
-                        ForbiddenError, NotFoundError, ValidationFailed)
+                        ConflictError, ForbiddenError, NotFoundError,
+                        ValidationFailed)
 from demo_identity import ROLE_EMPLOYEE, ROLE_MANAGER  # noqa: E402
 
 DEFAULT_PORT = 3500
@@ -503,12 +504,128 @@ def _format_timestamp(value):
     """
     if not value:
         return None
-    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M"):
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M:%S.%fZ", "%Y-%m-%dT%H:%M:%SZ",
+    ):
         try:
             return datetime.datetime.strptime(value, fmt).strftime("%d %b %Y · %H:%M")
         except (ValueError, TypeError):
             continue
     return value
+
+
+_RECOVERY_WORKFLOW_FIELDS = {
+    "schema_version", "workflow_id", "status", "task", "planner", "worker",
+    "reviewer", "human_review", "final_result",
+}
+_RECOVERY_STATUSES = {
+    "in_progress", "awaiting_human_review", "approved", "corrected",
+    "rejected", "partially_accepted", "failed",
+}
+_RECOVERY_FINAL_STATUSES = {
+    "approved", "corrected", "rejected", "partially_accepted", "failed",
+}
+
+
+def _valid_recovery_workflow(value, *, started=False):
+    """Check the stable Student 5 workflow envelope before rendering it.
+
+    The backend's MultiAgentClient performs the authoritative shared-contract
+    validation.  This lighter presentation-boundary check prevents malformed
+    mocked or stale responses from being mistaken for live workflow state.
+    """
+    if not isinstance(value, dict):
+        return False
+    expected = set(_RECOVERY_WORKFLOW_FIELDS)
+    if started:
+        expected.add("submitted_evidence")
+    if set(value) != expected:
+        return False
+    if (value.get("schema_version") != "1.0"
+            or not isinstance(value.get("workflow_id"), str)
+            or not value["workflow_id"].strip()
+            or value.get("status") not in _RECOVERY_STATUSES
+            or not isinstance(value.get("task"), str)
+            or not value["task"].strip()):
+        return False
+    for role in ("planner", "worker", "reviewer"):
+        stage = value.get(role)
+        if stage is not None and (
+                not isinstance(stage, dict)
+                or not isinstance(stage.get("output"), dict)):
+            return False
+    if started:
+        evidence = value.get("submitted_evidence")
+        if (not isinstance(evidence, dict)
+                or evidence.get("evidence_type") != "student5_staffing_recovery"
+                or not isinstance(evidence.get("current_state"), dict)
+                or not isinstance(evidence.get("policy_context"), dict)
+                or not isinstance(evidence.get("mcp_context"), dict)):
+            return False
+    return True
+
+
+def _recovery_stage_states(workflow):
+    """Return manager-facing ordered progress without inventing completion."""
+    states = []
+    running_assigned = False
+    in_progress = workflow.get("status") == "in_progress"
+    for role, label in (
+        ("planner", "Planner"), ("worker", "Worker"),
+        ("reviewer", "Reviewer"),
+    ):
+        stage = workflow.get(role)
+        if stage is not None:
+            execution = stage.get("execution") or {}
+            states.append({
+                "role": role,
+                "label": label,
+                "state": "complete",
+                "state_label": (
+                    "Fallback used" if execution.get("fallback_used") is True
+                    else "Complete"
+                ),
+                "fallback_used": execution.get("fallback_used") is True,
+            })
+        elif in_progress and not running_assigned:
+            states.append({
+                "role": role, "label": label, "state": "running",
+                "state_label": "Running", "fallback_used": False,
+            })
+            running_assigned = True
+        else:
+            states.append({
+                "role": role, "label": label, "state": "waiting",
+                "state_label": "Waiting", "fallback_used": False,
+            })
+
+    status = workflow.get("status")
+    if status == "awaiting_human_review":
+        review_state, review_label = "running", "Review required"
+    elif status in _RECOVERY_FINAL_STATUSES:
+        review_state = "complete" if status != "failed" else "waiting"
+        review_label = "Recorded" if status != "failed" else "Not reached"
+    else:
+        review_state, review_label = "waiting", "Waiting"
+    states.append({
+        "role": "human_review", "label": "Human Review",
+        "state": review_state, "state_label": review_label,
+        "fallback_used": False,
+    })
+    return states
+
+
+def _recovery_status_label(status):
+    return {
+        "in_progress": "In progress",
+        "awaiting_human_review": "Awaiting Human Review",
+        "approved": "Approved",
+        "corrected": "Corrected",
+        "rejected": "Rejected",
+        "partially_accepted": "Partially Accepted",
+        "failed": "Failed",
+    }.get(status, status)
 
 
 def _initials(name: str) -> str:
@@ -973,6 +1090,7 @@ def create_app() -> Flask:
     #: full of "requires the Staff Manager role".
     _MANAGER_ENDPOINTS = {
         "workforce_overview", "staff_directory", "shift_planner", "requests_queue",
+        "recovery_workflow_page",
     }
 
     @app.before_request
@@ -1003,7 +1121,9 @@ def create_app() -> Flask:
     app.jinja_env.globals["shift_display_id"] = _shift_display_id
     app.jinja_env.globals["initials"] = _initials
     app.jinja_env.globals["date_long"] = _date_long
+    app.jinja_env.globals["format_timestamp"] = _format_timestamp
     app.jinja_env.globals["planner_link"] = _planner_link
+    app.jinja_env.globals["recovery_status_label"] = _recovery_status_label
     app.jinja_env.globals["timedelta"] = datetime.timedelta
 
     # ---------------------------------------------------------- shared assets
@@ -1313,6 +1433,244 @@ def create_app() -> Flask:
     @app.get("/partials/shifts/<int:shift_id>")
     def shift_detail_partial(shift_id: int):
         return _render_shift_detail(shift_id, embedded=request.args.get("panel") == "1")
+
+    # ------------------------------------------------------ Staffing Recovery
+    def _recovery_forbidden():
+        return render_template(
+            "partials/recovery_error.html",
+            title="Staffing Recovery not permitted",
+            message="Staffing Recovery is available to Staff Managers only.",
+            retry_url=None,
+        ), 403
+
+    def _recovery_error(title, message, *, retry_url=None,
+                        retry_method="get", status_code=200):
+        return render_template(
+            "partials/recovery_error.html", title=title, message=message,
+            retry_url=retry_url, retry_method=retry_method,
+        ), status_code
+
+    def _recovery_state(workflow):
+        return render_template(
+            "partials/recovery_state.html", workflow=workflow,
+            stage_states=_recovery_stage_states(workflow),
+            poll=workflow.get("status") == "in_progress",
+            max_comment_length=api_client.RECOVERY_REVIEW_COMMENT_MAX_LENGTH,
+        )
+
+    @app.get("/shifts/<int:shift_id>/recovery")
+    def recovery_workflow_page(shift_id: int):
+        """Manager page anchored in Shift Planner and authoritative evidence."""
+        evidence, error = None, None
+        initial_workflow = None
+        try:
+            evidence = api_client.get_recovery_evidence(shift_id)
+            if (not isinstance(evidence, dict)
+                    or evidence.get("evidence_type") != "student5_staffing_recovery"
+                    or not isinstance(evidence.get("current_state"), dict)):
+                evidence = None
+                error = "The recovery evidence response could not be used safely."
+        except NotFoundError:
+            error = "The selected shift could not be found."
+        except ForbiddenError:
+            return redirect(url_for("my_workforce"))
+        except BackendTimeoutError:
+            error = "Recovery evidence timed out. Return to Shift Planner and try again."
+        except (BackendUnavailableError, BackendError):
+            error = "Recovery evidence is temporarily unavailable. Return to Shift Planner and try again."
+
+        workflow_id = (request.args.get("workflow_id") or "").strip()
+        if error is None and workflow_id:
+            try:
+                candidate = api_client.get_recovery_workflow(workflow_id)
+                if _valid_recovery_workflow(candidate):
+                    initial_workflow = candidate
+                else:
+                    error = "The saved workflow state could not be used safely."
+            except ValidationFailed:
+                error = "The saved workflow identifier is invalid."
+            except NotFoundError:
+                error = "The saved workflow could not be found."
+            except BackendTimeoutError:
+                error = "The saved workflow timed out while loading. Try again."
+            except (ForbiddenError, BackendUnavailableError, BackendError):
+                error = "The saved workflow is temporarily unavailable. Try again."
+
+        shift = ((evidence or {}).get("current_state") or {}).get("shift")
+        return render_template(
+            "recovery_workflow.html", today=_today(), active="shifts",
+            service_available=error is None, evidence=evidence, shift=shift,
+            error=error, shift_id=shift_id, initial_workflow=initial_workflow,
+            stage_states=(
+                _recovery_stage_states(initial_workflow)
+                if initial_workflow else None
+            ),
+            poll=(
+                initial_workflow.get("status") == "in_progress"
+                if initial_workflow else False
+            ),
+            max_comment_length=api_client.RECOVERY_REVIEW_COMMENT_MAX_LENGTH,
+        )
+
+    @app.post("/partials/shifts/<int:shift_id>/recovery-workflow")
+    def start_recovery_workflow_partial(shift_id: int):
+        if not demo_identity.is_manager():
+            return _recovery_forbidden()
+        retry_url = url_for("start_recovery_workflow_partial", shift_id=shift_id)
+        try:
+            result = api_client.start_recovery_workflow(shift_id)
+        except NotFoundError:
+            return _recovery_error(
+                "Shift not found", "The selected shift no longer exists.")
+        except ValidationFailed:
+            return _recovery_error(
+                "Recovery could not start",
+                "The selected shift could not be submitted for recovery review.",
+                retry_url=retry_url, retry_method="post")
+        except ForbiddenError:
+            return _recovery_forbidden()
+        except BackendTimeoutError:
+            return _recovery_error(
+                "Recovery start timed out",
+                "No workflow result was confirmed. Check the service and try again.",
+                retry_url=retry_url, retry_method="post")
+        except BackendServiceUnavailableError:
+            return _recovery_error(
+                "Multi-Agent service unavailable",
+                "The analysis service is temporarily unavailable. No roster changes were made.",
+                retry_url=retry_url, retry_method="post")
+        except BackendBadGatewayError:
+            return _recovery_error(
+                "Recovery response could not be used",
+                "The workflow service returned an invalid response. No roster changes were made.",
+                retry_url=retry_url, retry_method="post")
+        except (BackendUnavailableError, BackendError):
+            return _recovery_error(
+                "Staffing Recovery unavailable",
+                "The workflow could not be started. No roster changes were made.",
+                retry_url=retry_url, retry_method="post")
+
+        if not _valid_recovery_workflow(result, started=True):
+            return _recovery_error(
+                "Recovery response could not be used",
+                "The workflow response was incomplete or invalid. No roster changes were made.",
+                retry_url=retry_url, retry_method="post")
+
+        evidence = result["submitted_evidence"]
+        workflow = {
+            key: value for key, value in result.items()
+            if key != "submitted_evidence"
+        }
+        response = make_response(render_template(
+            "partials/recovery_workspace.html", workflow=workflow,
+            evidence=evidence, shift=evidence["current_state"].get("shift", {}),
+            stage_states=_recovery_stage_states(workflow), poll=True,
+            max_comment_length=api_client.RECOVERY_REVIEW_COMMENT_MAX_LENGTH,
+        ))
+        response.headers["HX-Push-Url"] = url_for(
+            "recovery_workflow_page", shift_id=shift_id,
+            workflow_id=workflow["workflow_id"],
+        )
+        return response
+
+    @app.get("/partials/recovery-workflows/<workflow_id>")
+    def recovery_workflow_state_partial(workflow_id: str):
+        if not demo_identity.is_manager():
+            return _recovery_forbidden()
+        retry_url = url_for(
+            "recovery_workflow_state_partial", workflow_id=workflow_id)
+        try:
+            workflow = api_client.get_recovery_workflow(workflow_id)
+        except ValidationFailed:
+            return _recovery_error(
+                "Invalid workflow", "The workflow identifier is invalid.")
+        except NotFoundError:
+            return _recovery_error(
+                "Workflow not found",
+                "This workflow could not be found. Start a new recovery analysis from Shift Planner.")
+        except ForbiddenError:
+            return _recovery_forbidden()
+        except BackendTimeoutError:
+            return _recovery_error(
+                "Progress check timed out",
+                "Progress could not be refreshed. The workflow may still be running.",
+                retry_url=retry_url)
+        except (BackendServiceUnavailableError, BackendUnavailableError):
+            return _recovery_error(
+                "Progress temporarily unavailable",
+                "Progress could not be refreshed. The workflow may still be running.",
+                retry_url=retry_url)
+        except (BackendBadGatewayError, BackendError):
+            return _recovery_error(
+                "Progress response could not be used",
+                "The latest workflow state was unavailable. Try refreshing progress.",
+                retry_url=retry_url)
+        if not _valid_recovery_workflow(workflow):
+            return _recovery_error(
+                "Progress response could not be used",
+                "The latest workflow state was incomplete or invalid. Try refreshing progress.",
+                retry_url=retry_url)
+        return _recovery_state(workflow)
+
+    @app.post("/partials/recovery-workflows/<workflow_id>/review")
+    def recovery_workflow_review_partial(workflow_id: str):
+        if not demo_identity.is_manager():
+            return _recovery_forbidden()
+        decision = (request.form.get("decision") or "").strip()
+        comment = (request.form.get("comment") or "").strip()
+        if decision not in api_client.RECOVERY_REVIEW_DECISIONS:
+            return _recovery_error(
+                "Check the Human Review decision",
+                "Choose Approve, Request Correction, Reject, or Partially Accept.")
+        if len(comment) > api_client.RECOVERY_REVIEW_COMMENT_MAX_LENGTH:
+            return _recovery_error(
+                "Check the Human Review comment",
+                f"Comments must be {api_client.RECOVERY_REVIEW_COMMENT_MAX_LENGTH:,} characters or fewer.")
+        if decision == "correct" and not comment:
+            return _recovery_error(
+                "Correction comment required",
+                "Describe the correction before submitting Human Review.")
+        try:
+            workflow = api_client.submit_recovery_review(
+                workflow_id, decision, comment)
+        except ValidationFailed:
+            return _recovery_error(
+                "Human Review could not be recorded",
+                "Check the decision and comment, then try again.")
+        except ConflictError:
+            return _recovery_error(
+                "Human Review already closed",
+                "This workflow is not awaiting Human Review. Refresh its current state.",
+                retry_url=url_for(
+                    "recovery_workflow_state_partial", workflow_id=workflow_id))
+        except NotFoundError:
+            return _recovery_error(
+                "Workflow not found", "This workflow could not be found.")
+        except ForbiddenError:
+            return _recovery_forbidden()
+        except BackendTimeoutError:
+            return _recovery_error(
+                "Human Review timed out",
+                "The decision was not confirmed. Refresh the workflow before trying again.",
+                retry_url=url_for(
+                    "recovery_workflow_state_partial", workflow_id=workflow_id))
+        except (BackendServiceUnavailableError, BackendUnavailableError):
+            return _recovery_error(
+                "Human Review unavailable",
+                "The decision could not be confirmed. No roster changes were made.",
+                retry_url=url_for(
+                    "recovery_workflow_state_partial", workflow_id=workflow_id))
+        except (BackendBadGatewayError, BackendError):
+            return _recovery_error(
+                "Human Review response could not be used",
+                "The decision was not confirmed. Refresh the workflow before trying again.",
+                retry_url=url_for(
+                    "recovery_workflow_state_partial", workflow_id=workflow_id))
+        if not _valid_recovery_workflow(workflow):
+            return _recovery_error(
+                "Human Review response could not be used",
+                "The final workflow state was incomplete or invalid.")
+        return _recovery_state(workflow)
 
     def _shift_form_values(source):
         return {
