@@ -1771,6 +1771,19 @@
 .grid-shift strong { font-family: var(--font-mono); font-size: var(--size-data); }
 .grid-shift span,
 .grid-shift small { font-size: var(--size-label); }
+.grid-shift__recovery {
+  align-self: flex-start;
+  margin: 0 var(--space-3) var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid currentColor;
+  background: var(--color-surface);
+  color: var(--color-accent-ink);
+  font-size: var(--size-label);
+  font-weight: var(--weight-semibold);
+  line-height: 1.2;
+  text-decoration: none;
+}
+.grid-shift__recovery:hover { background: var(--color-surface-hover); }
 .week-grid__cell--covered .grid-shift { color: var(--color-success); }
 .week-grid__cell--short-one .grid-shift { color: var(--color-warning); }
 .week-grid__cell--short-many .grid-shift { color: var(--color-danger); }

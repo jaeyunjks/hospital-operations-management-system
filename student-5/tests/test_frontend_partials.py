@@ -1375,6 +1375,54 @@ def test_week_grid_preserves_multiple_real_shifts_in_one_cell(
     assert 'hx-get="/partials/planner"' in body
 
 
+def test_manager_discovers_recovery_on_understaffed_week_grid_shifts(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+
+    def fail_if_mutated(*args, **kwargs):
+        raise AssertionError("planner recovery discovery must not mutate assignments")
+
+    monkeypatch.setattr(fe_api_client, "assign_staff", fail_if_mutated)
+    monkeypatch.setattr(fe_api_client, "unassign_staff", fail_if_mutated)
+
+    body = frontend_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=Emergency").get_data(as_text=True)
+
+    assert 'href="/shifts/20/recovery"' in body
+    assert 'href="/shifts/21/recovery"' in body
+    assert 'href="/shifts/22/recovery"' in body
+    assert "Run Staffing Recovery" in body
+    assert "/assign" not in body
+    assert "/unassign" not in body
+
+
+def test_covered_week_grid_shift_does_not_offer_recovery(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+
+    body = frontend_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=ICU").get_data(as_text=True)
+
+    assert "2/2" in body
+    assert 'href="/shifts/23/recovery"' not in body
+    assert "Run Staffing Recovery" not in body
+
+
+def test_employee_planner_fragment_never_exposes_manager_recovery_action(
+        employee_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+
+    body = employee_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=Emergency").get_data(as_text=True)
+
+    assert "2/3" in body
+    assert "Run Staffing Recovery" not in body
+    assert "/recovery" not in body
+
+
 def test_empty_week_grid_cell_opens_existing_create_drawer_with_ui_context(
         frontend_client, fe_api_client, monkeypatch):
     _stub_week_planner(monkeypatch, fe_api_client)
@@ -5289,6 +5337,23 @@ def test_understaffed_shift_offers_recovery_entry(
     assert "Run Staffing Recovery" in body
     assert 'href="/shifts/11/recovery"' in body
     assert "Analysis only. No roster changes are made automatically." in body
+    assert body.index("Staffing Recovery") < body.index("Current assignments")
+
+
+def test_employee_shift_detail_does_not_offer_manager_recovery_entry(
+        employee_client, fe_api_client, monkeypatch):
+    _stub_shift_detail(monkeypatch, fe_api_client, assignments=[{
+        "staff_id": 1, "name": "Amara Okafor", "role": "Registered Nurse",
+        "department": "Emergency", "availability_status": "Available",
+        "assignment_status": "Assigned",
+    }], candidates=[_candidate(12)])
+
+    body = employee_client.get(
+        "/partials/shifts/11?panel=1").get_data(as_text=True)
+
+    assert "Gap 1" in body
+    assert "Run Staffing Recovery" not in body
+    assert 'href="/shifts/11/recovery"' not in body
 
 
 def test_recovery_page_shows_selected_shift_and_authoritative_coverage(

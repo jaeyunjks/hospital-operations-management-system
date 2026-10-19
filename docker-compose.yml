@@ -10,9 +10,9 @@ services:
     container_name: homs-homepage
     ports:
       - "3000:80"
-    networks: [homs-net]
+    networks: [ homs-net ]
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1/"]
+      test: [ "CMD", "wget", "-q", "--spider", "http://127.0.0.1/" ]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -21,7 +21,7 @@ services:
 
   # --- student-5 — Staff & Shift Management ----------------------------
   student5-database:
-    networks: [homs-net]
+    networks: [ homs-net ]
     build:
       context: .
       dockerfile: student-5/database/Dockerfile
@@ -45,7 +45,7 @@ services:
     restart: unless-stopped
 
   student5-backend:
-    networks: [homs-net]
+    networks: [ homs-net ]
     build:
       context: .
       dockerfile: student-5/backend/Dockerfile
@@ -62,6 +62,7 @@ services:
       RAG_ENABLED: "${STUDENT5_RAG_ENABLED:-false}"
       RAG_SERVER_URL: "${STUDENT5_RAG_SERVER_URL:-http://host.docker.internal:8100}"
       RAG_TIMEOUT: "${STUDENT5_RAG_TIMEOUT:-100}"
+      MULTI_AGENT_BASE_URL: "${STUDENT5_MULTI_AGENT_BASE_URL:-http://host.docker.internal:8200}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -82,7 +83,7 @@ services:
     restart: unless-stopped
 
   student5-frontend:
-    networks: [homs-net]
+    networks: [ homs-net ]
     build:
       context: .
       dockerfile: student-5/frontend/Dockerfile
@@ -126,10 +127,10 @@ services:
       PORT: 6400
       DB_PATH: /app/rooms.db
       FLASK_DEBUG: 0
-    ports: ["6400:6400"]
-    networks: [homs-net]
+    ports: [ "6400:6400" ]
+    networks: [ homs-net ]
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:6400/health')\""]
+      test: [ "CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:6400/health')\"" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -156,15 +157,15 @@ services:
       RAG_ENABLED: "${STUDENT4_RAG_ENABLED:-false}"
       RAG_SERVER_URL: "${STUDENT4_RAG_SERVER_URL:-http://host.docker.internal:8100}"
       RAG_TIMEOUT: "${STUDENT4_RAG_TIMEOUT:-100}"
-    ports: ["5400:5400"]
+    ports: [ "5400:5400" ]
     depends_on:
       student-4-database:
         condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    networks: [homs-net]
+    networks: [ homs-net ]
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:5400/health')\""]
+      test: [ "CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:5400/health')\"" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -180,11 +181,11 @@ services:
       PORT: 3400
       BACKEND_URL: http://student-4-backend:5400
       FLASK_DEBUG: 0
-    ports: ["3400:3400"]
+    ports: [ "3400:3400" ]
     depends_on:
       student-4-backend:
         condition: service_healthy
-    networks: [homs-net]
+    networks: [ homs-net ]
 
   # --- student-3 — Pharmacy & Medication Inventory Management -----------
   student-3-database:
@@ -195,12 +196,12 @@ services:
     environment:
       PORT: 6300
       STUDENT3_DATABASE_PATH: /data/pharmacy.db
-    ports: ["6300:6300"]
+    ports: [ "6300:6300" ]
     volumes:
       - student3-database-data:/data
-    networks: [homs-net]
+    networks: [ homs-net ]
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:6300/health')\""]
+      test: [ "CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:6300/health')\"" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -234,13 +235,13 @@ services:
       FLASK_DEBUG: 0
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    ports: ["5300:5300"]
+    ports: [ "5300:5300" ]
     depends_on:
       student-3-database:
         condition: service_healthy
-    networks: [homs-net]
+    networks: [ homs-net ]
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:5300/health')\""]
+      test: [ "CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:5300/health')\"" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -257,13 +258,13 @@ services:
       # Demo default only; set STUDENT3_FLASK_SECRET_KEY outside local development.
       FLASK_SECRET_KEY: "${STUDENT3_FLASK_SECRET_KEY:-student3-compose-development-secret}"
       FLASK_DEBUG: 0
-    ports: ["3300:3300"]
+    ports: [ "3300:3300" ]
     depends_on:
       student-3-backend:
         condition: service_healthy
-    networks: [homs-net]
+    networks: [ homs-net ]
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:3300/')\""]
+      test: [ "CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://localhost:3300/')\"" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -279,7 +280,7 @@ services:
       - "6200:6200"
     volumes:
       - student2-database-data:/data
-    networks: [homs-net]
+    networks: [ homs-net ]
     healthcheck:
       test:
         - CMD
@@ -331,7 +332,7 @@ services:
         condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
-    networks: [homs-net]
+    networks: [ homs-net ]
     healthcheck:
       test:
         - CMD
@@ -355,7 +356,7 @@ services:
     depends_on:
       student-2-backend:
         condition: service_healthy
-    networks: [homs-net]
+    networks: [ homs-net ]
     healthcheck:
       test:
         - CMD
@@ -370,7 +371,7 @@ services:
 
   # --- student-1 — Patient & Admissions Management ---------------------
   student-1-database:
-    networks: [homs-net]
+    networks: [ homs-net ]
     build:
       context: ./student-1
       dockerfile: database/Dockerfile
@@ -423,7 +424,7 @@ services:
         condition: service_healthy
     ports:
       - "5100:5100"
-    networks: [homs-net]
+    networks: [ homs-net ]
     command: python -m backend.app
     healthcheck:
       test:
@@ -438,7 +439,7 @@ services:
     restart: unless-stopped
 
   student-1-frontend:
-    networks: [homs-net]
+    networks: [ homs-net ]
     build:
       context: ./student-1
       dockerfile: frontend/Dockerfile

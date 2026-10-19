@@ -71,6 +71,23 @@
     {% if shift.notes %}<p class="detail-notes">{{ shift.notes }}</p>{% endif %}
   </section>
 
+  {% if is_manager and coverage and coverage.difference < 0 %}
+  <section class="drawer__section recovery-entry" aria-labelledby="recovery-entry-heading">
+    <div>
+      <span class="u-label">Decision support</span>
+      <h3 id="recovery-entry-heading">Staffing Recovery</h3>
+      <p class="drawer__muted">
+        Review this coverage gap with policy guidance, controlled read-only
+        evidence, independent agent review, and explicit Human Review.
+      </p>
+    </div>
+    <a class="btn-primary" href="{{ url_for('recovery_workflow_page', shift_id=shift.shift_id) }}">
+      Run Staffing Recovery
+    </a>
+    <p class="drawer__muted">Analysis only. No roster changes are made automatically.</p>
+  </section>
+  {% endif %}
+
   <section class="drawer__section" aria-labelledby="current-assignments-heading">
     <div class="row row--between">
       <h3 class="u-label" id="current-assignments-heading">Current assignments</h3>
@@ -221,23 +238,6 @@
     <p class="drawer__muted">No staff hold the required role for this shift.</p>
     {% endif %}
   </section>
-
-  {% if coverage and coverage.difference < 0 %}
-  <section class="drawer__section recovery-entry" aria-labelledby="recovery-entry-heading">
-    <div>
-      <span class="u-label">Decision support</span>
-      <h3 id="recovery-entry-heading">Staffing Recovery</h3>
-      <p class="drawer__muted">
-        Review this coverage gap with policy guidance, controlled read-only
-        evidence, independent agent review, and explicit Human Review.
-      </p>
-    </div>
-    <a class="btn-primary" href="{{ url_for('recovery_workflow_page', shift_id=shift.shift_id) }}">
-      Run Staffing Recovery
-    </a>
-    <p class="drawer__muted">Analysis only. No roster changes are made automatically.</p>
-  </section>
-  {% endif %}
 
   <section class="drawer__section drawer__boundary" aria-labelledby="shift-actions-heading">
     <h3 class="u-label" id="shift-actions-heading">Shift actions</h3>
