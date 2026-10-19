@@ -13,6 +13,7 @@
 <section class="panel" aria-label="Shared MCP tools">{% include 'partials/mcp_panel.html' %}</section>
 
 <section class="panel" aria-label="Pharmacy assistant">{% include 'partials/rag_panel.html' %}</section>
+<section class="panel" aria-label="Multi-agent reorder review">{% include 'partials/multi_agent_panel.html' %}</section>
 
 <section class="stat-row" aria-label="Pharmacy inventory summary">
   <a class="stat" href="/medicines?stock_status=low"><span class="stat__label">Low Stock</span><strong class="stat__value stat__value--warning">{{ counts.low_stock|default(0) }}</strong><span class="stat__meta">At or below reorder level</span></a>

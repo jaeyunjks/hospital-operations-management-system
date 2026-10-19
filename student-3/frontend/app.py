@@ -513,6 +513,71 @@ def rag_ask():
         return render_template("partials/rag_result_error.html", error=str(exc))
 
 
+MULTI_AGENT_DECISIONS = (("approve", "Approve"), ("correct", "Correct"),
+                         ("partially_accept", "Partially accept"), ("reject", "Reject"))
+
+
+def _multi_agent_view(body):
+    return render_template("partials/multi_agent_result.html", workflow=body["workflow"],
+                           evidence=body.get("evidence_summary"), decisions=MULTI_AGENT_DECISIONS,
+                           is_manager=is_manager())
+
+
+@app.get("/multi-agent/status")
+def multi_agent_status_badge():
+    try:
+        return render_template("partials/multi_agent_status.html", status=api_client.multi_agent_status(),
+                               error=None)
+    except api_client.BackendError as exc:
+        return render_template("partials/multi_agent_status.html", status=None, error=str(exc))
+
+
+@app.get("/multi-agent/form")
+def multi_agent_form():
+    """Medicine picker for a reorder decision; loaded after the dashboard renders."""
+    try:
+        candidates, error = api_client.multi_agent_candidates(), None
+    except api_client.BackendError as exc:
+        candidates, error = [], str(exc)
+    return render_template("partials/multi_agent_form.html", candidates=candidates, error=error)
+
+
+@app.post("/multi-agent/start")
+def multi_agent_start():
+    """Run Planner -> Worker -> Reviewer for one medicine; either role may start it."""
+    medicine_id = request.form.get("medicine_id", type=int)
+    if medicine_id is None:
+        return render_template("partials/multi_agent_error.html", error="Choose a medicine first")
+    try:
+        return _multi_agent_view(api_client.multi_agent_start(medicine_id))
+    except api_client.BackendError as exc:
+        return render_template("partials/multi_agent_error.html", error=str(exc))
+
+
+@app.get("/multi-agent/workflows/<workflow_id>")
+def multi_agent_workflow(workflow_id):
+    try:
+        return _multi_agent_view(api_client.multi_agent_workflow(workflow_id))
+    except api_client.BackendError as exc:
+        return render_template("partials/multi_agent_error.html", error=str(exc))
+
+
+@app.post("/multi-agent/workflows/<workflow_id>/review")
+def multi_agent_review(workflow_id):
+    """Record the human-review decision; only a Pharmacy Manager may decide."""
+    if not is_manager():
+        return render_template("partials/multi_agent_error.html", error="Pharmacy Manager role required"), 403
+    decision = request.form.get("decision", "")
+    if decision not in dict(MULTI_AGENT_DECISIONS):
+        return render_template("partials/multi_agent_error.html", error="Choose a decision first")
+    try:
+        body = api_client.multi_agent_review(workflow_id, decision, request.form.get("comment", ""),
+                                             current_identity()["role"])
+        return _multi_agent_view(body)
+    except api_client.BackendError as exc:
+        return render_template("partials/multi_agent_error.html", error=str(exc))
+
+
 @app.get("/movements")
 def movements():
     filters = movement_filters()
@@ -643,4 +708,4 @@ def health():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", os.environ.get("FRONTEND_PORT", "3300")))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port, debug=False)  # noqa: S104 - container listens on its network; Compose publishes the port

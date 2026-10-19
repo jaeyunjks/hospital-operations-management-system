@@ -1,0 +1,5 @@
+{% if error %}<span class="badge badge-danger">Backend unavailable</span>
+{% elif not status.enabled %}<span class="badge badge-neutral">Multi-Agent disabled</span>
+{% elif not status.reachable %}<span class="badge badge-danger">Multi-Agent server unreachable</span>
+{% else %}<span class="badge badge-success">Multi-Agent connected</span>
+{% endif %}

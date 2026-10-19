@@ -81,6 +81,7 @@ Compose waits for database health, uses `http://student-3-database:6300` on `hom
 |---|---|---|---|
 | `PORT` / `BACKEND_PORT` | `5300` | No | Listen port; `PORT` wins. |
 | `DATABASE_URL` / `DATABASE_SERVICE_URL` | `http://localhost:6300` | No | Database-service base URL; first name wins. |
+| `AI_ENABLED` | `true` | No | AI-Mode switch; `false` (the cloud baseline) makes advisories use their rule-based fallback without contacting Ollama. |
 | `OLLAMA_URL` | `http://localhost:11434` | No | Ollama API base URL; Compose uses `http://host.docker.internal:11434`. |
 | `OLLAMA_MODEL` | `llama3.2:3b` | No | Model submitted to Ollama. |
 | `OLLAMA_TIMEOUT` | `90` seconds | No | Bound per model call; invalid input reverts to 90. |
@@ -90,6 +91,9 @@ Compose waits for database health, uses `http://student-3-database:6300` on `hom
 | `RAG_ENABLED` | `false` | No | Exactly `true` enables questions to the shared RAG server; CI leaves it off. |
 | `RAG_SERVER_URL` | `http://127.0.0.1:8100` | No | Shared RAG server; Compose uses `http://host.docker.internal:8100`. |
 | `RAG_TIMEOUT` | `100` seconds | No | Bound per question; kept below the frontend's 120-second wait. |
+| `MULTI_AGENT_ENABLED` | `false` | No | Exactly `true` enables reorder reviews on the shared Multi-Agent Server; CI and the cloud baseline leave it off. |
+| `MULTI_AGENT_SERVER_URL` | `http://127.0.0.1:8200` | No | Shared Multi-Agent Server; Compose uses `http://host.docker.internal:8200`. |
+| `MULTI_AGENT_TIMEOUT` | `300` seconds | No | Bound for one Planner → Worker → Reviewer run; kept below the frontend's 320-second wait. |
 | `AGENT_ENABLED` | `true` | No | Starts background draft-proposal cycles. |
 | `AGENT_INTERVAL_SECONDS` | `300` | No | Delay between cycles; invalid/low values become 300. |
 | `AGENT_MAX_PROPOSALS` | `3` | No | Maximum created per cycle. |
@@ -129,6 +133,11 @@ Manager-changing routes require `X-HOMS-Role: Pharmacy Manager`.
 | GET | `/api/purchase-orders/alerts` | Read-only open-order summary (pending, AI-suggested, approved, ordered, overdue deliveries) for the MCP order-alerts tool. |
 | GET, PUT | `/api/purchase-orders/{id}` | Detail or manager edit. |
 | POST | `/api/purchase-orders/{id}/approve`, `/reject`, `/mark-ordered`, `/cancel` | Workflow transitions. |
+| GET | `/api/multi-agent/status` | Multi-Agent flag and reachability. |
+| GET | `/api/multi-agent/candidates` | Medicines that currently qualify for a reorder decision. |
+| POST | `/api/multi-agent/reorder-workflows` | Run Planner → Worker → Reviewer for one medicine (`{"medicine_id": ...}`). |
+| GET | `/api/multi-agent/workflows/{id}` | Read one pharmacy workflow. |
+| POST | `/api/multi-agent/workflows/{id}/review` | Manager human-review decision (`approve`, `correct`, `partially_accept`, `reject`). |
 
 Observed health request and response:
 
@@ -258,13 +267,46 @@ To run it locally, start Ollama and the RAG server from the repository root
 `python3 ai-services/rag-server/server.py`), and start this backend with
 `RAG_ENABLED=true`.
 
+## Shared Multi-Agent access
+
+`POST /api/multi-agent/reorder-workflows` takes one `medicine_id`. The backend
+recalculates the reorder candidates, refuses a medicine that no longer
+qualifies (409), and sends the Multi-Agent Server a task prefixed
+`Pharmacy reorder decision:` with evidence built by `services/reorder_workflow.py`:
+the current state, an objective (usable stock against the coverage target), three
+options (order the suggested quantity, order half, do not order) with their risks,
+hard constraints, the manager-approval rule and the known unknowns. All numbers
+come from the backend, never from a model.
+
+The Multi-Agent Server runs the Planner, Worker and Reviewer and returns
+`awaiting_human_review`. `services/multi_agent_client.py` (standard library only)
+returns an allowlisted view of each stage and refuses any workflow whose task is
+not a pharmacy reorder decision (403). Only a Pharmacy Manager may submit the
+review; a comment is required unless the decision is `approve`. The workflow
+never creates or changes a purchase order. Each call is logged as
+`[MULTI-AGENT] <action> outcome=... status=... duration_ms=...`.
+
+| Outcome | HTTP | Meaning |
+|---|---|---|
+| `ok` | 200 / 201 | Workflow started, read or reviewed. |
+| `disabled` | 503 | `MULTI_AGENT_ENABLED` is not `true` (the CI setting). |
+| `forbidden` | 403 | The workflow belongs to another feature. |
+| `not_found` / `invalid_state` | 404 / 409 | Unknown workflow, or already reviewed. |
+| `workflow_failed` / `unavailable` | 502 | An agent failed after its retries, or the server is unreachable. |
+| `timeout` | 504 | No result within `MULTI_AGENT_TIMEOUT`. |
+
+To run it locally, start the Multi-Agent Server from the repository root
+(`python3 ai-services/multi-agent-server/api.py --model-mode ollama`; from
+Docker add `HOMS_MULTI_AGENT_HOST=0.0.0.0 HOMS_MULTI_AGENT_ALLOW_DOCKER_HOST=true`)
+and start this backend with `MULTI_AGENT_ENABLED=true`.
+
 ## Running the tests
 
 ```bash
 cd student-3/backend && python3 -m unittest discover -s tests -v
 ```
 
-Tests mock every database-service call, never using port 6300. They cover CRUD validation, FEFO, receipt/write-off, AI source/fallback behaviour, dashboard bulk reads, agent duplicate/adaptation behaviour, and MCP access (disabled flag, tool allowlist, in-process MCP round trip, 502/504 mapping). RAG access tests cover the disabled flag, request validation, contract checks and failure mapping. The current suite passes **48 tests**; MCP round-trip tests are skipped if the `mcp` SDK is not installed.
+Tests mock every database-service call, never using port 6300. They cover CRUD validation, FEFO, receipt/write-off, AI source/fallback behaviour, dashboard bulk reads, agent duplicate/adaptation behaviour, and MCP access (disabled flag, tool allowlist, in-process MCP round trip, 502/504 mapping). RAG access tests cover the disabled flag, request validation, contract checks and failure mapping. Multi-Agent tests cover the disabled flag, evidence built from backend figures, the pharmacy-only scope, manager-only review, validation and failure mapping; AI-Mode tests cover the `AI_ENABLED` switch. The current suite passes **63 tests**; MCP round-trip tests are skipped if the `mcp` SDK is not installed.
 
 ## Troubleshooting
 

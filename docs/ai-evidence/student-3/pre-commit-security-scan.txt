@@ -1,0 +1,40 @@
+# Student 3 - pre-commit security scan report (Release 2)
+# 2026-10-18T23:24:00Z
+# Scope: the Student 3 services and the shared components Student 3 owns
+#   (RAG server, pharmacy MCP tools, agentic-loop RAG mode).
+# Tools: ruff 0.17.1 security rules (S), detect-secrets 1.5.0, pip-audit 2.10.1
+
+## Findings on the first run and how they were resolved
+- pip-audit: Flask 3.0.3 has a known vulnerability (PYSEC-2026-2151). Upgraded to Flask 3.1.3
+  in student-3/backend, student-3/frontend, student-3/database and ai-services/rag-server;
+  all unit tests pass on 3.1.3.
+- ruff S310 (urllib opens a configured URL): every client now refuses a configured service URL
+  that is not http:// or https:// (student-3/backend/services/http_url.py, the frontend
+  api_client, the RAG server's Ollama client and CLI, and the loop's RAG client). The reviewed
+  calls carry a noqa comment that states this check.
+- ruff S608 (SQL text built with f-strings): reviewed. Column and table names come from fixed
+  allowlists in the code and every user-supplied value is a ? parameter. Marked with the reason.
+- ruff S104 (listen on 0.0.0.0): needed inside the containers; Compose publishes the ports.
+  In the RAG server it is the list used to refuse wildcard binds.
+- ruff S101 (assert): only in test files; allowed there by student-3/ruff.toml and
+  ai-services/rag-server/ruff.toml.
+- detect-secrets: no secrets found.
+
+## Final run
+$ ruff check --select S student-3 ai-services/rag-server ai-services/mcp-server/tools/pharmacy_stock.py ai-services/mcp-server/tools/pharmacy_orders.py ai-services/agentic-loop/rag_loop.py
+All checks passed!
+(exit 0)
+
+$ detect-secrets scan student-3 ai-services/rag-server ai-services/mcp-server/tools/pharmacy_stock.py ai-services/mcp-server/tools/pharmacy_orders.py ai-services/agentic-loop/rag_loop.py docker-compose.yml .github/workflows/student-3.yml
+files with potential secrets: 0
+
+$ pip-audit -r student-3/backend/requirements.txt
+No known vulnerabilities found
+$ pip-audit -r student-3/frontend/requirements.txt
+No known vulnerabilities found
+$ pip-audit -r student-3/database/requirements.txt
+No known vulnerabilities found
+$ pip-audit -r ai-services/rag-server/requirements.txt
+No known vulnerabilities found
+$ pip-audit -r ai-services/mcp-server/requirements.txt
+No known vulnerabilities found

@@ -7,8 +7,10 @@
 # Stages: syntax check and unit tests (feature and shared, with fakes; no MCP,
 # RAG or Ollama server is started) -> build all three images -> verify
 # database seeding and backend enrichment -> verify MCP and RAG are retained
-# but disabled in the backend and frontend -> tear down. Ollama and AI
-# endpoints are excluded. The shared MCP and RAG servers are never started in
+# but disabled in the backend and frontend -> post-commit endpoint tests for
+# POST /api/stock/issue and POST /api/purchase-orders/{id}/approve ->
+# verify Multi-Agent is retained but disabled -> tear down. Ollama and AI
+# endpoints are excluded. The shared MCP, RAG and Multi-Agent servers are never started in
 # CI: MCP_ENABLED and RAG_ENABLED are false, so their routes and dashboard
 # panels must report "disabled".
 # ==========================================================================
@@ -36,6 +38,7 @@ on:
 env:
   MCP_ENABLED: 'false'
   RAG_ENABLED: 'false'
+  MULTI_AGENT_ENABLED: 'false'
 
 jobs:
   test:
@@ -137,7 +140,8 @@ jobs:
         run: |
           docker run -d --name s3-be --network homs-s3-ci -p 127.0.0.1:5300:5300 \
             -e DATABASE_SERVICE_URL=http://s3-db:6300 \
-            -e MCP_ENABLED="$MCP_ENABLED" -e RAG_ENABLED="$RAG_ENABLED" student-3-backend
+            -e MCP_ENABLED="$MCP_ENABLED" -e RAG_ENABLED="$RAG_ENABLED" \
+            -e MULTI_AGENT_ENABLED="$MULTI_AGENT_ENABLED" student-3-backend
 
       - name: Wait for backend health
         run: |
@@ -164,6 +168,41 @@ jobs:
           assert all(fields <= m.keys() for m in medicines), 'Backend enrichment fields are missing'
           assert any(m['supplier_name'] for m in medicines), 'Supplier enrichment is missing'
           print(f'Backend returned {len(medicines)} enriched medicines')
+          PY
+
+      - name: Post-commit endpoint tests (stock issue and purchase-order approval)
+        # Two backend/API endpoint functions tested against the running container and a
+        # freshly seeded database: POST /api/stock/issue (FEFO) and
+        # POST /api/purchase-orders/{id}/approve (manager approval). Standard library only.
+        env:
+          STUDENT3_BACKEND_URL: http://localhost:5300
+        run: |
+          python3 -m unittest discover -v -s student-3/tests -p 'test_endpoints_ci.py' 2>&1 | tee /tmp/s3-endpoint-tests.txt
+          grep -q '^OK' /tmp/s3-endpoint-tests.txt
+          {
+            echo '### Student 3 post-commit endpoint tests'
+            echo '```'
+            cat /tmp/s3-endpoint-tests.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify Multi-Agent is retained but disabled in the backend
+        run: |
+          curl -fsS --connect-timeout 2 --max-time 10 http://localhost:5300/api/multi-agent/status -o /tmp/s3-ma-status.json
+          code=$(curl -sS --connect-timeout 2 --max-time 10 -o /tmp/s3-ma-start.json -w '%{http_code}' \
+            -X POST http://localhost:5300/api/multi-agent/reorder-workflows -H 'Content-Type: application/json' \
+            -d '{"medicine_id": 1}')
+          echo "POST /api/multi-agent/reorder-workflows -> HTTP $code"
+          test "$code" = 503
+          python - <<'PY'
+          import json
+          status = json.load(open('/tmp/s3-ma-status.json'))
+          start = json.load(open('/tmp/s3-ma-start.json'))
+          print('Multi-Agent status:', status)
+          print('Multi-Agent start:', start)
+          assert status['enabled'] is False and status['reachable'] is False, 'Multi-Agent must be disabled in CI'
+          assert start['outcome'] == 'disabled' and start['ok'] is False, 'Disabled workflow start was not refused'
+          print('Multi-Agent integration is present and disabled for CI')
           PY
 
       - name: Verify MCP is retained but disabled in the backend
@@ -245,6 +284,10 @@ jobs:
           grep -q 'RAG disabled' /tmp/s3-rag-badge.html
           grep -q 'RAG mode is disabled' /tmp/s3-rag-panel.html
           echo "Frontend RAG panel is present and reports RAG disabled"
+          curl -fsS --max-time 30 -b "$jar" http://localhost:3300/multi-agent/status -o /tmp/s3-ma-badge.html
+          grep -q 'Reorder decision review' /tmp/s3-dashboard.html
+          grep -q 'Multi-Agent disabled' /tmp/s3-ma-badge.html
+          echo "Frontend Multi-Agent panel is present and reports Multi-Agent disabled"
 
       - name: Container logs on failure
         if: failure()

@@ -11,15 +11,17 @@ import urllib.request
 
 from flask import Flask, g, jsonify, request
 
-from services import mcp_client, rag_client
+from services import mcp_client, multi_agent_client, rag_client
+from services.reorder_workflow import build_evidence as build_reorder_evidence
+from services.http_url import http_url
 from services.ai_client import health_check
 from services.expiry_advisory import advisory as expiry_advisory
 from services.reorder_recommendation import advisory as reorder_advisory, candidates_for as reorder_candidates
 from services.scheduled_agent import ScheduledAgent, ORDER_LOCK, decision_record, timestamp
 
-DATABASE_SERVICE_URL = os.environ.get(
+DATABASE_SERVICE_URL = http_url(os.environ.get(
     "DATABASE_URL", os.environ.get("DATABASE_SERVICE_URL", "http://localhost:6300")
-).rstrip("/")
+), "DATABASE_URL")
 PORT = int(os.environ.get("PORT", os.environ.get("BACKEND_PORT", "5300")))
 MANAGER_ROLE = "Pharmacy Manager"
 OPEN_STATUSES = {"pending_approval", "approved", "ordered"}
@@ -68,10 +70,10 @@ def database_request(path, method="GET", payload=None):
     """Call only the database service; this process never opens SQLite."""
     data = json.dumps(payload).encode() if payload is not None else None
     headers = {"Content-Type": "application/json"} if data else {}
-    call = urllib.request.Request(f"{DATABASE_SERVICE_URL}{path}", data=data,
+    call = urllib.request.Request(f"{DATABASE_SERVICE_URL}{path}", data=data,  # noqa: S310 - http(s) base URL checked at start-up
                                   headers=headers, method=method)
     try:
-        with urllib.request.urlopen(call, timeout=5) as response:
+        with urllib.request.urlopen(call, timeout=5) as response:  # noqa: S310 - http(s) base URL checked by http_url()
             return json.load(response)
     except urllib.error.HTTPError as exc:
         try:
@@ -427,6 +429,89 @@ def rag_ask():
         return fail(f"question must be at most {rag_client.MAX_QUESTION_LENGTH} characters", 400)
     result = rag_client.ask(question)
     return jsonify(result.to_dict()), RAG_STATUS_CODES[result.outcome]
+
+
+MULTI_AGENT_STATUS_CODES = {"ok": 200, "disabled": 503, "not_found": 404, "forbidden": 403,
+                            "invalid_state": 409, "rejected": 400, "workflow_failed": 502,
+                            "unavailable": 502, "timeout": 504}
+
+
+@app.get("/api/multi-agent/status")
+def multi_agent_status():
+    """Report whether Multi-Agent mode is enabled and the shared server is reachable."""
+    return jsonify(multi_agent_client.status())
+
+
+@app.get("/api/multi-agent/candidates")
+def multi_agent_candidates():
+    """Medicines that currently qualify for a reorder decision (read-only)."""
+    try:
+        candidates = reorder_candidates(database_request)
+    except DatabaseServiceError as exc:
+        return fail(str(exc), exc.status)
+    return jsonify({"candidates": [
+        {key: item[key] for key in ("medicine_id", "medicine_name", "supplier_name",
+                                    "available_quantity", "suggested_quantity")}
+        for item in candidates]})
+
+
+@app.post("/api/multi-agent/reorder-workflows")
+def multi_agent_start_reorder():
+    """Run Planner -> Worker -> Reviewer for one medicine; never creates or changes orders."""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or set(payload) != {"medicine_id"}:
+        return fail("Body must be a JSON object with only 'medicine_id'", 400)
+    medicine_id = payload["medicine_id"]
+    if not isinstance(medicine_id, int) or isinstance(medicine_id, bool):
+        return fail("medicine_id must be an integer", 400)
+    if not multi_agent_client.MULTI_AGENT_ENABLED:
+        result = multi_agent_client.WorkflowResult(False, "disabled", error="Multi-Agent mode is disabled")
+        return jsonify(result.to_dict()), MULTI_AGENT_STATUS_CODES[result.outcome]
+    try:
+        candidate = next((item for item in reorder_candidates(database_request)
+                          if item["medicine_id"] == medicine_id), None)
+    except DatabaseServiceError as exc:
+        return fail(str(exc), exc.status)
+    if candidate is None:
+        return fail("This medicine does not currently need a reorder decision", 409)
+    result = multi_agent_client.start(candidate["medicine_name"], build_reorder_evidence(candidate))
+    body = result.to_dict()
+    body["evidence_summary"] = {key: candidate[key] for key in (
+        "medicine_name", "supplier_name", "available_quantity", "near_expiry_quantity",
+        "open_order_quantity", "daily_usage_rate", "lead_time_days", "suggested_quantity", "unit_price")}
+    return jsonify(body), 201 if result.ok else MULTI_AGENT_STATUS_CODES[result.outcome]
+
+
+@app.get("/api/multi-agent/workflows/<workflow_id>")
+def multi_agent_get(workflow_id):
+    """Read one pharmacy reorder workflow, including its human review if recorded."""
+    if not multi_agent_client.valid_workflow_id(workflow_id):
+        return fail("Workflow not found", 404)
+    result = multi_agent_client.get(workflow_id)
+    return jsonify(result.to_dict()), MULTI_AGENT_STATUS_CODES[result.outcome]
+
+
+@app.post("/api/multi-agent/workflows/<workflow_id>/review")
+def multi_agent_review(workflow_id):
+    """Record the Pharmacy Manager's human-review decision on a pharmacy workflow."""
+    if denied := require_manager():
+        return denied
+    if not multi_agent_client.valid_workflow_id(workflow_id):
+        return fail("Workflow not found", 404)
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict) or set(payload) - {"decision", "comment"}:
+        return fail("Only 'decision' and 'comment' are accepted", 400)
+    decision = payload.get("decision")
+    if decision not in multi_agent_client.DECISIONS:
+        return fail("decision must be one of: " + ", ".join(multi_agent_client.DECISIONS), 400)
+    comment = payload.get("comment", "")
+    if not isinstance(comment, str) or len(comment.strip()) > multi_agent_client.MAX_COMMENT_LENGTH:
+        return fail(f"comment must be text of at most {multi_agent_client.MAX_COMMENT_LENGTH} characters", 400)
+    comment = comment.strip()
+    if decision in {"correct", "partially_accept", "reject"} and not comment:
+        return fail("A comment is required unless the decision is approve", 400)
+    result = multi_agent_client.review(workflow_id, decision, comment)
+    return jsonify(result.to_dict()), MULTI_AGENT_STATUS_CODES[result.outcome]
 
 
 @app.get("/api/staff")
@@ -873,4 +958,4 @@ def po_update(po_id):
 
 if __name__ == "__main__":
     agent.start()
-    app.run(host="0.0.0.0", port=PORT, debug=False)
+    app.run(host="0.0.0.0", port=PORT, debug=False)  # noqa: S104 - container listens on its network; Compose publishes the port

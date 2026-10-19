@@ -1,0 +1,20 @@
+<div class="panel__header">
+  <div>
+    <span class="page-header__eyebrow">Multi-Agent workflow</span>
+    <h2 class="panel__title">Reorder decision review</h2>
+  </div>
+  <div id="multi-agent-status" hx-get="/multi-agent/status" hx-trigger="load" hx-swap="innerHTML"><span class="badge badge-neutral">Checking Multi-Agent…</span></div>
+</div>
+<div class="panel__body">
+  <p class="table__muted">The shared Multi-Agent Server reviews one low-stock medicine: the Planner sets out what to check, the Worker compares the order options using backend-calculated figures, and the Reviewer checks the Worker's proposal for risks. A Pharmacy Manager then approves, corrects, partially accepts or rejects it. The workflow never creates or changes a purchase order.</p>
+  <div id="multi-agent-form" hx-get="/multi-agent/form" hx-trigger="load" hx-swap="innerHTML"><p class="table__muted">Loading medicines…</p></div>
+  <div id="multi-agent-loading" class="ai-loading htmx-indicator" role="status" aria-live="polite">
+    <span class="ai-spinner" aria-hidden="true"></span>
+    <div>
+      <p class="ai-loading__status">Planner, Worker and Reviewer are working… <span data-ai-elapsed>0s</span></p>
+      <p class="ai-loading__note">Three local models run one after another; this usually takes 1 to 2 minutes.</p>
+      <p class="ai-loading__slow" data-ai-slow hidden>Still working — the first run after start-up loads the models.</p>
+    </div>
+  </div>
+  <div id="multi-agent-result" aria-live="polite"></div>
+</div>

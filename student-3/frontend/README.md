@@ -79,6 +79,7 @@ Compose waits for backend health and uses `http://student-3-backend:5300` on `ho
 | `PORT` / `FRONTEND_PORT` | `3300` | No | Listen port; `PORT` wins. |
 | `BACKEND_API_URL` | `http://localhost:5300` | No | The only service base URL used. |
 | `BACKEND_API_TIMEOUT` | `120` seconds | No | Timeout used for AI advisory calls; invalid input reverts to 120. |
+| `MULTI_AGENT_API_TIMEOUT` | `320` seconds | No | Wait for one multi-agent reorder review (three local models). |
 | `FLASK_SECRET_KEY` | Random per process | No | Signs the demo-role session cookie; Compose sets it from `STUDENT3_FLASK_SECRET_KEY` (fixed development default). |
 
 `BACKEND_API_TIMEOUT` is 120 seconds because an Ollama-backed backend advisory can take longer than ordinary CRUD. `api_client` turns timeout and connection failures into `BackendError`, and page routes render their error state instead of failing with a 500.
@@ -184,13 +185,30 @@ status badge loads after the page.
 
 The shared loading indicator shows elapsed time while the local model works.
 
+## Reorder decision review panel (Multi-Agent)
+
+The dashboard's **Reorder decision review** panel lists the medicines that
+currently qualify for a reorder and runs a review through the backend
+(`/api/multi-agent/*`); the frontend never contacts the Multi-Agent Server.
+
+- **Run multi-agent review** shows the backend's evidence summary and one card
+  each for the Planner (goal and steps), Worker (options, eligibility, risks and
+  proposal) and Reviewer (verdict, recommendation and risks), with the model
+  used and whether it was live or a fallback.
+- **Human review:** a Pharmacy Manager chooses Approve, Correct, Partially
+  accept or Reject (a comment is required unless approving) and the recorded
+  decision replaces the form. A Pharmacist sees "Waiting for a Pharmacy
+  Manager's decision" and the review route returns 403.
+- The panel states that no purchase order is created or changed; disabled or
+  unreachable Multi-Agent shows the backend's error.
+
 ## Running the tests
 
 ```bash
 cd student-3/frontend && python3 -m unittest discover -s tests -v
 ```
 
-Tests mock `api_client`, so they never use a live backend on port 5300. They cover rendering routes, dashboard data, manager gates, agent panel output, MCP panel rendering and argument forwarding, RAG answer/refusal/error rendering, and timeout/connection-error display. The current suite passes **49 tests**.
+Tests mock `api_client`, so they never use a live backend on port 5300. They cover rendering routes, dashboard data, manager gates, agent panel output, MCP panel rendering and argument forwarding, RAG answer/refusal/error rendering, and timeout/connection-error display. The current suite passes **61 tests**.
 
 ## Troubleshooting
 

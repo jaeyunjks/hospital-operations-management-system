@@ -9,7 +9,16 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-API_BASE_URL = os.environ.get("BACKEND_API_URL", "http://localhost:5300").rstrip("/")
+def _http_url(value, setting):
+    """The backend address must be a plain http(s) URL; urllib would also open file: URLs."""
+    candidate = (value or "").strip().rstrip("/")
+    parsed = urllib.parse.urlparse(candidate)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError(f"{setting} must be an http:// or https:// URL")
+    return candidate
+
+
+API_BASE_URL = _http_url(os.environ.get("BACKEND_API_URL", "http://localhost:5300"), "BACKEND_API_URL")
 try:
     BACKEND_API_TIMEOUT = float(os.environ.get("BACKEND_API_TIMEOUT", "120"))
 except ValueError:
@@ -29,9 +38,9 @@ def _request(path: str, method: str = "GET", payload: dict | None = None,
     headers = {"Content-Type": "application/json"} if data else {}
     if role:
         headers["X-HOMS-Role"] = role
-    call = urllib.request.Request(f"{API_BASE_URL}{path}", data=data, headers=headers, method=method)
+    call = urllib.request.Request(f"{API_BASE_URL}{path}", data=data, headers=headers, method=method)  # noqa: S310 - http(s) base URL checked at start-up
     try:
-        with urllib.request.urlopen(call, timeout=timeout) as response:
+        with urllib.request.urlopen(call, timeout=timeout) as response:  # noqa: S310 - http(s) base URL checked at start-up
             return json.load(response)
     except urllib.error.HTTPError as exc:
         try: message = json.load(exc).get("error", "Backend request failed")
@@ -175,3 +184,35 @@ def rag_ask(question):
     unreachable RAG raises :class:`BackendError` with the backend's message.
     """
     return _request("/api/rag/ask", "POST", {"question": question}, timeout=BACKEND_API_TIMEOUT)
+
+
+try:
+    MULTI_AGENT_API_TIMEOUT = float(os.environ.get("MULTI_AGENT_API_TIMEOUT", "320"))
+except ValueError:
+    MULTI_AGENT_API_TIMEOUT = 320.0
+
+
+def multi_agent_status():
+    """Ask the backend whether the shared Multi-Agent Server is enabled and reachable."""
+    return _request("/api/multi-agent/status", timeout=15)
+
+
+def multi_agent_candidates():
+    """Medicines that currently qualify for a reorder decision."""
+    return _request("/api/multi-agent/candidates", timeout=15)["candidates"]
+
+
+def multi_agent_start(medicine_id):
+    """Run Planner -> Worker -> Reviewer through the backend; waits for all three agents."""
+    return _request("/api/multi-agent/reorder-workflows", "POST", {"medicine_id": medicine_id},
+                    timeout=MULTI_AGENT_API_TIMEOUT)
+
+
+def multi_agent_workflow(workflow_id):
+    return _request(f"/api/multi-agent/workflows/{workflow_id}", timeout=15)
+
+
+def multi_agent_review(workflow_id, decision, comment, role):
+    """Send the Pharmacy Manager's human-review decision through the backend."""
+    return _request(f"/api/multi-agent/workflows/{workflow_id}/review", "POST",
+                    {"decision": decision, "comment": comment}, role, timeout=45)

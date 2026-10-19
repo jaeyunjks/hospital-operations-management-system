@@ -18,6 +18,7 @@ import os
 import sys
 import textwrap
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Dict, Optional, Tuple
 
@@ -26,13 +27,15 @@ DEFAULT_URL = os.environ.get("HOMS_RAG_URL", "http://127.0.0.1:8100")
 
 def call(base_url: str, method: str, path: str, payload: Optional[Dict[str, Any]] = None,
          timeout: float = 180) -> Tuple[int, Dict[str, Any]]:
+    if urllib.parse.urlparse(base_url).scheme not in ("http", "https"):
+        raise SystemExit("--url must be an http:// or https:// URL")
     data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 - http(s) base URL checked in __init__
         base_url.rstrip("/") + path, data=data, method=method,
         headers={"Content-Type": "application/json"} if data else {},
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - http(s) base URL checked in __init__
             return response.status, json.load(response)
     except urllib.error.HTTPError as error:
         try:

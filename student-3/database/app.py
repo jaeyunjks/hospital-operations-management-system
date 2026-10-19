@@ -223,7 +223,7 @@ def update_medicine(medicine_id):
     conn = get_db()
     try:
         cursor = conn.execute(
-            f"UPDATE medicines SET {', '.join(fields)} WHERE medicine_id = ?",
+            f"UPDATE medicines SET {', '.join(fields)} WHERE medicine_id = ?",  # noqa: S608 - column/table names come from a fixed allowlist; values are ? parameters
             values,
         )
         if cursor.rowcount == 0:
@@ -308,7 +308,7 @@ def get_batches():
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
     conn = get_db()
     try:
-        rows = conn.execute(f"SELECT * FROM batches{where} ORDER BY expiry_date ASC", values).fetchall()
+        rows = conn.execute(f"SELECT * FROM batches{where} ORDER BY expiry_date ASC", values).fetchall()  # noqa: S608 - column/table names come from a fixed allowlist; values are ? parameters
         return jsonify([dict(row) for row in rows])
     finally:
         conn.close()
@@ -460,7 +460,7 @@ def update_supplier(supplier_id):
     conn = get_db()
     try:
         cursor = conn.execute(
-            f"UPDATE suppliers SET {', '.join(fields)} WHERE supplier_id = ?",
+            f"UPDATE suppliers SET {', '.join(fields)} WHERE supplier_id = ?",  # noqa: S608 - column/table names come from a fixed allowlist; values are ? parameters
             values,
         )
         if cursor.rowcount == 0:
@@ -640,7 +640,7 @@ def update_purchase_order(po_id):
     if not fields: return json_error("No fields supplied for update", 400)
     conn = get_db()
     try:
-        cursor = conn.execute(f"UPDATE purchase_orders SET {', '.join(fields)} WHERE po_id = ?", (*values, po_id))
+        cursor = conn.execute(f"UPDATE purchase_orders SET {', '.join(fields)} WHERE po_id = ?", (*values, po_id))  # noqa: S608 - column/table names come from a fixed allowlist; values are ? parameters
         if cursor.rowcount == 0: return json_error("Purchase order not found", 404)
         conn.commit()
         return jsonify(dict(conn.execute("SELECT * FROM purchase_orders WHERE po_id = ?", (po_id,)).fetchone()))
@@ -783,4 +783,4 @@ def validate_non_negative_float(value, field_name):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=6300, debug=False)
+    app.run(host="0.0.0.0", port=6300, debug=False)  # noqa: S104 - container listens on its network; Compose publishes the port

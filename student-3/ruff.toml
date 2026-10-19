@@ -1,0 +1,6 @@
+# Ruff settings for Student 3 (pharmacy). The security rule selection itself comes
+# from the command line or the group's pre-commit configuration.
+[lint.per-file-ignores]
+# Test files use plain assert statements, and the CI endpoint tests call the
+# backend address given in STUDENT3_BACKEND_URL.
+"**/tests/*.py" = ["S101", "S310"]

@@ -1,0 +1,5 @@
+# Ruff settings for the shared RAG server. The security rule selection comes from
+# the command line or the group's pre-commit configuration.
+[lint.per-file-ignores]
+# Test files use plain assert statements and bind test servers to wildcard hosts on purpose.
+"tests/*.py" = ["S101", "S104"]

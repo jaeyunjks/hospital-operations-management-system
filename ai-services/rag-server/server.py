@@ -19,7 +19,7 @@ from rag import FEATURES, RagEngine, RagError, SCHEMA_VERSION, load_settings
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8100
-WILDCARD_HOSTS = {"0.0.0.0", "::", "[::]", "*"}
+WILDCARD_HOSTS = {"0.0.0.0", "::", "[::]", "*"}  # noqa: S104 - list used to refuse wildcard binds, not a bind
 REQUEST_FIELDS = {"question", "feature", "top_k"}
 MAX_BODY_BYTES = 4096
 

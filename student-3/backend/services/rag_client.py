@@ -17,13 +17,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from services.http_url import http_url
+
 FEATURE = "student-3"
 MAX_QUESTION_LENGTH = 500
 STATUSES = ("answered", "insufficient_context")
 CONFIDENCE = {"answered": ("high", "medium", "low"), "insufficient_context": ("none",)}
 
 RAG_ENABLED = os.environ.get("RAG_ENABLED", "false").strip().lower() == "true"
-RAG_SERVER_URL = os.environ.get("RAG_SERVER_URL", "http://127.0.0.1:8100").strip().rstrip("/")
+RAG_SERVER_URL = http_url(os.environ.get("RAG_SERVER_URL", "http://127.0.0.1:8100"), "RAG_SERVER_URL")
 try:
     RAG_TIMEOUT = float(os.environ.get("RAG_TIMEOUT", "100"))
 except ValueError:
@@ -68,10 +70,10 @@ class RAGResult:
 
 def _request(method: str, path: str, payload: dict[str, Any] | None = None, timeout: float | None = None):
     data = json.dumps(payload).encode() if payload is not None else None
-    call = urllib.request.Request(f"{RAG_SERVER_URL}{path}", data=data, method=method,
+    call = urllib.request.Request(f"{RAG_SERVER_URL}{path}", data=data, method=method,  # noqa: S310 - http(s) base URL checked at start-up
                                   headers={"Content-Type": "application/json"} if data else {})
     try:
-        with urllib.request.urlopen(call, timeout=timeout or RAG_TIMEOUT) as response:
+        with urllib.request.urlopen(call, timeout=timeout or RAG_TIMEOUT) as response:  # noqa: S310 - http(s) base URL checked by http_url()
             return response.status, json.load(response)
     except urllib.error.HTTPError as exc:
         try:

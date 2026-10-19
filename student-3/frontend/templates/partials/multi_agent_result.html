@@ -1,0 +1,64 @@
+{% set labels = {'awaiting_human_review': 'Awaiting human review', 'approved': 'Approved', 'corrected': 'Corrected',
+                 'partially_accepted': 'Partially accepted', 'rejected': 'Rejected', 'failed': 'Failed'} %}
+{% macro source(stage) %}{% if stage %}<span class="table__muted">{{ stage.model or 'model' }} · {{ 'fallback' if stage.fallback_used else 'live' }}</span>{% endif %}{% endmacro %}
+{% macro items(values) %}{% if values %}<ul class="ma-list">{% for value in values %}<li>{{ value }}</li>{% endfor %}</ul>{% else %}<p class="table__muted">None.</p>{% endif %}{% endmacro %}
+{% set plan = (workflow.planner or {}).output or {} %}
+{% set work = (workflow.worker or {}).output or {} %}
+{% set review = (workflow.reviewer or {}).output or {} %}
+<article class="ma-result" data-workflow-id="{{ workflow.workflow_id }}">
+  <div class="mcp-result__head">
+    <h3 class="mcp-subtitle">{{ workflow.medicine }}</h3>
+    <span class="badge {{ 'badge-warning' if workflow.status == 'awaiting_human_review' else ('badge-danger' if workflow.status in ('rejected', 'failed') else 'badge-success') }}">{{ labels.get(workflow.status, workflow.status|replace('_', ' ')|capitalize) }}</span>
+  </div>
+  {% if evidence %}
+  <p class="table__muted">Evidence from the pharmacy backend: {{ evidence.available_quantity }} in stock, {{ evidence.near_expiry_quantity }} expiring within the {{ evidence.lead_time_days }}-day lead time, {{ evidence.open_order_quantity }} on open orders, {{ evidence.daily_usage_rate }} issued per day, suggested order {{ evidence.suggested_quantity }} from {{ evidence.supplier_name }}.</p>
+  {% endif %}
+
+  <div class="ma-stages">
+    <section class="ma-stage" aria-label="Planner">
+      <div class="mcp-result__head"><h4 class="mcp-subtitle">1. Planner</h4>{{ source(workflow.planner) }}</div>
+      <p>{{ plan.goal or 'No plan returned.' }}</p>
+      {{ items(plan.planned_steps) }}
+    </section>
+    <section class="ma-stage" aria-label="Worker">
+      <div class="mcp-result__head"><h4 class="mcp-subtitle">2. Worker</h4>{{ source(workflow.worker) }}</div>
+      {% set proposal = work.proposed_solution or {} %}
+      <p><strong>Proposal:</strong> {{ proposal.selected_option or 'No option selected' }}</p>
+      {% if work.evaluated_options %}
+      <div class="table-wrap"><table class="table table--zebra"><thead><tr><th>Option</th><th>Eligible</th><th>Risks</th></tr></thead><tbody>
+        {% for option in work.evaluated_options %}<tr><td class="table__name">{{ option.label }}</td><td>{{ 'Yes' if option.eligible else 'No' }}</td><td>{{ option.risk_indicators|join(' ') or '—' }}</td></tr>{% endfor %}
+      </tbody></table></div>
+      {% endif %}
+      {{ items(proposal.reasoning) }}
+    </section>
+    <section class="ma-stage" aria-label="Reviewer">
+      <div class="mcp-result__head"><h4 class="mcp-subtitle">3. Reviewer</h4>{{ source(workflow.reviewer) }}</div>
+      <p><strong>Verdict:</strong> {{ (review.review_status or 'Not reviewed')|replace('_', ' ')|capitalize }}</p>
+      <p><strong>Recommendation:</strong> {{ review.recommendation or '—' }}</p>
+      <p class="mcp-subtitle">Risks</p>
+      {{ items(review.risks) }}
+    </section>
+  </div>
+
+  <section class="ma-stage" aria-label="Human review">
+    <h4 class="mcp-subtitle">4. Human review</h4>
+    {% if workflow.human_review %}
+      <p><strong>{{ labels.get(workflow.status, workflow.status) }}</strong> by the Pharmacy Manager{% if workflow.human_review.comments %}: “{{ workflow.human_review.comments }}”{% endif %}</p>
+      <p class="table__muted">Recorded {{ (workflow.human_review.timestamp or '')[:16]|replace('T', ' ') }} UTC. No purchase order was created or changed; place approved orders from the Purchase Orders page.</p>
+    {% elif workflow.status == 'awaiting_human_review' and is_manager %}
+      <form class="stack stack--sm" hx-post="/multi-agent/workflows/{{ workflow.workflow_id }}/review" hx-target="#multi-agent-result" hx-swap="innerHTML">
+        <fieldset class="ma-decisions"><legend class="u-label">Decision</legend>
+          {% for value, label in decisions %}<label><input type="radio" name="decision" value="{{ value }}" required> {{ label }}</label>{% endfor %}
+        </fieldset>
+        <label class="mcp-field">Comment (required unless approving)
+          <input class="input" name="comment" maxlength="1000" autocomplete="off" placeholder="For example: Approve, but order 120 units">
+        </label>
+        <button class="btn btn-primary" type="submit">Record decision</button>
+      </form>
+    {% elif workflow.status == 'awaiting_human_review' %}
+      <p class="table__muted">Waiting for a Pharmacy Manager's decision.</p>
+    {% else %}
+      <p class="table__muted">The workflow did not reach human review.</p>
+    {% endif %}
+  </section>
+</article>

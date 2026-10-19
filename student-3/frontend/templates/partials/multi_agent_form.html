@@ -1,0 +1,13 @@
+{% if error %}<p class="table__muted">Medicines could not be loaded: {{ error }}</p>
+{% elif not candidates %}<p class="table__muted">No medicine currently needs a reorder decision.</p>
+{% else %}
+<form class="rag-form" data-ai-job data-ai-indicator="multi-agent-loading" data-ai-results="multi-agent-result"
+      hx-post="/multi-agent/start" hx-target="#multi-agent-result" hx-swap="innerHTML" hx-indicator="#multi-agent-loading">
+  <label class="mcp-field rag-field">Low-stock medicine
+    <select class="select" name="medicine_id" required>
+      {% for item in candidates %}<option value="{{ item.medicine_id }}">{{ item.medicine_name }} — {{ item.available_quantity }} in stock, suggested order {{ item.suggested_quantity }}</option>{% endfor %}
+    </select>
+  </label>
+  <button class="btn btn-primary" type="submit">Run multi-agent review</button>
+</form>
+{% endif %}

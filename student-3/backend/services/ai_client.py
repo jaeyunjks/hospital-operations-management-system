@@ -18,8 +18,13 @@ from typing import Any
 import urllib.error
 import urllib.request
 
+from services.http_url import http_url
 
-OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434").rstrip("/")
+
+# AI-Mode is on by default for local runs; the cloud deployment sets AI_ENABLED=false so
+# advisories use their rule-based fallback and Ollama is never contacted.
+AI_ENABLED = os.environ.get("AI_ENABLED", "true").strip().lower() == "true"
+OLLAMA_URL = http_url(os.environ.get("OLLAMA_URL", "http://localhost:11434"), "OLLAMA_URL")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 try:
     OLLAMA_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "90"))
@@ -122,12 +127,12 @@ def _post_generate(prompt: str, timeout: float) -> tuple[dict[str, Any] | None, 
         "keep_alive": "10m",
         "options": {"temperature": 0, "num_predict": 800},
     }).encode("utf-8")
-    request = urllib.request.Request(
+    request = urllib.request.Request(  # noqa: S310 - http(s) base URL checked at start-up
         f"{OLLAMA_URL}/api/generate", data=request_data,
         headers={"Content-Type": "application/json"}, method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310 - http(s) base URL checked at start-up
             payload = json.load(response)
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace").strip()
@@ -164,6 +169,9 @@ def call_json(prompt: str, expected_schema: Any, *, prompt_name: str = "inline",
     This function never raises raw transport, parsing, or validation exceptions
     to feature code; inspect ``result.ok`` and ``result.error`` instead.
     """
+    if not AI_ENABLED:
+        return AIResult(False, error="AI-Mode is disabled", outcome="disabled",
+                        prompt_name=prompt_name, prompt_version=prompt_version)
     started = time.monotonic()
     timeout = OLLAMA_TIMEOUT if timeout is None else timeout
     retry_note = ""
@@ -234,6 +242,7 @@ def run_prompt(name: str, expected_schema: Any, *, version: str = "v1",
 def health_check() -> dict[str, Any]:
     """Report reachability, configured model availability, and a measured probe."""
     report: dict[str, Any] = {
+        "enabled": AI_ENABLED,
         "ollama_url": OLLAMA_URL,
         "model": OLLAMA_MODEL,
         "reachable": False,
@@ -241,8 +250,11 @@ def health_check() -> dict[str, Any]:
         "round_trip_seconds": None,
         "probe": None,
     }
+    if not AI_ENABLED:
+        report["probe"] = {"ok": False, "error": "AI-Mode is disabled"}
+        return report
     try:
-        with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=min(OLLAMA_TIMEOUT, 5)) as response:
+        with urllib.request.urlopen(f"{OLLAMA_URL}/api/tags", timeout=min(OLLAMA_TIMEOUT, 5)) as response:  # noqa: S310 - http(s) base URL checked at start-up
             tags = json.load(response)
         report["reachable"] = True
         report["model_available"] = any(

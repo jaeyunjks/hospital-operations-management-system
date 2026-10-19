@@ -38,7 +38,7 @@ class TemporaryDatabaseTests(unittest.TestCase):
             tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
             self.assertTrue(set(init_db.EXPECTED_TABLES) <= tables)
             for table in init_db.EXPECTED_TABLES:
-                self.assertGreaterEqual(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 10, table)
+                self.assertGreaterEqual(connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0], 10, table)  # noqa: S608 - column/table names come from a fixed allowlist; values are ? parameters
         init_db.check(str(self.path))
 
     def test_schema_crud_for_staff_supplier_medicine_batch_and_purchase_order(self):

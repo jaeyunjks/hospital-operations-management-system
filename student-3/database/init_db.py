@@ -56,7 +56,7 @@ def check(database_path: str | None = None) -> None:
             raise RuntimeError(f"Missing tables: {', '.join(sorted(missing))}")
 
         row_counts = {
-            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # noqa: S608 - column/table names come from a fixed allowlist; values are ? parameters
             for table in EXPECTED_TABLES
         }
         below_minimum = {

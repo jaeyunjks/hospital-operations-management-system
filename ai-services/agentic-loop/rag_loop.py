@@ -26,6 +26,7 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Sequence
@@ -69,18 +70,20 @@ class RagClient:
     """Blocking HTTP client for the shared RAG server's public API."""
 
     def __init__(self, base_url: str, timeout: float):
+        if urllib.parse.urlparse(base_url).scheme not in ("http", "https"):
+            raise ValueError("--rag-url must be an http:// or https:// URL")
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
     def _call(self, method: str, path: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
-        request = urllib.request.Request(
+        request = urllib.request.Request(  # noqa: S310 - http(s) base URL checked in __init__
             f"{self.base_url}{path}", data=data, method=method,
             headers={"Content-Type": "application/json", "Accept": "application/json"} if data
             else {"Accept": "application/json"},
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310 - http(s) base URL checked in __init__
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             try:

@@ -1,0 +1,865 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "bfe70705-87c4-49c2-b372-50e7031594bb",
+  "timestamp": "2026-10-18T23:15:52.776Z",
+  "task": "Pharmacy reorder decision: Ciprofloxacin 500mg (019)",
+  "input_evidence": {
+    "scenario": "Pharmacy reorder decision",
+    "current_state": {
+      "medicine": "Ciprofloxacin 500mg (019)",
+      "supplier": "MetroMed Wholesale",
+      "available_units": 10,
+      "near_expiry_units": 0,
+      "open_order_units": 40,
+      "daily_usage_rate": 0.0,
+      "lead_time_days": 2,
+      "unit_price": 6.09
+    },
+    "objective": {
+      "metric": "usable_stock_units",
+      "current": 50,
+      "target": 60,
+      "unit": "units"
+    },
+    "options": [
+      {
+        "id": "order_suggested",
+        "label": "Order the suggested 10 units ($60.90)",
+        "attributes": {
+          "supplier_active": true,
+          "quantity_positive": true
+        },
+        "outcomes": {
+          "metric_delta": 10
+        },
+        "risk_indicators": [
+          "40 units are already on open purchase orders."
+        ]
+      },
+      {
+        "id": "order_half",
+        "label": "Order half, 5 units ($30.45)",
+        "attributes": {
+          "supplier_active": true,
+          "quantity_positive": true
+        },
+        "outcomes": {
+          "metric_delta": 5
+        },
+        "risk_indicators": [
+          "40 units are already on open purchase orders.",
+          "Projected stock of 55 units stays below the coverage target of 60."
+        ]
+      },
+      {
+        "id": "defer",
+        "label": "Do not order now",
+        "attributes": {
+          "supplier_active": true,
+          "quantity_positive": false
+        },
+        "outcomes": {
+          "metric_delta": 0
+        },
+        "risk_indicators": [
+          "Stock stays at 50 units, below the coverage target of 60."
+        ]
+      }
+    ],
+    "constraints": [
+      {
+        "id": "supplier_active",
+        "scope": "option",
+        "type": "hard",
+        "field": "supplier_active",
+        "operator": "equals",
+        "value": true,
+        "description": "The supplier must be active."
+      },
+      {
+        "id": "orders_stock",
+        "scope": "option",
+        "type": "hard",
+        "field": "quantity_positive",
+        "operator": "equals",
+        "value": true,
+        "description": "The option must order a positive quantity."
+      },
+      {
+        "id": "value_review",
+        "scope": "workflow",
+        "type": "policy",
+        "description": "Large order values need the Pharmacy Manager's attention."
+      },
+      {
+        "id": "manager_approval",
+        "scope": "workflow",
+        "type": "approval",
+        "description": "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+      }
+    ],
+    "unknowns": [
+      "Demand beyond the last 30 days of issues is not known.",
+      "No stock was issued in the last 30 days, so the usage rate may underestimate demand."
+    ],
+    "evidence_mode": "live_pharmacy_data"
+  },
+  "planner": {
+    "started_at": "2026-10-18T23:15:52.778Z",
+    "completed_at": "2026-10-18T23:16:19.555Z",
+    "input": {
+      "task": "Pharmacy reorder decision: Ciprofloxacin 500mg (019)",
+      "evidence": {
+        "scenario": "Pharmacy reorder decision",
+        "current_state": {
+          "medicine": "Ciprofloxacin 500mg (019)",
+          "supplier": "MetroMed Wholesale",
+          "available_units": 10,
+          "near_expiry_units": 0,
+          "open_order_units": 40,
+          "daily_usage_rate": 0.0,
+          "lead_time_days": 2,
+          "unit_price": 6.09
+        },
+        "objective": {
+          "metric": "usable_stock_units",
+          "current": 50,
+          "target": 60,
+          "unit": "units"
+        },
+        "options": [
+          {
+            "id": "order_suggested",
+            "label": "Order the suggested 10 units ($60.90)",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": true
+            },
+            "outcomes": {
+              "metric_delta": 10
+            },
+            "risk_indicators": [
+              "40 units are already on open purchase orders."
+            ]
+          },
+          {
+            "id": "order_half",
+            "label": "Order half, 5 units ($30.45)",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": true
+            },
+            "outcomes": {
+              "metric_delta": 5
+            },
+            "risk_indicators": [
+              "40 units are already on open purchase orders.",
+              "Projected stock of 55 units stays below the coverage target of 60."
+            ]
+          },
+          {
+            "id": "defer",
+            "label": "Do not order now",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": false
+            },
+            "outcomes": {
+              "metric_delta": 0
+            },
+            "risk_indicators": [
+              "Stock stays at 50 units, below the coverage target of 60."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "supplier_active",
+            "scope": "option",
+            "type": "hard",
+            "field": "supplier_active",
+            "operator": "equals",
+            "value": true,
+            "description": "The supplier must be active."
+          },
+          {
+            "id": "orders_stock",
+            "scope": "option",
+            "type": "hard",
+            "field": "quantity_positive",
+            "operator": "equals",
+            "value": true,
+            "description": "The option must order a positive quantity."
+          },
+          {
+            "id": "value_review",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Large order values need the Pharmacy Manager's attention."
+          },
+          {
+            "id": "manager_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+          }
+        ],
+        "unknowns": [
+          "Demand beyond the last 30 days of issues is not known.",
+          "No stock was issued in the last 30 days, so the usage rate may underestimate demand."
+        ],
+        "evidence_mode": "live_pharmacy_data"
+      }
+    },
+    "output": {
+      "goal": "Determine the best course of action for the pharmacy reorder decision for Ciprofloxacin 500mg (019)",
+      "required_evidence": [
+        "current_state.medicine",
+        "current_state.supplier",
+        "current_state.available_units",
+        "current_state.near_expiry_units",
+        "current_state.open_order_units",
+        "current_state.daily_usage_rate",
+        "current_state.lead_time_days",
+        "current_state.unit_price",
+        "objective.metric",
+        "objective.current",
+        "objective.target",
+        "objective.unit",
+        "options[].id",
+        "options[].label",
+        "options[].attributes.supplier_active",
+        "options[].attributes.quantity_positive",
+        "options[].outcomes.metric_delta",
+        "options[].risk_indicators[]",
+        "constraints[].id",
+        "constraints[].scope",
+        "constraints[].type",
+        "constraints[].field",
+        "constraints[].operator",
+        "constraints[].value",
+        "constraints[].description",
+        "unknowns[]"
+      ],
+      "constraints": [
+        "The supplier must be active.",
+        "The option must order a positive quantity.",
+        "Large order values need the Pharmacy Manager's attention.",
+        "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+      ],
+      "planned_steps": [
+        "Evaluate the current state of the medicine and supplier.",
+        "Assess the available units, near expiry units, open order units, daily usage rate, lead time days, and unit price.",
+        "Determine the best course of action based on the objective metric, current value, target value, and unit.",
+        "Consider the risk indicators for each option.",
+        "Ensure that the supplier is active and the option orders a positive quantity.",
+        "Check if the order value exceeds the threshold for Pharmacy Manager's attention.",
+        "Verify that a Pharmacy Manager has approved the decision."
+      ],
+      "expected_result": "A decision on whether to order the suggested 10 units, order half, or defer the order"
+    },
+    "execution": {
+      "provider": "live_ollama",
+      "model": "llama3.1:8b",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "llama3.1:8b",
+          "raw_response": "{\n  \"goal\": \"Determine the best course of action for the pharmacy reorder decision for Ciprofloxacin 500mg (019)\",\n  \"required_evidence\": [\n    \"current_state.medicine\",\n    \"current_state.supplier\",\n    \"current_state.available_units\",\n    \"current_state.near_expiry_units\",\n    \"current_state.open_order_units\",\n    \"current_state.daily_usage_rate\",\n    \"current_state.lead_time_days\",\n    \"current_state.unit_price\",\n    \"objective.metric\",\n    \"objective.current\",\n    \"objective.target\",\n    \"objective.unit\",\n    \"options[].id\",\n    \"options[].label\",\n    \"options[].attributes.supplier_active\",\n    \"options[].attributes.quantity_positive\",\n    \"options[].outcomes.metric_delta\",\n    \"options[].risk_indicators[]\",\n    \"constraints[].id\",\n    \"constraints[].scope\",\n    \"constraints[].type\",\n    \"constraints[].field\",\n    \"constraints[].operator\",\n    \"constraints[].value\",\n    \"constraints[].description\",\n    \"unknowns[]\"\n  ],\n  \"constraints\": [\n    \"The supplier must be active.\",\n    \"The option must order a positive quantity.\",\n    \"Large order values need the Pharmacy Manager's attention.\",\n    \"A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders.\"\n  ],\n  \"planned_steps\": [\n    \"Evaluate the current state of the medicine and supplier.\",\n    \"Assess the available units, near expiry units, open order units, daily usage rate, lead time days, and unit price.\",\n    \"Determine the best course of action based on the objective metric, current value, target value, and unit.\",\n    \"Consider the risk indicators for each option.\",\n    \"Ensure that the supplier is active and the option orders a positive quantity.\",\n    \"Check if the order value exceeds the threshold for Pharmacy Manager's attention.\",\n    \"Verify that a Pharmacy Manager has approved the decision.\"\n  ],\n  \"expected_result\": \"A decision on whether to order the suggested 10 units, order half, or defer the order\"\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": null,
+          "valid": true
+        }
+      ],
+      "attempt_count": 1
+    }
+  },
+  "worker": {
+    "started_at": "2026-10-18T23:16:19.558Z",
+    "completed_at": "2026-10-18T23:16:38.411Z",
+    "input": {
+      "task": "Pharmacy reorder decision: Ciprofloxacin 500mg (019)",
+      "planner_output": {
+        "goal": "Determine the best course of action for the pharmacy reorder decision for Ciprofloxacin 500mg (019)",
+        "required_evidence": [
+          "current_state.medicine",
+          "current_state.supplier",
+          "current_state.available_units",
+          "current_state.near_expiry_units",
+          "current_state.open_order_units",
+          "current_state.daily_usage_rate",
+          "current_state.lead_time_days",
+          "current_state.unit_price",
+          "objective.metric",
+          "objective.current",
+          "objective.target",
+          "objective.unit",
+          "options[].id",
+          "options[].label",
+          "options[].attributes.supplier_active",
+          "options[].attributes.quantity_positive",
+          "options[].outcomes.metric_delta",
+          "options[].risk_indicators[]",
+          "constraints[].id",
+          "constraints[].scope",
+          "constraints[].type",
+          "constraints[].field",
+          "constraints[].operator",
+          "constraints[].value",
+          "constraints[].description",
+          "unknowns[]"
+        ],
+        "constraints": [
+          "The supplier must be active.",
+          "The option must order a positive quantity.",
+          "Large order values need the Pharmacy Manager's attention.",
+          "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+        ],
+        "planned_steps": [
+          "Evaluate the current state of the medicine and supplier.",
+          "Assess the available units, near expiry units, open order units, daily usage rate, lead time days, and unit price.",
+          "Determine the best course of action based on the objective metric, current value, target value, and unit.",
+          "Consider the risk indicators for each option.",
+          "Ensure that the supplier is active and the option orders a positive quantity.",
+          "Check if the order value exceeds the threshold for Pharmacy Manager's attention.",
+          "Verify that a Pharmacy Manager has approved the decision."
+        ],
+        "expected_result": "A decision on whether to order the suggested 10 units, order half, or defer the order"
+      },
+      "evidence": {
+        "scenario": "Pharmacy reorder decision",
+        "current_state": {
+          "medicine": "Ciprofloxacin 500mg (019)",
+          "supplier": "MetroMed Wholesale",
+          "available_units": 10,
+          "near_expiry_units": 0,
+          "open_order_units": 40,
+          "daily_usage_rate": 0.0,
+          "lead_time_days": 2,
+          "unit_price": 6.09
+        },
+        "objective": {
+          "metric": "usable_stock_units",
+          "current": 50,
+          "target": 60,
+          "unit": "units"
+        },
+        "options": [
+          {
+            "id": "order_suggested",
+            "label": "Order the suggested 10 units ($60.90)",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": true
+            },
+            "outcomes": {
+              "metric_delta": 10
+            },
+            "risk_indicators": [
+              "40 units are already on open purchase orders."
+            ]
+          },
+          {
+            "id": "order_half",
+            "label": "Order half, 5 units ($30.45)",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": true
+            },
+            "outcomes": {
+              "metric_delta": 5
+            },
+            "risk_indicators": [
+              "40 units are already on open purchase orders.",
+              "Projected stock of 55 units stays below the coverage target of 60."
+            ]
+          },
+          {
+            "id": "defer",
+            "label": "Do not order now",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": false
+            },
+            "outcomes": {
+              "metric_delta": 0
+            },
+            "risk_indicators": [
+              "Stock stays at 50 units, below the coverage target of 60."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "supplier_active",
+            "scope": "option",
+            "type": "hard",
+            "field": "supplier_active",
+            "operator": "equals",
+            "value": true,
+            "description": "The supplier must be active."
+          },
+          {
+            "id": "orders_stock",
+            "scope": "option",
+            "type": "hard",
+            "field": "quantity_positive",
+            "operator": "equals",
+            "value": true,
+            "description": "The option must order a positive quantity."
+          },
+          {
+            "id": "value_review",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Large order values need the Pharmacy Manager's attention."
+          },
+          {
+            "id": "manager_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+          }
+        ],
+        "unknowns": [
+          "Demand beyond the last 30 days of issues is not known.",
+          "No stock was issued in the last 30 days, so the usage rate may underestimate demand."
+        ],
+        "evidence_mode": "live_pharmacy_data"
+      }
+    },
+    "output": {
+      "status": "proposal_ready",
+      "plan_steps_followed": [
+        "Evaluate the current state of the medicine and supplier.",
+        "Assess the available units, near expiry units, open order units, daily usage rate, lead time days, and unit price.",
+        "Determine the best course of action based on the objective metric, current value, target value, and unit.",
+        "Consider the risk indicators for each option.",
+        "Ensure that the supplier is active and the option orders a positive quantity.",
+        "Check if the order value exceeds the threshold for Pharmacy Manager's attention.",
+        "Verify that a Pharmacy Manager has approved the decision."
+      ],
+      "missing_planner_evidence": [],
+      "gap": {
+        "metric": "usable_stock_units",
+        "current": 50,
+        "target": 60,
+        "deficit": 10
+      },
+      "evaluated_options": [
+        {
+          "option_id": "order_suggested",
+          "label": "Order the suggested 10 units ($60.90)",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "supplier_active",
+              "passed": true
+            },
+            {
+              "constraint_id": "orders_stock",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": [
+            "40 units are already on open purchase orders."
+          ]
+        },
+        {
+          "option_id": "order_half",
+          "label": "Order half, 5 units ($30.45)",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "supplier_active",
+              "passed": true
+            },
+            {
+              "constraint_id": "orders_stock",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": [
+            "40 units are already on open purchase orders.",
+            "Projected stock of 55 units stays below the coverage target of 60."
+          ]
+        },
+        {
+          "option_id": "defer",
+          "label": "Do not order now",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "supplier_active",
+              "passed": true
+            },
+            {
+              "constraint_id": "orders_stock",
+              "passed": false
+            }
+          ],
+          "eligible": false,
+          "risk_indicators": [
+            "Stock stays at 50 units, below the coverage target of 60."
+          ]
+        }
+      ],
+      "proposed_solution": {
+        "selected_option_id": "order_suggested",
+        "selected_option": "Order the suggested 10 units ($60.90)",
+        "metric_delta": 10,
+        "projected_value": 60.9,
+        "reasoning": [
+          "The supplier is active.",
+          "The option orders a positive quantity.",
+          "The order value does not exceed the threshold for Pharmacy Manager's attention."
+        ]
+      },
+      "limitations": [],
+      "mutation_executed": false
+    },
+    "execution": {
+      "provider": "live_ollama",
+      "model": "llama3.2:3b",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "llama3.2:3b",
+          "raw_response": "{\n  \"status\": \"proposal_ready\",\n  \"plan_steps_followed\": [\n    \"Evaluate the current state of the medicine and supplier.\",\n    \"Assess the available units, near expiry units, open order units, daily usage rate, lead time days, and unit price.\",\n    \"Determine the best course of action based on the objective metric, current value, target value, and unit.\",\n    \"Consider the risk indicators for each option.\",\n    \"Ensure that the supplier is active and the option orders a positive quantity.\",\n    \"Check if the order value exceeds the threshold for Pharmacy Manager's attention.\",\n    \"Verify that a Pharmacy Manager has approved the decision.\"\n  ],\n  \"missing_planner_evidence\": [],\n  \"gap\": {\n    \"metric\": \"usable_stock_units\",\n    \"current\": 50,\n    \"target\": 60,\n    \"deficit\": 10\n  },\n  \"evaluated_options\": [\n    {\n      \"option_id\": \"order_suggested\",\n      \"label\": \"Order the suggested 10 units ($60.90)\",\n      \"hard_constraint_checks\": [\n        {\n          \"constraint_id\": \"supplier_active\",\n          \"passed\": true\n        },\n        {\n          \"constraint_id\": \"orders_stock\",\n          \"passed\": true\n        }\n      ],\n      \"eligible\": true,\n      \"risk_indicators\": [\n        \"40 units are already on open purchase orders.\"\n      ]\n    },\n    {\n      \"option_id\": \"order_half\",\n      \"label\": \"Order half, 5 units ($30.45)\",\n      \"hard_constraint_checks\": [\n        {\n          \"constraint_id\": \"supplier_active\",\n          \"passed\": true\n        },\n        {\n          \"constraint_id\": \"orders_stock\",\n          \"passed\": true\n        }\n      ],\n      \"eligible\": true,\n      \"risk_indicators\": [\n        \"40 units are already on open purchase orders.\",\n        \"Projected stock of 55 units stays below the coverage target of 60.\"\n      ]\n    },\n    {\n      \"option_id\": \"defer\",\n      \"label\": \"Do not order now\",\n      \"hard_constraint_checks\": [\n        {\n          \"constraint_id\": \"supplier_active\",\n          \"passed\": true\n        },\n        {\n          \"constraint_id\": \"orders_stock\",\n          \"passed\": false\n        }\n      ],\n      \"eligible\": false,\n      \"risk_indicators\": [\n        \"Stock stays at 50 units, below the coverage target of 60.\"\n      ]\n    }\n  ],\n  \"proposed_solution\": {\n    \"selected_option_id\": \"order_suggested\",\n    \"selected_option\": \"Order the suggested 10 units ($60.90)\",\n    \"metric_delta\": 10,\n    \"projected_value\": 60.9,\n    \"reasoning\": [\n      \"The supplier is active.\",\n      \"The option orders a positive quantity.\",\n      \"The order value does not exceed the threshold for Pharmacy Manager's attention.\"\n    ]\n  },\n  \"limitations\": [],\n  \"mutation_executed\": false\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": null,
+          "valid": true
+        }
+      ],
+      "attempt_count": 1
+    }
+  },
+  "reviewer": {
+    "started_at": "2026-10-18T23:16:38.416Z",
+    "completed_at": "2026-10-18T23:17:00.654Z",
+    "input": {
+      "task": "Pharmacy reorder decision: Ciprofloxacin 500mg (019)",
+      "planner_output": {
+        "goal": "Determine the best course of action for the pharmacy reorder decision for Ciprofloxacin 500mg (019)",
+        "required_evidence": [
+          "current_state.medicine",
+          "current_state.supplier",
+          "current_state.available_units",
+          "current_state.near_expiry_units",
+          "current_state.open_order_units",
+          "current_state.daily_usage_rate",
+          "current_state.lead_time_days",
+          "current_state.unit_price",
+          "objective.metric",
+          "objective.current",
+          "objective.target",
+          "objective.unit",
+          "options[].id",
+          "options[].label",
+          "options[].attributes.supplier_active",
+          "options[].attributes.quantity_positive",
+          "options[].outcomes.metric_delta",
+          "options[].risk_indicators[]",
+          "constraints[].id",
+          "constraints[].scope",
+          "constraints[].type",
+          "constraints[].field",
+          "constraints[].operator",
+          "constraints[].value",
+          "constraints[].description",
+          "unknowns[]"
+        ],
+        "constraints": [
+          "The supplier must be active.",
+          "The option must order a positive quantity.",
+          "Large order values need the Pharmacy Manager's attention.",
+          "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+        ],
+        "planned_steps": [
+          "Evaluate the current state of the medicine and supplier.",
+          "Assess the available units, near expiry units, open order units, daily usage rate, lead time days, and unit price.",
+          "Determine the best course of action based on the objective metric, current value, target value, and unit.",
+          "Consider the risk indicators for each option.",
+          "Ensure that the supplier is active and the option orders a positive quantity.",
+          "Check if the order value exceeds the threshold for Pharmacy Manager's attention.",
+          "Verify that a Pharmacy Manager has approved the decision."
+        ],
+        "expected_result": "A decision on whether to order the suggested 10 units, order half, or defer the order"
+      },
+      "worker_output": {
+        "status": "proposal_ready",
+        "plan_steps_followed": [
+          "Evaluate the current state of the medicine and supplier.",
+          "Assess the available units, near expiry units, open order units, daily usage rate, lead time days, and unit price.",
+          "Determine the best course of action based on the objective metric, current value, target value, and unit.",
+          "Consider the risk indicators for each option.",
+          "Ensure that the supplier is active and the option orders a positive quantity.",
+          "Check if the order value exceeds the threshold for Pharmacy Manager's attention.",
+          "Verify that a Pharmacy Manager has approved the decision."
+        ],
+        "missing_planner_evidence": [],
+        "gap": {
+          "metric": "usable_stock_units",
+          "current": 50,
+          "target": 60,
+          "deficit": 10
+        },
+        "evaluated_options": [
+          {
+            "option_id": "order_suggested",
+            "label": "Order the suggested 10 units ($60.90)",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "supplier_active",
+                "passed": true
+              },
+              {
+                "constraint_id": "orders_stock",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": [
+              "40 units are already on open purchase orders."
+            ]
+          },
+          {
+            "option_id": "order_half",
+            "label": "Order half, 5 units ($30.45)",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "supplier_active",
+                "passed": true
+              },
+              {
+                "constraint_id": "orders_stock",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": [
+              "40 units are already on open purchase orders.",
+              "Projected stock of 55 units stays below the coverage target of 60."
+            ]
+          },
+          {
+            "option_id": "defer",
+            "label": "Do not order now",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "supplier_active",
+                "passed": true
+              },
+              {
+                "constraint_id": "orders_stock",
+                "passed": false
+              }
+            ],
+            "eligible": false,
+            "risk_indicators": [
+              "Stock stays at 50 units, below the coverage target of 60."
+            ]
+          }
+        ],
+        "proposed_solution": {
+          "selected_option_id": "order_suggested",
+          "selected_option": "Order the suggested 10 units ($60.90)",
+          "metric_delta": 10,
+          "projected_value": 60.9,
+          "reasoning": [
+            "The supplier is active.",
+            "The option orders a positive quantity.",
+            "The order value does not exceed the threshold for Pharmacy Manager's attention."
+          ]
+        },
+        "limitations": [],
+        "mutation_executed": false
+      },
+      "evidence": {
+        "scenario": "Pharmacy reorder decision",
+        "current_state": {
+          "medicine": "Ciprofloxacin 500mg (019)",
+          "supplier": "MetroMed Wholesale",
+          "available_units": 10,
+          "near_expiry_units": 0,
+          "open_order_units": 40,
+          "daily_usage_rate": 0.0,
+          "lead_time_days": 2,
+          "unit_price": 6.09
+        },
+        "objective": {
+          "metric": "usable_stock_units",
+          "current": 50,
+          "target": 60,
+          "unit": "units"
+        },
+        "options": [
+          {
+            "id": "order_suggested",
+            "label": "Order the suggested 10 units ($60.90)",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": true
+            },
+            "outcomes": {
+              "metric_delta": 10
+            },
+            "risk_indicators": [
+              "40 units are already on open purchase orders."
+            ]
+          },
+          {
+            "id": "order_half",
+            "label": "Order half, 5 units ($30.45)",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": true
+            },
+            "outcomes": {
+              "metric_delta": 5
+            },
+            "risk_indicators": [
+              "40 units are already on open purchase orders.",
+              "Projected stock of 55 units stays below the coverage target of 60."
+            ]
+          },
+          {
+            "id": "defer",
+            "label": "Do not order now",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": false
+            },
+            "outcomes": {
+              "metric_delta": 0
+            },
+            "risk_indicators": [
+              "Stock stays at 50 units, below the coverage target of 60."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "supplier_active",
+            "scope": "option",
+            "type": "hard",
+            "field": "supplier_active",
+            "operator": "equals",
+            "value": true,
+            "description": "The supplier must be active."
+          },
+          {
+            "id": "orders_stock",
+            "scope": "option",
+            "type": "hard",
+            "field": "quantity_positive",
+            "operator": "equals",
+            "value": true,
+            "description": "The option must order a positive quantity."
+          },
+          {
+            "id": "value_review",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Large order values need the Pharmacy Manager's attention."
+          },
+          {
+            "id": "manager_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+          }
+        ],
+        "unknowns": [
+          "Demand beyond the last 30 days of issues is not known.",
+          "No stock was issued in the last 30 days, so the usage rate may underestimate demand."
+        ],
+        "evidence_mode": "live_pharmacy_data"
+      }
+    },
+    "output": {
+      "review_status": "validated_with_risks",
+      "validated_findings": [
+        "The supplier is active.",
+        "The option orders a positive quantity.",
+        "The order value does not exceed the threshold for Pharmacy Manager's attention."
+      ],
+      "risks": [
+        "40 units are already on open purchase orders.",
+        "Projected stock of 55 units stays below the coverage target of 60.",
+        "Stock stays at 50 units, below the coverage target of 60."
+      ],
+      "unsupported_claims": [],
+      "recommendation": "Order the suggested 10 units ($60.90)",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "execution": {
+      "provider": "live_ollama",
+      "model": "llama3.1:8b",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "llama3.1:8b",
+          "raw_response": "{\n  \"review_status\": \"validated_with_risks\",\n  \"validated_findings\": [\n    \"The supplier is active.\",\n    \"The option orders a positive quantity.\",\n    \"The order value does not exceed the threshold for Pharmacy Manager's attention.\"\n  ],\n  \"risks\": [\n    \"40 units are already on open purchase orders.\",\n    \"Projected stock of 55 units stays below the coverage target of 60.\",\n    \"Stock stays at 50 units, below the coverage target of 60.\"\n  ],\n  \"unsupported_claims\": [],\n  \"recommendation\": \"Order the suggested 10 units ($60.90)\",\n  \"human_approval_required\": true,\n  \"mutation_verified_absent\": true\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": null,
+          "valid": true
+        }
+      ],
+      "attempt_count": 1
+    }
+  },
+  "human_review": {
+    "decision": "correct",
+    "comments": "Order 20 units instead to cover the two-day lead time.",
+    "timestamp": "2026-10-18T23:17:10.337Z"
+  },
+  "final_status": "corrected",
+  "final_result": {
+    "status": "corrected",
+    "proposal": {
+      "selected_option_id": "order_suggested",
+      "selected_option": "Order the suggested 10 units ($60.90)",
+      "metric_delta": 10,
+      "projected_value": 60.9,
+      "reasoning": [
+        "The supplier is active.",
+        "The option orders a positive quantity.",
+        "The order value does not exceed the threshold for Pharmacy Manager's attention."
+      ]
+    },
+    "review": {
+      "review_status": "validated_with_risks",
+      "validated_findings": [
+        "The supplier is active.",
+        "The option orders a positive quantity.",
+        "The order value does not exceed the threshold for Pharmacy Manager's attention."
+      ],
+      "risks": [
+        "40 units are already on open purchase orders.",
+        "Projected stock of 55 units stays below the coverage target of 60.",
+        "Stock stays at 50 units, below the coverage target of 60."
+      ],
+      "unsupported_claims": [],
+      "recommendation": "Order the suggested 10 units ($60.90)",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "human_decision": "correct",
+    "human_comments_or_correction": "Order 20 units instead to cover the two-day lead time.",
+    "mutation_executed": false
+  },
+  "completed_at": "2026-10-18T23:17:10.338Z"
+}

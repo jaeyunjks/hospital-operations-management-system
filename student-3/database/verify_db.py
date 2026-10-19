@@ -85,12 +85,12 @@ def verify(database_path: str | Path | None = None) -> bool:
 
         print("\nData population")
         for table in REQUIRED_TABLES:
-            check_count(connection, f"SELECT COUNT(*) FROM {table};",
+            check_count(connection, f"SELECT COUNT(*) FROM {table};",  # noqa: S608 - column/table names come from a fixed allowlist; values are ? parameters
                         f"'{table}' holds at least {MINIMUM_RECORDS} records",
                         MINIMUM_RECORDS)
         for role, minimum in (("manager", 2), ("staff", 10)):
             check_count(connection,
-                        f"SELECT COUNT(*) FROM staff WHERE role = '{role}';",
+                        f"SELECT COUNT(*) FROM staff WHERE role = '{role}';",  # noqa: S608 - column/table names come from a fixed allowlist; values are ? parameters
                         f"at least {minimum} staff records have role '{role}'", minimum)
 
         print("\nRelationship integrity")
@@ -101,7 +101,7 @@ def verify(database_path: str | Path | None = None) -> bool:
                 SELECT COUNT(*) FROM {child} AS c
                 LEFT JOIN {parent} AS p ON c.{column} = p.{key}
                 WHERE c.{column} IS NOT NULL AND p.{key} IS NULL;
-            """, f"no {child}.{column} references a missing {parent} record")
+            """, f"no {child}.{column} references a missing {parent} record")  # noqa: S608 - table/column names come from the fixed RELATIONSHIPS list
         check_count(connection, """
             SELECT COUNT(*) FROM (
                 SELECT medicine_id, batch_number FROM batches
@@ -119,7 +119,7 @@ def verify(database_path: str | Path | None = None) -> bool:
             check_count(connection, f"""
                 SELECT COUNT(*) FROM {child} AS c
                 JOIN {parent} AS p ON c.{column} = p.{key};
-            """, f"{child}.{column} resolves to {parent} records", minimum=1)
+            """, f"{child}.{column} resolves to {parent} records", minimum=1)  # noqa: S608 - table/column names come from the fixed RELATIONSHIPS list
     except (sqlite3.Error, OSError) as error:
         check(False, f"database verification failed: {error}")
     finally:

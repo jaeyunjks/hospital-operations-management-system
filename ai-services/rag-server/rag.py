@@ -18,6 +18,7 @@ import socket
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -124,18 +125,20 @@ class OllamaClient:
     """Minimal blocking client for the local Ollama embedding and chat APIs."""
 
     def __init__(self, base_url: str, timeout: float):
+        if urllib.parse.urlparse(base_url).scheme not in ("http", "https"):
+            raise ValueError("OLLAMA_URL must be an http:// or https:// URL")
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
     def _post(self, path: str, payload: Dict[str, Any]) -> Dict[str, Any]:
-        request = urllib.request.Request(
+        request = urllib.request.Request(  # noqa: S310 - http(s) base URL checked in __init__
             f"{self.base_url}{path}",
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json", "Accept": "application/json"},
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310 - http(s) base URL checked in __init__
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             if error.code == 404:
@@ -171,8 +174,8 @@ class OllamaClient:
         return content
 
     def models(self) -> List[str]:
-        request = urllib.request.Request(f"{self.base_url}/api/tags", method="GET")
-        with urllib.request.urlopen(request, timeout=min(self.timeout, 3)) as response:
+        request = urllib.request.Request(f"{self.base_url}/api/tags", method="GET")  # noqa: S310 - http(s) base URL checked in __init__
+        with urllib.request.urlopen(request, timeout=min(self.timeout, 3)) as response:  # noqa: S310 - http(s) base URL checked in __init__
             body = json.loads(response.read().decode("utf-8"))
         return [model.get("name", "") for model in body.get("models", [])]
 

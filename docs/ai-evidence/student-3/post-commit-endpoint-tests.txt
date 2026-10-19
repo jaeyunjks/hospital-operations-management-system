@@ -1,0 +1,17 @@
+# Student 3 - post-commit endpoint tests (Release 2)
+# 2026-10-18T23:28:12Z
+# Same command as the student-3.yml step, run locally against the backend container
+# and a freshly seeded database container (the tests change data).
+
+$ STUDENT3_BACKEND_URL=http://localhost:5300 python3 -m unittest discover -v -s student-3/tests -p 'test_endpoints_ci.py'
+test_manager_approves_once_and_a_second_approval_is_refused (test_endpoints_ci.ApprovePurchaseOrderEndpointTests) ... ok
+test_only_a_pharmacy_manager_can_approve (test_endpoints_ci.ApprovePurchaseOrderEndpointTests) ... ok
+test_unknown_order_is_not_found (test_endpoints_ci.ApprovePurchaseOrderEndpointTests) ... ok
+test_invalid_requests_are_rejected (test_endpoints_ci.IssueStockEndpointTests) ... ok
+test_issue_larger_than_stock_is_refused_and_changes_nothing (test_endpoints_ci.IssueStockEndpointTests) ... ok
+test_issue_takes_stock_from_the_earliest_expiring_batch (test_endpoints_ci.IssueStockEndpointTests) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.119s
+
+OK
