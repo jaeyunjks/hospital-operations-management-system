@@ -10,6 +10,12 @@
   (``grounded_loop.py``).
 - ``rag`` (Release 1): ACT queries the shared RAG server and deterministic
   checks validate grounding and insufficient-context handling (``rag_loop.py``).
+- ``multi-agent`` (Release 2): reviews Planner -> Worker -> Reviewer -> Human
+  Review workflow history from the Multi-Agent Server (``multi_agent_review.py``).
+- ``testing`` (Release 2): reviews pre-commit security scans and post-commit
+  CI/CD endpoint tests (``testing_review.py``).
+- ``cloud`` (Release 2): probes the Azure/AWS deployment, reviews it and records
+  the human release decision (``cloud_review.py``).
 """
 
 from __future__ import annotations
@@ -35,7 +41,14 @@ DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434"
 DEFAULT_OLLAMA_TIMEOUT = 120.0
 DEFAULT_COMMAND_TIMEOUT = 600.0
 DEFAULT_EVIDENCE_LIMIT = 12_000
-MODES = {"command": None, "mcp": "grounded_loop", "rag": "rag_loop"}
+MODES = {
+    "command": None,
+    "mcp": "grounded_loop",
+    "rag": "rag_loop",
+    "multi-agent": "multi_agent_review",
+    "testing": "testing_review",
+    "cloud": "cloud_review",
+}
 
 AGENT_DIR = Path(__file__).resolve().parent
 DEFAULT_REPO_ROOT = AGENT_DIR.parents[1]
@@ -296,11 +309,12 @@ def select_mode(argv: Sequence[str]) -> tuple[str, List[str]]:
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run the shared Plan -> Act -> Observe -> Adapt loop "
-        "(Release 0 command mode; use --mode mcp or --mode rag for Release 1 validation)."
+        "(Release 0 command mode; --mode mcp / rag for Release 1; "
+        "--mode multi-agent / testing / cloud for Release 2 reviews)."
     )
     parser.add_argument(
         "--mode", choices=sorted(MODES), default="command",
-        help="command (default): run a validation command; mcp / rag: see --mode X --help",
+        help="command (default): run a validation command; other modes: see --mode X --help",
     )
     parser.add_argument("--student", required=True, help="Student number or student-N")
     parser.add_argument("--command", required=True, help="Validation command to run")

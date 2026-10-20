@@ -1,0 +1,58 @@
+{
+  "workflow_id": "wf-20261021-0001",
+  "feature": "student-4",
+  "request": "Recommend a bed for an incoming Emergency patient who needs isolation.",
+  "status": "completed",
+  "created_at": "2026-10-21T01:00:00.000Z",
+  "steps": [
+    {
+      "agent": "planner",
+      "started_at": "2026-10-21T01:00:00.100Z",
+      "finished_at": "2026-10-21T01:00:03.200Z",
+      "output": {
+        "plan": [
+          "Read current Emergency ward occupancy",
+          "Filter beds with isolation capability",
+          "Rank available beds by readiness"
+        ],
+        "required_evidence": ["ward_occupancy:Emergency", "beds:isolation"]
+      }
+    },
+    {
+      "agent": "worker",
+      "started_at": "2026-10-21T01:00:03.300Z",
+      "finished_at": "2026-10-21T01:00:09.800Z",
+      "output": {
+        "result": "Bed E-07 is available, cleaned and isolation-capable.",
+        "evidence_used": ["ward_occupancy:Emergency", "beds:isolation"]
+      }
+    },
+    {
+      "agent": "reviewer",
+      "started_at": "2026-10-21T01:00:09.900Z",
+      "finished_at": "2026-10-21T01:00:13.400Z",
+      "output": {
+        "verdict": "supported",
+        "risks": ["Occupancy data is 4 minutes old"],
+        "recommendations": ["Confirm E-07 status with the ward before allocation"]
+      }
+    },
+    {
+      "agent": "human",
+      "started_at": "2026-10-21T01:01:00.000Z",
+      "finished_at": "2026-10-21T01:01:20.000Z",
+      "output": {
+        "decision": "approved",
+        "reviewer": "Asher",
+        "comment": "Confirmed with ward nurse."
+      }
+    }
+  ],
+  "audit_log": [
+    {"timestamp": "2026-10-21T01:00:00.000Z", "actor": "planner", "event": "plan_created"},
+    {"timestamp": "2026-10-21T01:00:03.300Z", "actor": "worker", "event": "task_started"},
+    {"timestamp": "2026-10-21T01:00:09.800Z", "actor": "worker", "event": "result_submitted"},
+    {"timestamp": "2026-10-21T01:00:13.400Z", "actor": "reviewer", "event": "review_completed"},
+    {"timestamp": "2026-10-21T01:01:20.000Z", "actor": "human", "event": "decision_recorded"}
+  ]
+}

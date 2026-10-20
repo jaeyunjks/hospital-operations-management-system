@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<testsuites><testsuite name="pytest" tests="2" failures="0" errors="0" skipped="0">
+<testcase classname="student-4.tests.test_endpoints" name="test_get_beds_returns_list" time="0.02"/>
+<testcase classname="student-4.tests.test_endpoints" name="test_post_bed_creates_record" time="0.03"/>
+</testsuite></testsuites>
