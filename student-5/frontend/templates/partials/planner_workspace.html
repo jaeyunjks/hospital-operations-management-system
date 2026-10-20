@@ -275,6 +275,13 @@
             <span>{{ shift.planning_state.label }}</span>
             {% if cell.shifts|length > 1 %}<small>{{ shift.required_role }}</small>{% endif %}
           </button>
+          {% if is_manager and shift.shortfall > 0 %}
+          <a class="grid-shift__recovery"
+             href="{{ url_for('recovery_workflow_page', shift_id=shift.shift_id) }}"
+             aria-label="Run Staffing Recovery for {{ shift.department }} {{ shift.start_time }} shift on {{ shift.shift_date }}">
+            Run Staffing Recovery
+          </a>
+          {% endif %}
           {% endfor %}
         {% else %}
         <button class="grid-create" type="button" data-shift-drawer-open

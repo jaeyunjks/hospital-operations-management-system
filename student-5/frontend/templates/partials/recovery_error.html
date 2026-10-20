@@ -1,0 +1,16 @@
+<section id="recovery-state" class="panel recovery-error" role="alert">
+  <div class="alert alert--danger">
+    <div>
+      <p class="alert__title">{{ title }}</p>
+      <p class="alert__body">{{ message }}</p>
+    </div>
+  </div>
+  {% if retry_url %}
+  <button class="btn-secondary btn-compact" type="button"
+          {% if retry_method == 'post' %}hx-post="{{ retry_url }}"{% else %}hx-get="{{ retry_url }}"{% endif %}
+          hx-target="{{ '#recovery-workspace' if retry_method == 'post' else '#recovery-state' }}"
+          hx-swap="{{ 'innerHTML' if retry_method == 'post' else 'outerHTML' }}"
+          hx-disabled-elt="this">Retry</button>
+  {% endif %}
+  <p class="recovery-no-mutation">No roster changes have been made.</p>
+</section>

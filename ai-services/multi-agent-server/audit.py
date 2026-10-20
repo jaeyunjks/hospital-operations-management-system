@@ -47,6 +47,27 @@ class AuditStore:
                 raise RuntimeError(f"invalid workflow audit: {workflow_id}")
             return record
 
+    def workflow_ids_with_status(self, status: str) -> list[str]:
+        """Return valid persisted workflow IDs currently in one lifecycle state."""
+
+        with self._lock:
+            if not self.reports_dir.is_dir():
+                return []
+            workflow_ids = []
+            for path in sorted(self.reports_dir.glob("workflow-*.json")):
+                try:
+                    record = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    continue
+                workflow_id = record.get("workflow_id") if isinstance(record, dict) else None
+                if (
+                    isinstance(workflow_id, str)
+                    and record.get("final_status") == status
+                    and path == self.path_for(workflow_id)
+                ):
+                    workflow_ids.append(workflow_id)
+            return workflow_ids
+
     @staticmethod
     def _write(path: Path, record: Dict[str, Any]) -> None:
         temporary = path.with_suffix(".json.tmp")

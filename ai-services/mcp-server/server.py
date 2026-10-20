@@ -28,7 +28,13 @@ from mcp.types import (
 )
 
 from tools.system import MAX_MESSAGE_LENGTH, TOOL_NAME, homs_echo, validation_error
-from tools import care_tasks, pharmacy_orders, pharmacy_stock, ward_occupancy
+from tools import (
+    care_tasks,
+    pharmacy_orders,
+    pharmacy_stock,
+    staffing_recovery,
+    ward_occupancy,
+)
 
 SERVER_NAME = "HOMS Shared MCP Server"
 SERVER_VERSION = "0.1.0"
@@ -39,6 +45,8 @@ DEFAULT_STUDENT4_API_URL = "http://127.0.0.1:5400/api"
 DEFAULT_STUDENT4_API_TIMEOUT = 10.0
 DEFAULT_STUDENT3_API_URL = "http://127.0.0.1:5300/api"
 DEFAULT_STUDENT3_API_TIMEOUT = 10.0
+DEFAULT_STUDENT5_API_URL = "http://127.0.0.1:5500/api"
+DEFAULT_STUDENT5_API_TIMEOUT = 10.0
 WILDCARD_HOSTS = {"0.0.0.0", "::", "[::]", "*"}
 
 
@@ -54,6 +62,8 @@ class ServerConfig:
     student4_api_timeout: float
     student3_api_url: str
     student3_api_timeout: float
+    student5_api_url: str
+    student5_api_timeout: float
 
 
 def _api_url(name: str, default: str) -> str:
@@ -135,6 +145,10 @@ def load_config() -> ServerConfig:
         student3_api_url=_api_url("HOMS_STUDENT3_API_URL", DEFAULT_STUDENT3_API_URL),
         student3_api_timeout=_api_timeout(
             "HOMS_STUDENT3_API_TIMEOUT", DEFAULT_STUDENT3_API_TIMEOUT
+        ),
+        student5_api_url=_api_url("HOMS_STUDENT5_API_URL", DEFAULT_STUDENT5_API_URL),
+        student5_api_timeout=_api_timeout(
+            "HOMS_STUDENT5_API_TIMEOUT", DEFAULT_STUDENT5_API_TIMEOUT
         ),
     )
 
@@ -322,6 +336,30 @@ HOMS_OPEN_CARE_TASKS_TOOL = Tool(
 )
 
 
+HOMS_STAFFING_RECOVERY_TOOL = Tool(
+    name=staffing_recovery.TOOL_NAME,
+    title="HOMS Staffing Recovery Context",
+    description=(
+        "Read one privacy-safe Student 5 staffing-recovery evidence snapshot for "
+        "a selected shift through its published backend API. Read-only; does not "
+        "create, update, delete, approve or execute any roster change."
+    ),
+    input_schema={
+        "type": "object",
+        "properties": {
+            "shift_id": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "Required. Positive whole-number Student 5 shift id.",
+            }
+        },
+        "required": ["shift_id"],
+        "additionalProperties": False,
+    },
+    output_schema=staffing_recovery.OUTPUT_SCHEMA,
+)
+
+
 async def list_tools(
     ctx: ServerRequestContext,
     params: PaginatedRequestParams | None,
@@ -335,6 +373,7 @@ async def list_tools(
             HOMS_PHARMACY_STOCK_TOOL,
             HOMS_PHARMACY_ORDERS_TOOL,
             HOMS_OPEN_CARE_TASKS_TOOL,
+            HOMS_STAFFING_RECOVERY_TOOL,
         ]
     )
 
@@ -433,6 +472,25 @@ async def call_tool(
                 arguments.get("admission_id"),
                 api_url=care_tasks.API_URL,
                 timeout=care_tasks.API_TIMEOUT,
+            )
+        )
+
+    if params.name == staffing_recovery.TOOL_NAME:
+        arguments = params.arguments or {}
+        unexpected = sorted(set(arguments) - {"shift_id"})
+        if unexpected:
+            return _result(
+                staffing_recovery.tool_error(
+                    "invalid_input",
+                    "Only the 'shift_id' argument is accepted.",
+                    {"reason": "unexpected_fields", "fields": unexpected},
+                )
+            )
+        return _result(
+            await staffing_recovery.homs_staffing_recovery_context(
+                arguments.get("shift_id"),
+                api_url=config.student5_api_url,
+                timeout=config.student5_api_timeout,
             )
         )
 

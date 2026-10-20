@@ -26,6 +26,8 @@ FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
 if str(FRONTEND_DIR) not in sys.path:
     sys.path.append(str(FRONTEND_DIR))
 
+import api_client as frontend_api_client  # noqa: E402
+
 
 def _load_frontend_app_module():
     spec = importlib.util.spec_from_file_location(
@@ -1371,6 +1373,54 @@ def test_week_grid_preserves_multiple_real_shifts_in_one_cell(
     assert "Registered Nurse" in body and "Doctor" in body
     assert 'aria-label="Manage Emergency 07:00 shift on 2026-08-26' in body
     assert 'hx-get="/partials/planner"' in body
+
+
+def test_manager_discovers_recovery_on_understaffed_week_grid_shifts(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+
+    def fail_if_mutated(*args, **kwargs):
+        raise AssertionError("planner recovery discovery must not mutate assignments")
+
+    monkeypatch.setattr(fe_api_client, "assign_staff", fail_if_mutated)
+    monkeypatch.setattr(fe_api_client, "unassign_staff", fail_if_mutated)
+
+    body = frontend_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=Emergency").get_data(as_text=True)
+
+    assert 'href="/shifts/20/recovery"' in body
+    assert 'href="/shifts/21/recovery"' in body
+    assert 'href="/shifts/22/recovery"' in body
+    assert "Run Staffing Recovery" in body
+    assert "/assign" not in body
+    assert "/unassign" not in body
+
+
+def test_covered_week_grid_shift_does_not_offer_recovery(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+
+    body = frontend_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=ICU").get_data(as_text=True)
+
+    assert "2/2" in body
+    assert 'href="/shifts/23/recovery"' not in body
+    assert "Run Staffing Recovery" not in body
+
+
+def test_employee_planner_fragment_never_exposes_manager_recovery_action(
+        employee_client, fe_api_client, monkeypatch):
+    _stub_week_planner(monkeypatch, fe_api_client)
+
+    body = employee_client.get(
+        "/partials/planner?week_start=2026-08-24&selected_date=2026-08-26"
+        "&department=Emergency").get_data(as_text=True)
+
+    assert "2/3" in body
+    assert "Run Staffing Recovery" not in body
+    assert "/recovery" not in body
 
 
 def test_empty_week_grid_cell_opens_existing_create_drawer_with_ui_context(
@@ -5057,3 +5107,585 @@ def test_demand_callout_spacing_is_not_an_inline_style(
     body = frontend_client.get("/partials/demand").data.decode()
     assert "demand-callout" in body
     assert "margin-bottom: var(--space-5)" not in body
+
+
+# ===========================================================================
+# Release 2 Phase 3F — Staffing Recovery manager workflow
+# ===========================================================================
+
+RECOVERY_WORKFLOW_ID = "12345678-1234-4678-9234-567812345678"
+
+
+def _recovery_operational_evidence():
+    return {
+        "schema_version": "1.0",
+        "evidence_type": "student5_staffing_recovery",
+        "evidence_mode": "live_api",
+        "current_state": {
+            "shift": dict(SHIFT_FIXTURE),
+            "coverage": {
+                "required_staff_count": 2,
+                "assigned_staff_count": 1,
+                "filled_staff_count": 1,
+                "shortfall": 1,
+                "surplus": 0,
+                "coverage_status": "Understaffed",
+            },
+            "current_assignments": [{
+                "staff_ref": "staff-1", "role": "Registered Nurse",
+                "department": "Emergency", "availability_status": "Available",
+                "assignment_status": "Assigned",
+            }],
+        },
+        "objective": {
+            "metric": "assigned_staff", "current": 1, "target": 2,
+            "unit": "staff member", "staffing_gap": 1,
+        },
+        "options": [{
+            "id": "staff-12", "label": "staff-12",
+            "attributes": {
+                "backend_eligible": True, "role": "Registered Nurse",
+                "specialisation": "Critical Care",
+                "department": "Intensive Care",
+                "employment_status": "Full-Time",
+                "availability_status": "Available",
+                "department_match": False,
+                "weekly_availability_matches": True,
+                "weekly_rostered_hours": 32.0,
+                "blocked_reason": None,
+                "approved_unavailability": None,
+                "current_assignments": [],
+                "conflicting_assignment": None,
+            },
+            "outcomes": {
+                "metric_delta": 1,
+                "projected_assigned_staff_count": 2,
+                "projected_staffing_gap": 0,
+            },
+            "risk_indicators": [
+                "Candidate's home department differs from the shift department."
+            ],
+        }],
+        "constraints": [{
+            "id": "human_approval", "scope": "workflow", "type": "approval",
+            "description": "Human approval is required before any assignment change.",
+        }],
+        "unknowns": [
+            "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured."
+        ],
+        "provenance": {"sources": [], "mutation_allowed": False},
+    }
+
+
+def _recovery_submitted_evidence(*, rag_status="answered", mcp_status="available"):
+    evidence = _recovery_operational_evidence()
+    evidence["evidence_separation"] = {
+        "operational_fact_fields": ["current_state", "objective", "options"],
+        "policy_context_field": "policy_context",
+        "policy_is_advisory": True,
+        "operational_rules_remain_authoritative": True,
+        "mcp_context_field": "mcp_context",
+        "mcp_is_controlled_operational_access": True,
+        "mcp_cannot_override_operational_rules": True,
+    }
+    evidence["policy_context"] = {
+        "context_type": "rag_policy_guidance",
+        "retrieval_status": rag_status,
+        "query": "Documented coverage and approval guidance",
+        "answer": (
+            "Only a Staff Manager records the decision [S1]."
+            if rag_status == "answered" else None
+        ),
+        "confidence": "high" if rag_status == "answered" else "none",
+        "citations": ([{
+            "id": "S1",
+            "source": "student-5/roles-and-decision-support-boundaries.md",
+            "title": "Roles and Decision-Support Boundaries",
+            "section": "Human decision boundary",
+            "score": 0.91,
+            "snippet": "Decision support never creates an assignment.",
+        }] if rag_status == "answered" else []),
+        "reason": None if rag_status == "answered" else "rag_unavailable",
+        "limitations": ["Policy is advisory."],
+    }
+    evidence["mcp_context"] = {
+        "context_type": "mcp_operational_access",
+        "retrieval_status": mcp_status,
+        "tool_name": "homs_staffing_recovery_context",
+        "tool_input": {"shift_id": 11},
+        "tool_result": ({
+            "shift_id": 11, "evidence": _recovery_operational_evidence(),
+            "source": "student-5-recovery-evidence-api",
+            "mutation_allowed": False,
+        } if mcp_status == "available" else None),
+        "source": (
+            "student-5-recovery-evidence-api"
+            if mcp_status == "available" else None
+        ),
+        "error_code": None,
+        "reason": None if mcp_status == "available" else "mcp_unavailable",
+        "consistency_status": (
+            "matched_authoritative_backend_evidence"
+            if mcp_status == "available" else "not_checked"
+        ),
+        "limitations": ["Registered tool access is read-only."],
+    }
+    return evidence
+
+
+def _recovery_stage(role, *, fallback=False):
+    outputs = {
+        "planner": {
+            "goal": "Restore safe shift coverage.",
+            "planned_steps": ["Measure the coverage gap.", "Review eligible options."],
+            "expected_result": "A proposal pending Human Review.",
+        },
+        "worker": {
+            "gap": {"metric": "assigned_staff", "current": 1, "target": 2,
+                    "deficit": 1},
+            "proposed_solution": {
+                "selected_option_id": "staff-12", "selected_option": "staff-12",
+                "metric_delta": 1, "projected_value": 2,
+                "reasoning": ["Passed backend eligibility."],
+            },
+            "limitations": ["Fatigue thresholds are unknown."],
+            "mutation_executed": False,
+        },
+        "reviewer": {
+            "review_status": "changes_required",
+            "recommendation": "Review the proposal and evidence before action.",
+            "recommended_option_id": "staff-12",
+            "risks": ["Cross-department option requires manager review."],
+            "unsupported_claims": [],
+            "human_approval_required": True,
+            "mutation_verified_absent": True,
+        },
+    }
+    return {
+        "started_at": "2026-10-17T01:00:00Z",
+        "completed_at": "2026-10-17T01:00:01Z",
+        "output": outputs[role],
+        "execution": {
+            "provider": "deterministic_fallback" if fallback else "ollama",
+            "model": None if fallback else "llama3.1:8b",
+            "fallback_used": fallback,
+        },
+    }
+
+
+def _recovery_workflow(status="in_progress", completed=0, *, fallback_role=None,
+                       decision=None, comment=""):
+    roles = ("planner", "worker", "reviewer")
+    workflow = {
+        "schema_version": "1.0",
+        "workflow_id": RECOVERY_WORKFLOW_ID,
+        "status": status,
+        "task": "Review the selected shift.",
+        "planner": None,
+        "worker": None,
+        "reviewer": None,
+        "human_review": None,
+        "final_result": None,
+    }
+    for role in roles[:completed]:
+        workflow[role] = _recovery_stage(role, fallback=role == fallback_role)
+    if status == "awaiting_human_review":
+        for role in roles:
+            workflow[role] = workflow[role] or _recovery_stage(
+                role, fallback=role == fallback_role)
+    if status in ("approved", "corrected", "rejected", "partially_accepted"):
+        for role in roles:
+            workflow[role] = workflow[role] or _recovery_stage(
+                role, fallback=role == fallback_role)
+        workflow["human_review"] = {
+            "decision": decision,
+            "comments": comment,
+            "timestamp": "2026-10-17T01:01:00Z",
+        }
+        workflow["final_result"] = {
+            "status": status,
+            "proposal": workflow["worker"]["output"]["proposed_solution"],
+            "review": workflow["reviewer"]["output"],
+            "human_decision": decision,
+            "human_comments_or_correction": comment,
+            "mutation_executed": False,
+        }
+    if status == "failed":
+        workflow["final_result"] = {
+            "status": "failed", "mutation_executed": False,
+        }
+    return workflow
+
+
+def _recovery_start_result(**evidence_kwargs):
+    return {
+        **_recovery_workflow(),
+        "submitted_evidence": _recovery_submitted_evidence(**evidence_kwargs),
+    }
+
+
+def test_understaffed_shift_offers_recovery_entry(
+        frontend_client, fe_api_client, monkeypatch):
+    _stub_shift_detail(monkeypatch, fe_api_client, assignments=[{
+        "staff_id": 1, "name": "Amara Okafor", "role": "Registered Nurse",
+        "department": "Emergency", "availability_status": "Available",
+        "assignment_status": "Assigned",
+    }], candidates=[_candidate(12)])
+
+    body = frontend_client.get("/partials/shifts/11?panel=1").get_data(as_text=True)
+
+    assert "Run Staffing Recovery" in body
+    assert 'href="/shifts/11/recovery"' in body
+    assert "Analysis only. No roster changes are made automatically." in body
+    assert body.index("Staffing Recovery") < body.index("Current assignments")
+
+
+def test_employee_shift_detail_does_not_offer_manager_recovery_entry(
+        employee_client, fe_api_client, monkeypatch):
+    _stub_shift_detail(monkeypatch, fe_api_client, assignments=[{
+        "staff_id": 1, "name": "Amara Okafor", "role": "Registered Nurse",
+        "department": "Emergency", "availability_status": "Available",
+        "assignment_status": "Assigned",
+    }], candidates=[_candidate(12)])
+
+    body = employee_client.get(
+        "/partials/shifts/11?panel=1").get_data(as_text=True)
+
+    assert "Gap 1" in body
+    assert "Run Staffing Recovery" not in body
+    assert 'href="/shifts/11/recovery"' not in body
+
+
+def test_recovery_page_shows_selected_shift_and_authoritative_coverage(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(
+        fe_api_client, "get_recovery_evidence",
+        lambda shift_id: _recovery_operational_evidence())
+
+    response = frontend_client.get("/shifts/11/recovery")
+    body = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Emergency · Registered Nurse" in body
+    assert "SH-011" in body
+    assert "27 Aug 2026" in body
+    assert "23:00–07:00" in body
+    assert "Understaffed" in body
+    assert "Run Staffing Recovery" in body
+    assert 'hx-post="/partials/shifts/11/recovery-workflow"' in body
+
+
+def test_start_uses_selected_shift_and_renders_polling_evidence_sections(
+        frontend_client, fe_api_client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        fe_api_client, "start_recovery_workflow",
+        lambda shift_id: calls.append(shift_id) or _recovery_start_result())
+
+    response = frontend_client.post("/partials/shifts/11/recovery-workflow")
+    body = response.get_data(as_text=True)
+
+    assert calls == [11]
+    assert response.headers["HX-Push-Url"] == (
+        f"/shifts/11/recovery?workflow_id={RECOVERY_WORKFLOW_ID}"
+    )
+    assert RECOVERY_WORKFLOW_ID in body
+    assert "In progress" in body
+    assert 'hx-trigger="load delay:1.5s"' in body
+    assert "Operational evidence" in body
+    assert "Policy Guidance" in body and "Advisory documentation only" in body
+    assert "Roles and Decision-Support Boundaries" in body
+    assert "Human decision boundary" in body
+    assert "Controlled Tool Access" in body
+    assert "homs_staffing_recovery_context" in body
+    assert "shift_id: 11" in body
+    assert "Read-only" in body
+    assert "Matched Authoritative Backend Evidence" in body
+    assert "No roster changes have been made." in body
+    assert "/api/" not in body
+
+
+def test_recovery_page_restores_persisted_workflow_via_existing_get(
+        frontend_client, fe_api_client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        fe_api_client, "get_recovery_evidence",
+        lambda shift_id: _recovery_operational_evidence())
+    monkeypatch.setattr(
+        fe_api_client, "get_recovery_workflow",
+        lambda workflow_id: calls.append(workflow_id) or _recovery_workflow(
+            "rejected", decision="reject", comment="No action authorised."))
+
+    response = frontend_client.get(
+        f"/shifts/11/recovery?workflow_id={RECOVERY_WORKFLOW_ID}")
+    body = response.get_data(as_text=True)
+
+    assert calls == [RECOVERY_WORKFLOW_ID]
+    assert "Rejected" in body
+    assert "No action authorised." in body
+    assert "persisted workflow state was retrieved" in body
+    assert "No roster changes have been made." in body
+
+
+def test_start_button_prevents_duplicate_submission_while_pending(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(
+        fe_api_client, "get_recovery_evidence",
+        lambda shift_id: _recovery_operational_evidence())
+    body = frontend_client.get("/shifts/11/recovery").get_data(as_text=True)
+    assert 'hx-disabled-elt="find button"' in body
+
+
+@pytest.mark.parametrize("rag_status,mcp_status,expected", [
+    ("unavailable", "available",
+     "Unavailable – workflow continued using authoritative operational evidence."),
+    ("answered", "unavailable",
+     "Unavailable – workflow continued using authoritative backend evidence."),
+])
+def test_degraded_rag_or_mcp_is_not_rendered_as_workflow_failure(
+        frontend_client, fe_api_client, monkeypatch,
+        rag_status, mcp_status, expected):
+    monkeypatch.setattr(
+        fe_api_client, "start_recovery_workflow",
+        lambda shift_id: _recovery_start_result(
+            rag_status=rag_status, mcp_status=mcp_status))
+    body = frontend_client.post(
+        "/partials/shifts/11/recovery-workflow").get_data(as_text=True)
+    assert expected in body
+    assert "Workflow failed safely" not in body
+
+
+@pytest.mark.parametrize("completed,visible,running", [
+    (0, (), "Planner"),
+    (1, ("Restore safe shift coverage.",), "Worker"),
+    (2, ("Restore safe shift coverage.", "staff-12"), "Reviewer"),
+])
+def test_poll_renders_only_completed_stages_and_next_running_stage(
+        frontend_client, fe_api_client, monkeypatch, completed, visible, running):
+    monkeypatch.setattr(
+        fe_api_client, "get_recovery_workflow",
+        lambda workflow_id: _recovery_workflow(completed=completed))
+
+    body = frontend_client.get(
+        f"/partials/recovery-workflows/{RECOVERY_WORKFLOW_ID}"
+    ).get_data(as_text=True)
+
+    for value in visible:
+        assert value in body
+    assert f"<strong>{running}</strong><small>Running</small>" in body
+    assert 'hx-trigger="load delay:1.5s"' in body
+
+
+def test_fallback_is_visible_neutrally_without_raw_failure_detail(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(
+        fe_api_client, "get_recovery_workflow",
+        lambda workflow_id: _recovery_workflow(
+            completed=2, fallback_role="worker"))
+    body = frontend_client.get(
+        f"/partials/recovery-workflows/{RECOVERY_WORKFLOW_ID}"
+    ).get_data(as_text=True)
+    assert "Fallback used" in body
+    assert "Completed using deterministic safety fallback." in body
+    assert "fallback_reason" not in body
+
+
+def test_poll_stops_and_human_review_appears_when_ready(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(
+        fe_api_client, "get_recovery_workflow",
+        lambda workflow_id: _recovery_workflow("awaiting_human_review"))
+    body = frontend_client.get(
+        f"/partials/recovery-workflows/{RECOVERY_WORKFLOW_ID}"
+    ).get_data(as_text=True)
+    assert "Awaiting Human Review" in body
+    assert "Human Review records your decision on this recommendation." in body
+    assert "It does not automatically change the roster." in body
+    assert 'value="approve"' in body
+    assert 'value="correct"' in body
+    assert 'value="partially_accept"' in body
+    assert 'value="reject"' in body
+    assert 'hx-trigger="load delay:1.5s"' not in body
+
+
+@pytest.mark.parametrize("decision,status,label", [
+    ("approve", "approved", "Approved"),
+    ("correct", "corrected", "Corrected"),
+    ("reject", "rejected", "Rejected"),
+    ("partially_accept", "partially_accepted", "Partially Accepted"),
+])
+def test_human_review_forwards_exact_decision_and_renders_final_state(
+        frontend_client, fe_api_client, monkeypatch, decision, status, label):
+    calls = []
+    comment = "Manager advisory decision."
+
+    def submit(workflow_id, submitted_decision, submitted_comment):
+        calls.append((workflow_id, submitted_decision, submitted_comment))
+        return _recovery_workflow(
+            status, decision=decision, comment=comment)
+
+    monkeypatch.setattr(fe_api_client, "submit_recovery_review", submit)
+    response = frontend_client.post(
+        f"/partials/recovery-workflows/{RECOVERY_WORKFLOW_ID}/review",
+        data={"decision": decision, "comment": comment},
+    )
+    body = response.get_data(as_text=True)
+
+    assert calls == [(RECOVERY_WORKFLOW_ID, decision, comment)]
+    assert label in body
+    assert comment in body
+    assert "No roster changes have been made." in body
+    assert "Roster mutation" in body and "None" in body
+    assert 'hx-trigger="load delay:1.5s"' not in body
+
+
+def test_empty_correction_comment_is_rejected_before_backend(
+        frontend_client, fe_api_client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        fe_api_client, "submit_recovery_review",
+        lambda *args: calls.append(args))
+    body = frontend_client.post(
+        f"/partials/recovery-workflows/{RECOVERY_WORKFLOW_ID}/review",
+        data={"decision": "correct", "comment": "   "},
+    ).get_data(as_text=True)
+    assert calls == []
+    assert "Correction comment required" in body
+
+
+def test_employee_cannot_start_poll_or_review_through_frontend(
+        employee_client, fe_api_client, monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        fe_api_client, "start_recovery_workflow",
+        lambda *args: calls.append(("start", args)))
+    monkeypatch.setattr(
+        fe_api_client, "get_recovery_workflow",
+        lambda *args: calls.append(("get", args)))
+    monkeypatch.setattr(
+        fe_api_client, "submit_recovery_review",
+        lambda *args: calls.append(("review", args)))
+
+    responses = [
+        employee_client.post("/partials/shifts/11/recovery-workflow"),
+        employee_client.get(
+            f"/partials/recovery-workflows/{RECOVERY_WORKFLOW_ID}"),
+        employee_client.post(
+            f"/partials/recovery-workflows/{RECOVERY_WORKFLOW_ID}/review",
+            data={"decision": "reject"}),
+    ]
+
+    assert all(response.status_code == 403 for response in responses)
+    assert all("Staff Managers only" in response.get_data(as_text=True)
+               for response in responses)
+    assert calls == []
+
+
+@pytest.mark.parametrize("error,title", [
+    (frontend_api_client.BackendUnavailableError("private http://127.0.0.1"),
+     "Staffing Recovery unavailable"),
+    (frontend_api_client.BackendTimeoutError("private timeout"), "Recovery start timed out"),
+    (frontend_api_client.BackendServiceUnavailableError("private upstream"),
+     "Multi-Agent service unavailable"),
+    (frontend_api_client.BackendBadGatewayError("private malformed"),
+     "Recovery response could not be used"),
+])
+def test_start_failures_are_safe_retryable_and_hide_internal_detail(
+        frontend_client, fe_api_client, monkeypatch, error, title):
+    monkeypatch.setattr(
+        fe_api_client, "start_recovery_workflow",
+        lambda shift_id: (_ for _ in ()).throw(error))
+    body = frontend_client.post(
+        "/partials/shifts/11/recovery-workflow").get_data(as_text=True)
+    assert title in body
+    assert "Retry" in body
+    assert "127.0.0.1" not in body
+    assert "private" not in body
+    assert "No roster changes have been made." in body
+
+
+def test_temporary_poll_error_is_retryable_and_does_not_claim_failure(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(
+        fe_api_client, "get_recovery_workflow",
+        lambda workflow_id: (_ for _ in ()).throw(
+            frontend_api_client.BackendUnavailableError("private network")))
+    body = frontend_client.get(
+        f"/partials/recovery-workflows/{RECOVERY_WORKFLOW_ID}"
+    ).get_data(as_text=True)
+    assert "Progress temporarily unavailable" in body
+    assert "The workflow may still be running." in body
+    assert "Retry" in body
+    assert "Workflow failed safely" not in body
+    assert "private" not in body
+
+
+def test_human_review_conflict_is_safe_and_refreshable(
+        frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(
+        fe_api_client, "submit_recovery_review",
+        lambda *args: (_ for _ in ()).throw(
+            frontend_api_client.ConflictError("private lifecycle detail")))
+    body = frontend_client.post(
+        f"/partials/recovery-workflows/{RECOVERY_WORKFLOW_ID}/review",
+        data={"decision": "reject", "comment": "Unsafe."},
+    ).get_data(as_text=True)
+    assert "Human Review already closed" in body
+    assert "Refresh" in body
+    assert "private lifecycle detail" not in body
+
+
+def test_frontend_recovery_calls_never_use_assignment_mutation_helpers(
+        frontend_client, fe_api_client, monkeypatch):
+    for name in ("assign_staff", "unassign_staff", "create_shift", "update_shift",
+                 "delete_shift", "update_availability"):
+        monkeypatch.setattr(
+            fe_api_client, name,
+            lambda *args, _name=name, **kwargs: (_ for _ in ()).throw(
+                AssertionError(f"mutation helper called: {_name}")))
+    monkeypatch.setattr(
+        fe_api_client, "start_recovery_workflow",
+        lambda shift_id: _recovery_start_result())
+    monkeypatch.setattr(
+        fe_api_client, "get_recovery_workflow",
+        lambda workflow_id: _recovery_workflow("awaiting_human_review"))
+    monkeypatch.setattr(
+        fe_api_client, "submit_recovery_review",
+        lambda workflow_id, decision, comment: _recovery_workflow(
+            "rejected", decision="reject", comment=comment))
+
+    assert frontend_client.post(
+        "/partials/shifts/11/recovery-workflow").status_code == 200
+    assert frontend_client.get(
+        f"/partials/recovery-workflows/{RECOVERY_WORKFLOW_ID}").status_code == 200
+    assert frontend_client.post(
+        f"/partials/recovery-workflows/{RECOVERY_WORKFLOW_ID}/review",
+        data={"decision": "reject", "comment": "No action."}).status_code == 200
+
+
+def test_frontend_recovery_api_client_uses_only_student5_backend_paths(
+        fe_api_client, monkeypatch):
+    calls = []
+
+    def fake_request(method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        return {}
+
+    monkeypatch.setattr(fe_api_client, "_request", fake_request)
+    fe_api_client.get_recovery_evidence(11)
+    fe_api_client.start_recovery_workflow(11)
+    fe_api_client.get_recovery_workflow(RECOVERY_WORKFLOW_ID)
+    fe_api_client.submit_recovery_review(
+        RECOVERY_WORKFLOW_ID, "reject", "Advisory only.")
+
+    assert calls == [
+        ("GET", "/api/shifts/11/recovery-evidence", {}),
+        ("POST", "/api/shifts/11/recovery-workflow", {
+            "timeout": fe_api_client.RECOVERY_START_API_TIMEOUT}),
+        ("GET", f"/api/recovery-workflows/{RECOVERY_WORKFLOW_ID}", {
+            "timeout": fe_api_client.RECOVERY_WORKFLOW_API_TIMEOUT}),
+        ("POST", f"/api/recovery-workflows/{RECOVERY_WORKFLOW_ID}/review", {
+            "payload": {"decision": "reject", "comment": "Advisory only."},
+            "timeout": fe_api_client.RECOVERY_WORKFLOW_API_TIMEOUT}),
+    ]
+    assert fe_api_client.RECOVERY_START_API_TIMEOUT > fe_api_client.API_TIMEOUT

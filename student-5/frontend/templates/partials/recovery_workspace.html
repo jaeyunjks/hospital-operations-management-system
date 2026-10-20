@@ -1,0 +1,128 @@
+{% set current = evidence.current_state %}
+{% set coverage = current.coverage %}
+{% set policy = evidence.policy_context %}
+{% set mcp = evidence.mcp_context %}
+
+<div class="recovery-safety-note recovery-safety-note--prominent" role="status">
+  <strong>No roster changes have been made.</strong>
+  Staffing Recovery is advisory and cannot execute an assignment.
+</div>
+
+{% include "partials/recovery_state.html" %}
+
+<div class="recovery-evidence-grid">
+  <details class="panel recovery-evidence" open>
+    <summary>
+      <span><span class="u-label">Authoritative</span> Operational evidence</span>
+      <span class="badge-info">Backend facts</span>
+    </summary>
+    <div class="recovery-evidence__body">
+      <dl class="recovery-coverage-metrics recovery-coverage-metrics--compact">
+        <div><dt>Required</dt><dd>{{ coverage.required_staff_count }}</dd></div>
+        <div><dt>Assigned</dt><dd>{{ coverage.assigned_staff_count }}</dd></div>
+        <div><dt>Shortfall</dt><dd>{{ coverage.shortfall }}</dd></div>
+        <div><dt>Status</dt><dd>{{ coverage.coverage_status }}</dd></div>
+      </dl>
+      <h3>Candidate evidence</h3>
+      {% if evidence.options %}
+      <ul class="recovery-candidates" role="list">
+        {% for option in evidence.options %}
+        <li>
+          <div class="recovery-candidates__heading">
+            <strong class="u-mono">{{ option.id }}</strong>
+            <span class="badge-{{ 'success' if option.attributes.backend_eligible else 'danger' }}">
+              {{ 'Backend eligible' if option.attributes.backend_eligible else 'Not eligible' }}
+            </span>
+          </div>
+          <p>{{ option.attributes.role or 'Role unavailable' }} · {{ option.attributes.department or 'Department unavailable' }}</p>
+          <p>
+            Availability: {{ option.attributes.availability_status or 'Unknown' }}
+            · Weekly pattern: {{ 'matches' if option.attributes.weekly_availability_matches else 'review required' }}
+          </p>
+          {% if option.risk_indicators %}
+          <ul>{% for risk in option.risk_indicators %}<li>{{ risk }}</li>{% endfor %}</ul>
+          {% endif %}
+          {% if option.attributes.blocked_reason %}<p class="recovery-risk">{{ option.attributes.blocked_reason }}</p>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="u-muted">No candidate options were supplied.</p>
+      {% endif %}
+      {% if evidence.unknowns %}
+      <h3>Known limitations</h3>
+      <ul>{% for unknown in evidence.unknowns %}<li>{{ unknown }}</li>{% endfor %}</ul>
+      {% endif %}
+    </div>
+  </details>
+
+  <details class="panel recovery-evidence">
+    <summary>
+      <span><span class="u-label">Advisory</span> Policy Guidance</span>
+      <span class="badge-{{ 'success' if policy.retrieval_status == 'answered' else 'neutral' }}">
+        {{ 'Retrieved' if policy.retrieval_status == 'answered' else policy.retrieval_status|replace('_', ' ')|title }}
+      </span>
+    </summary>
+    <div class="recovery-evidence__body">
+      <p class="recovery-boundary-copy">
+        Advisory documentation only. Backend operational evidence and deterministic
+        eligibility remain authoritative.
+      </p>
+      {% if policy.retrieval_status == 'answered' %}
+      <dl class="recovery-provenance-list">
+        <div><dt>Retrieval status</dt><dd>Answered</dd></div>
+        <div><dt>Confidence</dt><dd>{{ policy.confidence|title }}</dd></div>
+      </dl>
+      {% if policy.answer %}<p class="recovery-policy-answer">{{ policy.answer }}</p>{% endif %}
+      <div class="recovery-citations">
+        {% for citation in policy.citations %}
+        <article>
+          <span class="u-mono">[{{ citation.id }}]</span>
+          <h3>{{ citation.title }}</h3>
+          <p>{{ citation.section }}</p>
+          <p class="u-muted">{{ citation.source }}{% if citation.score is not none %} · score {{ citation.score }}{% endif %}</p>
+          <p>{{ citation.snippet }}</p>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p>
+        Unavailable – workflow continued using authoritative operational evidence.
+      </p>
+      <p class="u-muted">Recorded reason: {{ policy.reason|replace('_', ' ') if policy.reason else 'No relevant context returned' }}.</p>
+      {% endif %}
+    </div>
+  </details>
+
+  <details class="panel recovery-evidence">
+    <summary>
+      <span><span class="u-label">Controlled access</span> Controlled Tool Access</span>
+      <span class="badge-{{ 'success' if mcp.retrieval_status == 'available' else 'neutral' }}">
+        {{ mcp.retrieval_status|replace('_', ' ')|title }}
+      </span>
+    </summary>
+    <div class="recovery-evidence__body">
+      {% if mcp.retrieval_status == 'available' %}
+      <dl class="recovery-provenance-list">
+        <div><dt>Tool</dt><dd class="u-mono">{{ mcp.tool_name }}</dd></div>
+        <div><dt>Input</dt><dd class="u-mono">shift_id: {{ mcp.tool_input.shift_id }}</dd></div>
+        <div><dt>Access</dt><dd>{{ 'Read-only' if mcp.tool_result.mutation_allowed is sameas false else 'Unknown' }}</dd></div>
+        <div><dt>Source</dt><dd>{{ mcp.source }}</dd></div>
+        <div><dt>Consistency</dt><dd>{{ mcp.consistency_status|replace('_', ' ')|title }}</dd></div>
+      </dl>
+      <p class="recovery-boundary-copy">
+        The registered tool returned the same authoritative evidence. Its
+        duplicated evidence payload is intentionally not displayed here.
+      </p>
+      {% else %}
+      <p>Unavailable – workflow continued using authoritative backend evidence.</p>
+      <dl class="recovery-provenance-list">
+        <div><dt>Tool</dt><dd class="u-mono">{{ mcp.tool_name }}</dd></div>
+        <div><dt>Input</dt><dd class="u-mono">shift_id: {{ mcp.tool_input.shift_id }}</dd></div>
+        <div><dt>Consistency</dt><dd>Not checked</dd></div>
+      </dl>
+      {% endif %}
+      <p class="recovery-no-mutation">Registered access is read-only; mutation is not allowed.</p>
+    </div>
+  </details>
+</div>

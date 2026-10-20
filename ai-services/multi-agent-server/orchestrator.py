@@ -63,6 +63,9 @@ class MultiAgentOrchestrator:
                     "fallback_reason": None,
                     "attempts": attempts,
                     "attempt_count": len(attempts),
+                    "semantic_validation": getattr(
+                        error, "semantic_validation", None
+                    ),
                     "error": str(error),
                 },
             }
@@ -80,10 +83,10 @@ class MultiAgentOrchestrator:
         self.on_stage(name, record[name])
         return result.output
 
-    def start(
+    def create(
         self, *, task: str, evidence: Dict[str, Any]
     ) -> tuple[Dict[str, Any], str]:
-        """Run all model stages and persist the Human Review checkpoint."""
+        """Persist a new in-progress workflow before model execution begins."""
 
         if not task.strip():
             raise ValueError("task must not be blank")
@@ -106,37 +109,75 @@ class MultiAgentOrchestrator:
         }
         audit_path = self.audit_store.create(record)
         self.on_stage("workflow_started", {"workflow_id": workflow_id})
+        return record, str(audit_path)
+
+    def process(self, workflow_id: str) -> tuple[Dict[str, Any], str]:
+        """Run the existing ordered stages for one persisted workflow."""
+
+        record = self.audit_store.read(workflow_id)
+        if record.get("final_status") != "in_progress":
+            raise InvalidWorkflowStateError("workflow is not in progress")
+        audit_path = self.audit_store.path_for(workflow_id)
+        evidence = record["input_evidence"]
 
         try:
-            planner_input = {"task": record["task"], "evidence": evidence}
-            plan = self._run_stage(
-                name="planner",
-                agent=self.planner,
-                agent_input=planner_input,
-                record=record,
-            )
+            if record.get("planner") is None:
+                planner_input = {"task": record["task"], "evidence": evidence}
+                plan = self._run_stage(
+                    name="planner",
+                    agent=self.planner,
+                    agent_input=planner_input,
+                    record=record,
+                )
+            else:
+                plan = record["planner"].get("output")
+                if not isinstance(plan, dict):
+                    raise InvalidWorkflowStateError(
+                        "persisted Planner output is incomplete"
+                    )
 
-            worker_input = {
-                "task": record["task"],
-                "planner_output": plan,
-                "evidence": evidence,
-            }
-            work = self._run_stage(
-                name="worker", agent=self.worker, agent_input=worker_input, record=record
-            )
+            if record.get("worker") is None:
+                worker_input = {
+                    "task": record["task"],
+                    "planner_output": plan,
+                    "evidence": evidence,
+                }
+                work = self._run_stage(
+                    name="worker",
+                    agent=self.worker,
+                    agent_input=worker_input,
+                    record=record,
+                )
+            else:
+                work = record["worker"].get("output")
+                if not isinstance(work, dict):
+                    raise InvalidWorkflowStateError(
+                        "persisted Worker output is incomplete"
+                    )
 
-            reviewer_input = {
-                "task": record["task"],
-                "planner_output": plan,
-                "worker_output": work,
-                "evidence": evidence,
-            }
-            review = self._run_stage(
-                name="reviewer",
-                agent=self.reviewer,
-                agent_input=reviewer_input,
-                record=record,
-            )
+            if record.get("reviewer") is None:
+                reviewer_input = {
+                    "task": record["task"],
+                    "planner_output": plan,
+                    "worker_output": work,
+                    "worker_execution": {
+                        "provider": record["worker"]["execution"].get("provider"),
+                        "fallback_used": record["worker"]["execution"].get(
+                            "fallback_used", False
+                        ),
+                    },
+                    "evidence": evidence,
+                }
+                self._run_stage(
+                    name="reviewer",
+                    agent=self.reviewer,
+                    agent_input=reviewer_input,
+                    record=record,
+                )
+            elif not isinstance(record["reviewer"].get("output"), dict):
+                raise InvalidWorkflowStateError(
+                    "persisted Reviewer output is incomplete"
+                )
         except (RuntimeError, ValueError) as error:
             record["final_status"] = "failed"
             record["final_result"] = {
@@ -155,6 +196,14 @@ class MultiAgentOrchestrator:
         self.audit_store.update(record)
         self.on_stage("human_review_required", {"audit_path": str(audit_path)})
         return record, str(audit_path)
+
+    def start(
+        self, *, task: str, evidence: Dict[str, Any]
+    ) -> tuple[Dict[str, Any], str]:
+        """Synchronous CLI-compatible create and process wrapper."""
+
+        record, _audit_path = self.create(task=task, evidence=evidence)
+        return self.process(record["workflow_id"])
 
     def submit_human_review(
         self, *, workflow_id: str, human_review: HumanReview

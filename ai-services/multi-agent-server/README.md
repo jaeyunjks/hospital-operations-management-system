@@ -23,6 +23,7 @@ multi-agent-server/
 ├── orchestrator.py         # ordered hand-offs and finalisation gate
 ├── models.py               # explicit Planner/Worker/Reviewer JSON schemas
 ├── model_client.py         # role routing + Ollama validation/retries/fallback
+├── semantic_validation.py  # generic evidence/constraint cross-stage checks
 ├── audit.py                # collision-safe persistent JSON history
 ├── agents/                 # separate Planner, Worker, Reviewer roles
 ├── prompts/                # role-specific model instructions
@@ -92,6 +93,26 @@ error and required schema. The default limit is three attempts per agent
 (configurable from 1 to 5). Exhaustion fails `ollama` mode; `auto` mode may use
 the deterministic fallback but records that fact and all failed live attempts.
 
+Schema-valid output also passes deterministic semantic validation before it is
+accepted. Planner evidence requirements are unique supplied top-level keys.
+Worker option IDs, labels, hard-constraint results, eligibility, selection,
+objective gap, and safely derivable projections are checked against supplied
+structured evidence. The currently supported hard-constraint operator is
+`equals`; unknown operators fail closed. Advisory risks and retrieved policy
+context never become eligibility rules unless the input explicitly represents
+them as `type=hard`, `scope=option` constraints.
+
+Reviewer recommendations use `recommended_option_id` (`string` or `null`) and
+must agree with the validated Worker selection. Deterministically validated
+facts use `validated_evidence_refs` entries containing `source`, `path`, and the
+exact `value`; unrestricted prose is not accepted as a validated finding.
+Recommendation prose is limited to safe generic review instructions; all option
+identity is carried by the semantically checked `recommended_option_id` field.
+Semantic failures use the existing bounded correction attempts and `auto` mode
+fallback. Persisted execution distinguishes `malformed_json`, `schema_invalid`,
+and `semantic_invalid`, and records compact issue codes plus retry/fallback
+status. The stable public HTTP execution summary is unchanged.
+
 Use another scenario without changing server code:
 
 ```bash
@@ -103,8 +124,9 @@ python3 ai-services/multi-agent-server/main.py \
 Each run creates a unique file under `reports/multi-agent/` containing the
 original inputs, every agent hand-off/output, raw model attempts, normalisation,
 validation errors, model/provider provenance, human decision, timestamps,
-final status, and final result. Existing histories are never reused or
-overwritten. A successful live stage is labelled `live_ollama`; fallback output
+semantic validation metadata, final status, and final result. Existing
+histories are never reused or overwritten. A successful live stage is labelled
+`live_ollama`; fallback output
 is labelled `deterministic_fallback` and never presented as live.
 
 ### HTTP workflow
@@ -127,8 +149,8 @@ The HTTP API exposes:
 | Method | Path | Result |
 |--------|------|--------|
 | `GET` | `/health` | Lightweight service health; never calls Ollama |
-| `POST` | `/workflows` | Runs all three agents, then returns `awaiting_human_review` |
-| `GET` | `/workflows/{workflow_id}` | Reconstructs public state from the audit JSON |
+| `POST` | `/workflows` | Persists and returns a new `in_progress` workflow immediately |
+| `GET` | `/workflows/{workflow_id}` | Polls current persisted stage/lifecycle state |
 | `POST` | `/workflows/{workflow_id}/review` | Records Human Review and finalises the workflow |
 
 Create a generic workflow:
@@ -144,8 +166,15 @@ jq -n \
     http://127.0.0.1:8200/workflows
 ```
 
-The create request returns only after the three model stages finish. It does
-not wait for or infer a human decision. Retrieve the state and then review it:
+The create request returns HTTP `202`, the real workflow UUID, `Location`, and
+`Retry-After: 1` after the initial `in_progress` audit record is durable. A
+bounded background worker then runs the unchanged Planner → Worker → Reviewer
+sequence. Poll `Location` until the status becomes `awaiting_human_review` or
+`failed`; completed stages become visible as they are persisted. In-progress
+records are resumed from the next incomplete stage when the server restarts.
+The single background worker bounds local model load; additional workflows
+remain durably `in_progress` until their turn. No human decision is inferred.
+Retrieve the state and then review it:
 
 ```bash
 curl --fail-with-body http://127.0.0.1:8200/workflows/WORKFLOW_ID
@@ -178,4 +207,6 @@ python3 -m pytest -q ai-services/multi-agent-server/tests
 The tests mock Ollama and need no live model, database, or feature service.
 They cover schemas, normalisation, corrective retries, exhaustion, provenance,
 sequential hand-offs, persisted HTTP lifecycle, API validation, and the Human
-Review gate.
+Review gate. Generic semantic tests additionally cover Planner evidence
+resolution, Worker option/constraint fidelity, structured Reviewer grounding,
+safe fallback, and audit metadata.

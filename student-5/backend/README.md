@@ -21,10 +21,13 @@ Database Microservice      <- student-5/database/service.py (port 6500)
 SQLite
 ```
 
-The optional Release 1 path is read-only and crosses the shared MCP boundary:
+The optional Release 1 paths are read-only and cross the shared MCP boundary:
 
 ```
 Student 5 backend -> shared local MCP -> Student 4 Room & Bed API
+Student 5 recovery workflow -> shared local MCP
+                            -> homs_staffing_recovery_context
+                            -> Student 5 recovery-evidence API
 ```
 
 It never calls Student 4 directly or reads Student 4 data files. The shared
@@ -49,9 +52,14 @@ SQLite file** — every read and write crosses the HTTP boundary in
 | `routes/shift_routes.py` | Shift endpoints |
 | `routes/assignment_routes.py` | Assignment endpoints |
 | `routes/coverage_routes.py` | Staffing coverage endpoint |
+| `routes/recovery_routes.py` | Read-only Staffing Recovery evidence endpoint |
 | `routes/ai_routes.py` | AI-ready endpoints (structure only) |
 | `routes/mcp_routes.py` | Manager-only ward occupancy MCP gateway |
-| `services/mcp_client.py` | Narrow shared-MCP adapter |
+| `services/mcp_client.py` | Narrow shared-MCP adapters with fixed tool names and arguments |
+| `services/recovery_service.py` | Privacy-safe evidence assembler over existing deterministic services |
+| `services/recovery_policy_service.py` | Separately labelled advisory RAG policy enrichment |
+| `services/recovery_mcp_service.py` | Controlled MCP evidence enrichment and consistency check |
+| `services/multi_agent_client.py` | Bounded HTTP adapter for the shared Multi-Agent lifecycle |
 | `services/*.py` | Application logic, separated from routing and storage |
 
 ## Endpoints
@@ -73,6 +81,10 @@ SQLite file** — every read and write crosses the HTTP boundary in
 | GET | `/api/shifts/<id>` | Retrieve one shift |
 | PUT | `/api/shifts/<id>` | Update a shift |
 | DELETE | `/api/shifts/<id>` | Delete a shift (assignments cascade) |
+| GET | `/api/shifts/<id>/recovery-evidence` | Assemble read-only Staffing Recovery evidence (Staff Manager only) |
+| POST | `/api/shifts/<id>/recovery-workflow` | Return a new shared workflow ID with `in_progress` status |
+| GET | `/api/recovery-workflows/<workflow_id>` | Poll Planner, Worker, Reviewer and lifecycle state |
+| POST | `/api/recovery-workflows/<workflow_id>/review` | Record advisory Human Review without changing the roster |
 
 ### Assignment
 
@@ -135,6 +147,157 @@ POSITIONS.
 
 The frontend consumes these fields rather than recomputing them, so a KPI tile,
 a planner roll-up and the API cannot disagree about the same roster.
+
+### Staffing Recovery evidence
+
+`GET /api/shifts/<id>/recovery-evidence` is the Student 5 integration boundary
+for a later shared Multi-Agent workflow. It is manager-only and read-only:
+
+```
+selected shift
+      -> existing shift, coverage, assignment and eligibility services
+      -> privacy-safe generic evidence JSON
+```
+
+The response contains `schema_version`, `evidence_type`, `evidence_mode`,
+`current_state`, `objective`, `options`, `constraints`, `unknowns`, and
+`provenance`. The objective uses the existing per-shift coverage arithmetic.
+Candidate options project the existing deterministic eligibility result; this
+endpoint does not reimplement its hard rules or use Suggest Staff/LLM output.
+
+Staff identifiers are emitted as `staff-<id>`. Names, staff and shift notes,
+and absence reasons are excluded. Approved unavailability is represented only
+by its dates and status. `provenance.mutation_allowed` is always `false`, and
+the endpoint neither calls MCP/RAG/Multi-Agent/Ollama services nor changes an
+assignment. It returns the existing JSON 404, 403, 503, or 500 error contracts
+instead of constructing evidence when an authoritative source is unavailable.
+
+### Shared Multi-Agent workflow integration
+
+`POST /api/shifts/<id>/recovery-workflow` builds fresh evidence by calling the
+same `recovery_service` directly. It uses the existing Release 1
+`StaffShiftRAGClient` to request documented Student 5 policy guidance, then the
+fixed `StaffingRecoveryMCPClient` operation to call the registered
+`homs_staffing_recovery_context` tool with only `{"shift_id": <id>}`. It sends
+one generic `task` plus the enriched evidence to the separately running shared
+`POST /workflows` API. Student 5 does not implement or duplicate RAG, MCP
+transport, Planner, Worker, Reviewer, audit, or Human Review logic.
+
+The fixed, privacy-safe RAG question is:
+
+> What documented Student 5 rules govern an understaffed shift: per-shift
+> coverage, deterministic eligibility blockers, availability and approved
+> unavailability, assignment authority, and the Staff Manager human-approval
+> decision boundary?
+
+It contains policy concepts only—no shift ID, staff reference, name,
+department, notes, or absence reason. The RAG client fixes the shared request to
+`POST /query`, `feature: student-5`, and `top_k: 4`; callers cannot redirect the
+query to another feature or endpoint.
+
+The existing operational evidence fields remain at the top level for shared
+Multi-Agent compatibility. Two additional fields make the trust boundary
+explicit:
+
+- `evidence_separation` identifies the authoritative operational fields and
+  labels policy as advisory;
+- `policy_context` records `retrieval_status`, the fixed `query`, grounded
+  `answer`, `confidence`, validated `citations`, safe `reason`, and limitations.
+
+Phase 3E adds a third separate field, `mcp_context`. It records the fixed tool
+name, bounded `shift_id` input, validated tool result and source, retrieval
+status, safe error code, and a consistency status. The MCP snapshot must exactly
+match the freshly built operational evidence before its result is retained. A
+mismatch is recorded as `inconsistent` and the tool result is withheld; it can
+never replace backend coverage, eligibility, assignments, or unknowns.
+
+Citation objects retain only metadata validated by the R1 adapter: citation
+ID, source document, title, section, retrieval score, and source snippet. RAG
+text cannot change `backend_eligible`, coverage, assignments, availability,
+constraints, or unknowns. In particular, absent fatigue, overtime, rest,
+consecutive-shift, staffing-ratio, patient-load, and acuity policies remain
+explicitly unknown.
+
+RAG is optional in the existing architecture. When disabled, unavailable,
+timed out, invalid, or insufficient, Staffing Recovery continues from
+operational evidence and records an explicit `rag_disabled`, `rag_unavailable`,
+`rag_timeout`, `rag_invalid_response`, or `insufficient_context` policy status.
+It never fabricates substitute guidance.
+
+MCP is likewise optional and degrades explicitly as `mcp_disabled`,
+`mcp_unavailable`, `mcp_timeout`, `mcp_invalid_response`, or `mcp_tool_error`.
+The workflow still uses authoritative operational evidence and separately
+retrieved RAG policy context. The staffing tool performs only a fixed GET to
+the manager-only recovery-evidence endpoint; it cannot accept a URL, select a
+different tool, or invoke assignment/staff/shift/availability mutations.
+
+The request returns HTTP `202` with the validated shared `in_progress`
+response, real `workflow_id`, polling `Location`, and `Retry-After: 1`. At the
+Student 5 boundary only, the response also includes `submitted_evidence`: the
+exact privacy-safe operational, RAG, and MCP evidence sent to the shared
+workflow. The shared API itself remains generic and unchanged, and later GET
+responses continue to mirror its workflow envelope exactly. Clients
+poll `GET /api/recovery-workflows/<workflow_id>` until the workflow reaches
+`awaiting_human_review` or `failed`; completed agent stages appear in the same
+response contract. It never submits a review or changes a roster. Connection failure returns
+`503 multi_agent_unavailable`, timeout returns `504 multi_agent_timeout`, and
+an upstream failure or invalid workflow contract returns a safe `502` response.
+The shared service is not part of Docker Compose and is not included in the
+backend health check.
+
+`GET /api/recovery-workflows/<workflow_id>` and
+`POST /api/recovery-workflows/<workflow_id>/review` proxy the remaining shared
+lifecycle for Staff Managers. The review body mirrors the shared API exactly:
+
+```json
+{"decision": "approve", "comment": "Accepted as an advisory recommendation."}
+```
+
+Accepted decisions are `approve`, `correct`, `reject`, and
+`partially_accept`. A non-blank `comment` is required for `correct`; it is
+optional for the other decisions. The Student 5 backend returns the shared
+workflow envelope (`planner`, `worker`, `reviewer`, `human_review`, and
+`final_result`) after validating it. A completed Human Review records whether
+the manager accepted the recommendation, but it never calls an assignment
+route or writes staff, shift, assignment, availability, or unavailability
+data. The shared final result must continue to report
+`mutation_executed: false`.
+
+### Staffing Recovery frontend
+
+The manager-facing entry point is the existing Shift Planner detail for an
+understaffed shift. `Run Staffing Recovery` opens
+`/shifts/<shift_id>/recovery`; the browser then talks only to the Student 5
+frontend's HTMX partial routes. Server-side `api_client.py` calls the Student 5
+backend to start the workflow, polls its status every 1.5 seconds, and submits
+one of the four existing Human Review decisions. It never calls the shared RAG,
+MCP, or Multi-Agent services directly from the browser.
+
+The page presents authoritative operational evidence separately from advisory
+RAG policy citations and compact MCP registered-tool provenance. Planner,
+Worker, and Reviewer cards appear only after those stages exist in the public
+workflow response. Deterministic fallback is labelled neutrally. Polling stops
+at `awaiting_human_review`, any final state, or `failed`. Human Review accepts
+or rejects the recommendation only: no frontend path invokes an assignment
+mutation, and the final state continues to show `mutation_executed: false`.
+
+Frontend-specific timeout overrides are optional:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `STAFF_SHIFT_RECOVERY_START_API_TIMEOUT` | `125` | Allows bounded RAG/MCP enrichment before the asynchronous workflow ID is returned |
+| `STAFF_SHIFT_RECOVERY_WORKFLOW_API_TIMEOUT` | `15` | Bounds workflow polling and Human Review proxy calls |
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8200` | Local shared Multi-Agent API base URL |
+| `MULTI_AGENT_TIMEOUT` | `600` | Deadline for each short shared API request; model stages run asynchronously |
+| `RAG_ENABLED` | `false` | Enables shared policy enrichment; failure degrades explicitly |
+| `RAG_SERVER_URL` | `http://127.0.0.1:8100` | Local shared Release 1 RAG API |
+| `RAG_TIMEOUT` | `100` | Bounded policy-query deadline in seconds |
+| `MCP_ENABLED` | `false` | Enables controlled workflow MCP enrichment; failure degrades explicitly |
+| `MCP_SERVER_URL` | `http://127.0.0.1:8000/mcp` | Shared local MCP Streamable HTTP endpoint |
+| `MCP_TIMEOUT` | `15` | Bounded MCP operation deadline in seconds |
 
 ### AI-ready (structure only)
 
@@ -242,7 +405,10 @@ service, so it is reviewable and citable as an artefact in its own right.
 `GET /api/mcp/ward-occupancy` calls only
 `homs_ward_occupancy_status`. Its optional `ward` query parameter is an exact
 Student 4 ward name; Student 5 does not infer department-to-ward mappings.
-MCP availability is intentionally excluded from `/health`.
+The recovery workflow separately calls only `homs_staffing_recovery_context`
+with its server-selected tool name and one positive `shift_id`. Neither adapter
+allows a route or user to supply a tool name or upstream URL. MCP availability
+is intentionally excluded from `/health`.
 
 For Docker development, start the shared MCP separately on the host with
 `HOMS_MCP_HOST=0.0.0.0` and `HOMS_MCP_ALLOW_DOCKER_HOST=true`, then start
@@ -262,7 +428,11 @@ pip install -r requirements.txt
 
 ## Running locally
 
-Two processes are needed. **Start the database service first.**
+Two processes are needed for the baseline backend. **Start the database
+service first.** The recovery-workflow endpoint additionally requires the
+separate shared Multi-Agent Server. Enable and start RAG and MCP to add their
+separately labelled contexts; either optional service records an explicit
+degraded status when disabled or unavailable.
 
 Terminal 1 — database microservice:
 
@@ -278,6 +448,35 @@ Terminal 2 — backend/API microservice:
 
 ```bash
 cd student-5/backend && python3 app.py
+```
+
+Terminal 3 — shared Multi-Agent Server (deterministic local validation):
+
+```bash
+python3 ai-services/multi-agent-server/api.py --model-mode deterministic
+```
+
+For live Ollama validation, replace `deterministic` with `ollama` and ensure
+the configured Planner, Worker, and Reviewer models are available locally.
+
+Terminal 4 — optional shared RAG policy service:
+
+```bash
+python3 ai-services/rag-server/ingest.py
+python3 ai-services/rag-server/server.py
+```
+
+Terminal 5 — optional shared MCP service, configured to call this backend:
+
+```bash
+HOMS_STUDENT5_API_URL=http://127.0.0.1:5500/api \
+python3 ai-services/mcp-server/server.py
+```
+
+Enable both enrichments when starting the backend:
+
+```bash
+RAG_ENABLED=true MCP_ENABLED=true python3 app.py
 ```
 
 Confirm both are up:
@@ -297,6 +496,11 @@ curl -s http://127.0.0.1:5500/health
 | `OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama runtime base URL |
 | `OLLAMA_MODEL` | `llama3` | Model used to rank staff and narrate coverage |
 | `OLLAMA_TIMEOUT` | `8` | Seconds before abandoning the model and serving deterministic output |
+| `RAG_ENABLED` | `false` | Enables shared policy enrichment and `/api/rag/ask` |
+| `RAG_SERVER_URL` | `http://127.0.0.1:8100` | Shared local RAG API |
+| `RAG_TIMEOUT` | `100` | RAG request deadline in seconds |
+| `MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8200` | Shared local Multi-Agent API |
+| `MULTI_AGENT_TIMEOUT` | `600` | Bounded end-to-end workflow deadline in seconds |
 
 ## Error responses
 
@@ -307,8 +511,12 @@ Every failure returns JSON: `{"error": "<code>", "message": "<description>"}`.
 | 400 | `validation_error` | Malformed or missing request data |
 | 404 | `not_found` | Unknown staff, shift, assignment, or endpoint |
 | 405 | `method_not_allowed` | Wrong HTTP method for the path |
-| 409 | `conflict` | Duplicate assignment |
+| 409 | `conflict` | Duplicate assignment or workflow not awaiting Human Review |
 | 503 | `database_service_unavailable` | Database microservice unreachable |
+| 502 | `multi_agent_upstream_error` | Shared server rejected the request |
+| 502 | `multi_agent_invalid_response` | Shared server response failed validation |
+| 503 | `multi_agent_unavailable` | Shared server cannot be reached |
+| 504 | `multi_agent_timeout` | A shared workflow API request exceeded its deadline |
 
 ## Testing
 
@@ -337,8 +545,31 @@ curl -s -X POST http://127.0.0.1:5500/api/shifts/1/assign -H 'Content-Type: appl
 curl -s http://127.0.0.1:5500/api/shifts/coverage
 ```
 
+```bash
+curl --fail-with-body -X POST \
+  -H 'X-HOMS-Role: Staff Manager' \
+  http://127.0.0.1:5500/api/shifts/11/recovery-workflow
+```
+
+Use the returned UUID to inspect and review the advisory workflow:
+
+```bash
+curl --fail-with-body \
+  -H 'X-HOMS-Role: Staff Manager' \
+  http://127.0.0.1:5500/api/recovery-workflows/<workflow_id>
+```
+
+```bash
+curl --fail-with-body -X POST \
+  -H 'Content-Type: application/json' \
+  -H 'X-HOMS-Role: Staff Manager' \
+  -d '{"decision":"reject","comment":"Operational risk remains unresolved."}' \
+  http://127.0.0.1:5500/api/recovery-workflows/<workflow_id>/review
+```
+
 ## Scope
 
-No frontend code, no authentication, no LLM integration, and no direct SQLite
-access. The service reads and writes only Staff & Shift Management data via the
-database microservice.
+No assignment execution, in-service Planner/Worker/Reviewer implementation,
+or direct SQLite access. The advisory workflow integration calls the separate
+shared service; operational Staff & Shift data still crosses only the database
+microservice boundary.

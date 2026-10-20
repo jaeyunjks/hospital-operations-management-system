@@ -53,4 +53,12 @@ class Config:
     #: Keep the caller deadline just above that bounded operation.
     RAG_TIMEOUT = float(os.environ.get("RAG_TIMEOUT", "100"))
 
+    #: Shared Release 2 Multi-Agent API. The service remains a separate local,
+    #: non-containerised process and is called only by an explicit workflow
+    #: trigger. The deadline covers all three sequential local model stages.
+    MULTI_AGENT_BASE_URL = os.environ.get(
+        "MULTI_AGENT_BASE_URL", "http://127.0.0.1:8200"
+    )
+    MULTI_AGENT_TIMEOUT = float(os.environ.get("MULTI_AGENT_TIMEOUT", "600"))
+
     JSON_SORT_KEYS = False

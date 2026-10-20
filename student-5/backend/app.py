@@ -30,6 +30,8 @@ from routes.assignment_routes import assignment_blueprint  # noqa: E402
 from routes.coverage_routes import coverage_blueprint  # noqa: E402
 from routes.mcp_routes import mcp_blueprint  # noqa: E402
 from routes.rag_routes import rag_blueprint  # noqa: E402
+from routes.recovery_routes import recovery_blueprint  # noqa: E402
+from routes.recovery_workflow_routes import recovery_workflow_blueprint  # noqa: E402
 from routes.request_routes import request_blueprint  # noqa: E402
 from routes.shift_routes import shift_blueprint  # noqa: E402
 from routes.staff_routes import staff_blueprint  # noqa: E402
@@ -51,6 +53,8 @@ def create_app(config_object: type = Config) -> Flask:
     app.register_blueprint(ai_blueprint)
     app.register_blueprint(mcp_blueprint)
     app.register_blueprint(rag_blueprint)
+    app.register_blueprint(recovery_blueprint)
+    app.register_blueprint(recovery_workflow_blueprint)
     app.register_blueprint(assignment_blueprint)
     app.register_blueprint(request_blueprint)
     app.register_blueprint(shift_blueprint)
@@ -95,8 +99,14 @@ def create_app(config_object: type = Config) -> Flask:
                     "GET    /api/shifts",
                     "POST   /api/shifts",
                     "GET    /api/shifts/<shift_id>",
+                    "GET    /api/shifts/<shift_id>/recovery-evidence",
+                    "POST   /api/shifts/<shift_id>/recovery-workflow",
                     "PUT    /api/shifts/<shift_id>",
                     "DELETE /api/shifts/<shift_id>",
+                ],
+                "recovery_workflows": [
+                    "GET    /api/recovery-workflows/<workflow_id>",
+                    "POST   /api/recovery-workflows/<workflow_id>/review",
                 ],
                 "assignments": [
                     "GET    /api/shifts/<shift_id>/assignments",

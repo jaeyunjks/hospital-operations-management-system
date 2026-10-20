@@ -48,12 +48,15 @@ def test_registers_all_shared_tools():
         "homs_pharmacy_stock_alerts",
         "homs_pharmacy_order_alerts",
         "homs_open_care_tasks",
+        "homs_staffing_recovery_context",
     ]
     assert listing.tools[0].input_schema["required"] == ["message"]
     assert listing.tools[0].input_schema["properties"]["message"]["maxLength"] == 200
     for tool in listing.tools[1:]:
         assert tool.input_schema["additionalProperties"] is False
-        if tool.name != "homs_open_care_tasks":
+        if tool.name not in {
+            "homs_open_care_tasks", "homs_staffing_recovery_context"
+        }:
             assert "required" not in tool.input_schema
 
 

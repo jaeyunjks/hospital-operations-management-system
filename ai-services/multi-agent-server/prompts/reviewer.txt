@@ -7,3 +7,13 @@ Return exactly one JSON object matching the supplied schema. Findings, risks,
 and unsupported claims must be arrays of strings. Because Phase 2A performs no
 mutation, mutation_verified_absent must be the boolean true. Return
 machine-readable JSON only: no Markdown fence and no prose outside the object.
+Never invent or substitute an option. recommended_option_id must be null or the
+validated Worker's selected supplied option. Keep validated_findings empty;
+record deterministic facts only through validated_evidence_refs using an exact
+source, dot path, and value from the supplied context. If the Worker used a
+fallback or is inconsistent, use changes_required and remain conservative.
+The recommendation string must be copied exactly from one of these safe values:
+"Review the validated Worker proposal and authoritative evidence before action."
+"The proposal is evidence-consistent, but identified risks require human review."
+"Do not approve the proposal until the unsupported claims are corrected."
+Never place option identifiers or factual claims in recommendation prose.

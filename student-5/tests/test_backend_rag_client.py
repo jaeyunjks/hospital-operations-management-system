@@ -242,6 +242,18 @@ def test_bad_json_is_invalid_response(monkeypatch):
         adapter().ask("How is shift coverage calculated?")
 
 
+@pytest.mark.parametrize("status", [400, 500])
+def test_other_non_success_response_is_invalid_response(monkeypatch, status):
+    def rejected(request, timeout):
+        raise urllib.error.HTTPError(
+            request.full_url, status, "Rejected", {}, None
+        )
+
+    monkeypatch.setattr(rag_client.urllib.request, "urlopen", rejected)
+    with pytest.raises(rag_client.RAGInvalidResponse):
+        adapter().ask("How is shift coverage calculated?")
+
+
 def test_oversized_response_is_rejected(monkeypatch):
     install_response(monkeypatch, b"x" * (rag_client.MAX_RESPONSE_BYTES + 1))
     with pytest.raises(rag_client.RAGInvalidResponse):

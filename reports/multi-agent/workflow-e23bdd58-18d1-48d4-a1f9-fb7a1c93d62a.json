@@ -1,0 +1,406 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "e23bdd58-18d1-48d4-a1f9-fb7a1c93d62a",
+  "timestamp": "2026-10-11T08:10:14.121Z",
+  "task": "Resolve a staffing shortage for the Emergency evening shift.",
+  "input_evidence": {
+    "scenario": "Staff/Shift Management validation example",
+    "current_state": {
+      "department": "Emergency",
+      "shift": "evening",
+      "occupancy_percent": 92
+    },
+    "objective": {
+      "metric": "assigned_staff",
+      "current": 4,
+      "target": 5,
+      "unit": "staff member"
+    },
+    "options": [
+      {
+        "id": "john",
+        "label": "John",
+        "attributes": {
+          "qualified": true,
+          "available": true,
+          "direct_conflict": false
+        },
+        "outcomes": {
+          "metric_delta": 1
+        },
+        "risk_indicators": []
+      },
+      {
+        "id": "sarah",
+        "label": "Sarah",
+        "attributes": {
+          "qualified": true,
+          "available": true,
+          "direct_conflict": false
+        },
+        "outcomes": {
+          "metric_delta": 1
+        },
+        "risk_indicators": [
+          "Already working a morning shift; total hours and fatigue need review."
+        ]
+      }
+    ],
+    "constraints": [
+      {
+        "id": "qualified",
+        "scope": "option",
+        "type": "hard",
+        "field": "qualified",
+        "operator": "equals",
+        "value": true,
+        "description": "The selected person must be qualified."
+      },
+      {
+        "id": "available",
+        "scope": "option",
+        "type": "hard",
+        "field": "available",
+        "operator": "equals",
+        "value": true,
+        "description": "The selected person must be available."
+      },
+      {
+        "id": "no_direct_conflict",
+        "scope": "option",
+        "type": "hard",
+        "field": "direct_conflict",
+        "operator": "equals",
+        "value": false,
+        "description": "The selected person must have no direct scheduling conflict."
+      },
+      {
+        "id": "avoid_excessive_hours",
+        "scope": "workflow",
+        "type": "policy",
+        "description": "Avoid excessive working hours and review fatigue risk."
+      },
+      {
+        "id": "human_approval",
+        "scope": "workflow",
+        "type": "approval",
+        "description": "Human approval is required before assignment changes."
+      }
+    ],
+    "unknowns": [
+      "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+    ],
+    "evidence_mode": "mock_sample"
+  },
+  "planner": {
+    "started_at": "2026-10-11T08:10:14.121Z",
+    "completed_at": "2026-10-11T08:10:29.413Z",
+    "input": {
+      "task": "Resolve a staffing shortage for the Emergency evening shift.",
+      "evidence": {
+        "scenario": "Staff/Shift Management validation example",
+        "current_state": {
+          "department": "Emergency",
+          "shift": "evening",
+          "occupancy_percent": 92
+        },
+        "objective": {
+          "metric": "assigned_staff",
+          "current": 4,
+          "target": 5,
+          "unit": "staff member"
+        },
+        "options": [
+          {
+            "id": "john",
+            "label": "John",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          },
+          {
+            "id": "sarah",
+            "label": "Sarah",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": [
+              "Already working a morning shift; total hours and fatigue need review."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "qualified",
+            "scope": "option",
+            "type": "hard",
+            "field": "qualified",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be qualified."
+          },
+          {
+            "id": "available",
+            "scope": "option",
+            "type": "hard",
+            "field": "available",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be available."
+          },
+          {
+            "id": "no_direct_conflict",
+            "scope": "option",
+            "type": "hard",
+            "field": "direct_conflict",
+            "operator": "equals",
+            "value": false,
+            "description": "The selected person must have no direct scheduling conflict."
+          },
+          {
+            "id": "avoid_excessive_hours",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Avoid excessive working hours and review fatigue risk."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before assignment changes."
+          }
+        ],
+        "unknowns": [
+          "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+        ],
+        "evidence_mode": "mock_sample"
+      }
+    },
+    "output": {
+      "goal": "Resolve a staffing shortage for the Emergency evening shift.",
+      "required_evidence": [
+        "The selected person must be qualified.",
+        "The selected person must be available.",
+        "The selected person must have no direct scheduling conflict.",
+        "Avoid excessive working hours and review fatigue risk.",
+        "Human approval is required before assignment changes."
+      ],
+      "constraints": [
+        "The selected person must be qualified.",
+        "The selected person must be available.",
+        "The selected person must have no direct scheduling conflict.",
+        "Avoid excessive working hours and review fatigue risk.",
+        "Human approval is required before assignment changes."
+      ],
+      "planned_steps": [
+        "Evaluate the qualifications of each option.",
+        "Check the availability of each option.",
+        "Assess the direct scheduling conflicts of each option.",
+        "Review the potential impact on consecutive workload and fatigue.",
+        "Obtain human approval for the selected option."
+      ],
+      "expected_result": "A qualified and available staff member with no direct scheduling conflict is assigned to the Emergency evening shift."
+    },
+    "execution": {
+      "provider": "live_ollama",
+      "model": "llama3.1:8b",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "llama3.1:8b",
+          "raw_response": "{\n  \"goal\": \"Resolve a staffing shortage for the Emergency evening shift.\",\n  \"required_evidence\": [\n    \"The selected person must be qualified.\",\n    \"The selected person must be available.\",\n    \"The selected person must have no direct scheduling conflict.\",\n    \"Avoid excessive working hours and review fatigue risk.\",\n    \"Human approval is required before assignment changes.\"\n  ],\n  \"constraints\": [\n    \"The selected person must be qualified.\",\n    \"The selected person must be available.\",\n    \"The selected person must have no direct scheduling conflict.\",\n    \"Avoid excessive working hours and review fatigue risk.\",\n    \"Human approval is required before assignment changes.\"\n  ],\n  \"planned_steps\": [\n    \"Evaluate the qualifications of each option.\",\n    \"Check the availability of each option.\",\n    \"Assess the direct scheduling conflicts of each option.\",\n    \"Review the potential impact on consecutive workload and fatigue.\",\n    \"Obtain human approval for the selected option.\"\n  ],\n  \"expected_result\": \"A qualified and available staff member with no direct scheduling conflict is assigned to the Emergency evening shift.\"\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": null,
+          "valid": true
+        }
+      ],
+      "attempt_count": 1
+    }
+  },
+  "worker": {
+    "started_at": "2026-10-11T08:10:29.416Z",
+    "completed_at": "2026-10-11T08:10:34.129Z",
+    "input": {
+      "task": "Resolve a staffing shortage for the Emergency evening shift.",
+      "planner_output": {
+        "goal": "Resolve a staffing shortage for the Emergency evening shift.",
+        "required_evidence": [
+          "The selected person must be qualified.",
+          "The selected person must be available.",
+          "The selected person must have no direct scheduling conflict.",
+          "Avoid excessive working hours and review fatigue risk.",
+          "Human approval is required before assignment changes."
+        ],
+        "constraints": [
+          "The selected person must be qualified.",
+          "The selected person must be available.",
+          "The selected person must have no direct scheduling conflict.",
+          "Avoid excessive working hours and review fatigue risk.",
+          "Human approval is required before assignment changes."
+        ],
+        "planned_steps": [
+          "Evaluate the qualifications of each option.",
+          "Check the availability of each option.",
+          "Assess the direct scheduling conflicts of each option.",
+          "Review the potential impact on consecutive workload and fatigue.",
+          "Obtain human approval for the selected option."
+        ],
+        "expected_result": "A qualified and available staff member with no direct scheduling conflict is assigned to the Emergency evening shift."
+      },
+      "evidence": {
+        "scenario": "Staff/Shift Management validation example",
+        "current_state": {
+          "department": "Emergency",
+          "shift": "evening",
+          "occupancy_percent": 92
+        },
+        "objective": {
+          "metric": "assigned_staff",
+          "current": 4,
+          "target": 5,
+          "unit": "staff member"
+        },
+        "options": [
+          {
+            "id": "john",
+            "label": "John",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          },
+          {
+            "id": "sarah",
+            "label": "Sarah",
+            "attributes": {
+              "qualified": true,
+              "available": true,
+              "direct_conflict": false
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": [
+              "Already working a morning shift; total hours and fatigue need review."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "qualified",
+            "scope": "option",
+            "type": "hard",
+            "field": "qualified",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be qualified."
+          },
+          {
+            "id": "available",
+            "scope": "option",
+            "type": "hard",
+            "field": "available",
+            "operator": "equals",
+            "value": true,
+            "description": "The selected person must be available."
+          },
+          {
+            "id": "no_direct_conflict",
+            "scope": "option",
+            "type": "hard",
+            "field": "direct_conflict",
+            "operator": "equals",
+            "value": false,
+            "description": "The selected person must have no direct scheduling conflict."
+          },
+          {
+            "id": "avoid_excessive_hours",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Avoid excessive working hours and review fatigue risk."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before assignment changes."
+          }
+        ],
+        "unknowns": [
+          "Consecutive workload and fatigue beyond the supplied direct-conflict evidence still require review."
+        ],
+        "evidence_mode": "mock_sample"
+      }
+    },
+    "output": null,
+    "execution": {
+      "provider": "live_ollama",
+      "model": "qwen2.5:0.5b",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "qwen2.5:0.5b",
+          "raw_response": "{\n  \"status\": \"no_eligible_option\",\n  \"plan_steps_followed\": [\n    \"Evaluate the qualifications of each option.\",\n    \"Check the availability of each option.\",\n    \"Assess the direct scheduling conflicts of each option.\"\n  ],\n  \"missing_planner_evidence\": [],\n  \"gap\": {\n    \"metric\": \"consecutive_workload\",\n    \"current\": 0,\n    \"target\": 1,\n    \"deficit\": 1\n  },\n  \"evaluated_options\": [],\n  \"proposed_solution\": {\n    \"selected_option_id\": \"john\",\n    \"selected_option\": \"John\",\n    \"metric_delta\": 1,\n    \"projected_value\": 5,\n    \"reasoning\": [\n      \"The selected person must be qualified.\",\n      \"The selected person must be available.\",\n      \"The selected person must have no direct scheduling conflict.\",\n      \"Avoid excessive working hours and review fatigue risk.\"\n    ]\n  },\n  \"limitations\": [],\n  \"mutation_executed\": false\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": "worker must evaluate every supplied option exactly once",
+          "valid": false
+        },
+        {
+          "attempt": 2,
+          "provider": "live_ollama",
+          "model": "qwen2.5:0.5b",
+          "raw_response": "{\n  \"status\": \"no_eligible_option\",\n  \"plan_steps_followed\": [\n    \"Evaluate the qualifications of each option.\",\n    \"Check the availability of each option.\"\n  ],\n  \"missing_planner_evidence\": [],\n  \"gap\": {\n    \"metric\": \"consecutive_workload\",\n    \"current\": 0,\n    \"target\": 1,\n    \"deficit\": 1\n  },\n  \"evaluated_options\": [],\n  \"proposed_solution\": {\n    \"selected_option_id\": \"john\",\n    \"selected_option\": \"John\",\n    \"metric_delta\": 1,\n    \"projected_value\": 5,\n    \"reasoning\": [\n      \"The selected person must be qualified.\",\n      \"The selected person must be available.\",\n      \"The selected person must have no direct scheduling conflict.\",\n      \"Avoid excessive working hours and review fatigue risk.\"\n    ]\n  },\n  \"limitations\": [],\n  \"mutation_executed\": false\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": "worker must evaluate every supplied option exactly once",
+          "valid": false
+        },
+        {
+          "attempt": 3,
+          "provider": "live_ollama",
+          "model": "qwen2.5:0.5b",
+          "raw_response": "{\n  \"status\": \"no_eligible_option\",\n  \"plan_steps_followed\": [\n    \"Evaluate the qualifications of each option.\",\n    \"Check the availability of each option.\"\n  ],\n  \"missing_planner_evidence\": [],\n  \"gap\": {\n    \"metric\": \"consecutive_workload\",\n    \"current\": 0,\n    \"target\": 1,\n    \"deficit\": 1\n  },\n  \"evaluated_options\": [],\n  \"proposed_solution\": {\n    \"selected_option_id\": \"john\",\n    \"selected_option\": \"John\",\n    \"metric_delta\": 1,\n    \"projected_value\": 5,\n    \"reasoning\": [\n      \"The selected person must be qualified.\",\n      \"The selected person must be available.\",\n      \"The selected person must have no direct scheduling conflict.\",\n      \"Avoid excessive working hours and review fatigue risk.\"\n    ]\n  },\n  \"limitations\": [],\n  \"mutation_executed\": false\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": "worker must evaluate every supplied option exactly once",
+          "valid": false
+        }
+      ],
+      "attempt_count": 3,
+      "error": "worker output remained invalid after 3 attempts: worker must evaluate every supplied option exactly once"
+    }
+  },
+  "reviewer": null,
+  "human_review": null,
+  "final_status": "failed",
+  "final_result": {
+    "status": "failed",
+    "error": "worker output remained invalid after 3 attempts: worker must evaluate every supplied option exactly once",
+    "mutation_executed": false
+  },
+  "completed_at": "2026-10-11T08:10:34.130Z"
+}

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 
 import pytest
 
@@ -29,6 +31,23 @@ MODELS = {
 }
 
 
+class ImmediateExecutor:
+    def submit(self, function, *args):
+        function(*args)
+
+
+class ManualExecutor:
+    def __init__(self):
+        self.jobs = []
+
+    def submit(self, function, *args):
+        self.jobs.append((function, args))
+
+    def run_next(self):
+        function, args = self.jobs.pop(0)
+        function(*args)
+
+
 def build_orchestrator(reports_dir: Path, client=None):
     client = client or DeterministicModelClient()
     return MultiAgentOrchestrator(
@@ -39,12 +58,14 @@ def build_orchestrator(reports_dir: Path, client=None):
     )
 
 
-def build_client(reports_dir: Path, model_client=None):
+def build_client(reports_dir: Path, model_client=None, executor=None):
     config = api.ServerConfig(
         host="127.0.0.1", port=8200, allow_docker_host=False
     )
     return api.create_app(
-        build_orchestrator(reports_dir, model_client), config
+        build_orchestrator(reports_dir, model_client),
+        config,
+        workflow_executor=executor or ImmediateExecutor(),
     ).test_client()
 
 
@@ -117,21 +138,76 @@ def test_health_does_not_run_a_workflow(tmp_path):
     assert list(tmp_path.glob("workflow-*.json")) == []
 
 
-def test_create_runs_all_agents_and_stops_at_human_review(
+def test_create_returns_pollable_workflow_before_agents_run(
     tmp_path, sample_evidence
 ):
-    response = create_workflow(build_client(tmp_path), sample_evidence)
+    executor = ManualExecutor()
+    client = build_client(tmp_path, executor=executor)
+    response = create_workflow(client, sample_evidence)
     body = response.get_json()
 
-    assert response.status_code == 201
+    assert response.status_code == 202
     assert body["workflow_id"]
-    assert body["status"] == "awaiting_human_review"
-    assert body["planner"]["output"]["goal"] == TASK
-    assert body["worker"]["output"]["mutation_executed"] is False
-    assert body["reviewer"]["output"]["human_approval_required"] is True
+    assert body["status"] == "in_progress"
+    assert body["planner"] is None
+    assert body["worker"] is None
+    assert body["reviewer"] is None
     assert body["human_review"] is None
     assert body["final_result"] is None
+    assert response.headers["Location"] == f"/workflows/{body['workflow_id']}"
+    assert response.headers["Retry-After"] == "1"
     assert (tmp_path / f"workflow-{body['workflow_id']}.json").is_file()
+    assert client.get(response.headers["Location"], headers=LOCAL).get_json()[
+        "status"
+    ] == "in_progress"
+    assert post_review(client, body["workflow_id"], "approve").status_code == 409
+
+    executor.run_next()
+    completed = client.get(response.headers["Location"], headers=LOCAL).get_json()
+    assert completed["status"] == "awaiting_human_review"
+    assert completed["planner"]["output"]["goal"] == TASK
+    assert completed["worker"]["output"]["mutation_executed"] is False
+    assert completed["reviewer"]["output"]["human_approval_required"] is True
+
+
+def test_get_polls_partial_background_progress(tmp_path, sample_evidence):
+    deterministic = DeterministicModelClient()
+    worker_started = Event()
+    release_worker = Event()
+
+    class BlockingWorkerClient:
+        def generate(self, *, role, prompt, context):
+            if role == "worker":
+                worker_started.set()
+                assert release_worker.wait(timeout=2)
+            return deterministic.generate(role=role, prompt=prompt, context=context)
+
+    executor = ThreadPoolExecutor(max_workers=1)
+    try:
+        client = build_client(
+            tmp_path, BlockingWorkerClient(), executor=executor
+        )
+        created = create_workflow(client, sample_evidence).get_json()
+        assert worker_started.wait(timeout=1)
+
+        partial = client.get(
+            f"/workflows/{created['workflow_id']}", headers=LOCAL
+        ).get_json()
+        assert partial["status"] == "in_progress"
+        assert partial["planner"]["output"]["goal"] == TASK
+        assert partial["worker"] is None
+        assert partial["reviewer"] is None
+
+        release_worker.set()
+        future = executor.submit(lambda: None)
+        future.result(timeout=2)
+        completed = client.get(
+            f"/workflows/{created['workflow_id']}", headers=LOCAL
+        ).get_json()
+        assert completed["status"] == "awaiting_human_review"
+    finally:
+        release_worker.set()
+        executor.shutdown(wait=True)
 
 
 def test_get_reconstructs_persisted_workflow_after_app_restart(
@@ -145,7 +221,27 @@ def test_get_reconstructs_persisted_workflow_after_app_restart(
     )
 
     assert response.status_code == 200
-    assert response.get_json() == created
+    assert created["status"] == "in_progress"
+    assert response.get_json()["status"] == "awaiting_human_review"
+    assert response.get_json()["workflow_id"] == created["workflow_id"]
+
+
+def test_app_restart_resumes_a_persisted_in_progress_workflow(
+    tmp_path, sample_evidence
+):
+    paused_executor = ManualExecutor()
+    first_client = build_client(tmp_path, executor=paused_executor)
+    created = create_workflow(first_client, sample_evidence).get_json()
+    assert created["status"] == "in_progress"
+
+    restarted_client = build_client(tmp_path)
+    resumed = restarted_client.get(
+        f"/workflows/{created['workflow_id']}", headers=LOCAL
+    ).get_json()
+
+    assert resumed["workflow_id"] == created["workflow_id"]
+    assert resumed["status"] == "awaiting_human_review"
+    assert resumed["human_review"] is None
 
 
 def test_restarted_app_can_finalise_persisted_workflow(tmp_path, sample_evidence):
@@ -274,7 +370,10 @@ def test_role_specific_live_provenance_is_returned_and_persisted(
 ):
     client = build_client(tmp_path, live_style_client(sample_evidence))
 
-    body = create_workflow(client, sample_evidence).get_json()
+    created = create_workflow(client, sample_evidence).get_json()
+    body = client.get(
+        f"/workflows/{created['workflow_id']}", headers=LOCAL
+    ).get_json()
     persisted = json.loads(
         (tmp_path / f"workflow-{body['workflow_id']}.json").read_text()
     )
@@ -311,7 +410,11 @@ def test_fallback_provenance_never_claims_live_success(tmp_path, sample_evidence
         {"planner": planner, "worker": deterministic, "reviewer": deterministic}
     )
 
-    body = create_workflow(build_client(tmp_path, routed), sample_evidence).get_json()
+    client = build_client(tmp_path, routed)
+    created = create_workflow(client, sample_evidence).get_json()
+    body = client.get(
+        f"/workflows/{created['workflow_id']}", headers=LOCAL
+    ).get_json()
     audit = json.loads(
         (tmp_path / f"workflow-{body['workflow_id']}.json").read_text()
     )
@@ -322,7 +425,7 @@ def test_fallback_provenance_never_claims_live_success(tmp_path, sample_evidence
     assert audit["planner"]["execution"]["attempts"][0]["model"] == "llama3.1:8b"
 
 
-def test_model_failure_returns_503_and_persists_failed_audit(
+def test_model_failure_is_reported_by_polling_persisted_audit(
     tmp_path, sample_evidence
 ):
     class FailedClient:
@@ -334,12 +437,18 @@ def test_model_failure_returns_503_and_persists_failed_audit(
             )
 
     response = create_workflow(build_client(tmp_path, FailedClient()), sample_evidence)
-    body = response.get_json()
+    created = response.get_json()
+    polled = build_client(tmp_path).get(
+        f"/workflows/{created['workflow_id']}", headers=LOCAL
+    )
+    body = polled.get_json()
 
-    assert response.status_code == 503
-    assert body["error"]["code"] == "workflow_execution_failed"
-    assert body["workflow"]["status"] == "failed"
-    assert body["workflow"]["human_review"] is None
+    assert response.status_code == 202
+    assert created["status"] == "in_progress"
+    assert polled.status_code == 200
+    assert body["status"] == "failed"
+    assert body["human_review"] is None
+    assert body["final_result"]["mutation_executed"] is False
     assert len(list(tmp_path.glob("workflow-*.json"))) == 1
 
 

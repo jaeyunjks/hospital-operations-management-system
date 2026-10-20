@@ -5,3 +5,6 @@ Return exactly one JSON object matching the supplied schema. Every
 required_evidence, constraints, and planned_steps item must be a string. Return
 machine-readable JSON only: no Markdown fence and no prose outside the object.
 Use only supplied facts; do not assume a domain not present in the evidence.
+required_evidence may contain only unique top-level keys copied exactly from the
+supplied evidence object; never use dotted or nested paths. Copy every supplied
+approval or safety constraint description exactly into constraints.

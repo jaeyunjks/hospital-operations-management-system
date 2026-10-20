@@ -1,0 +1,1778 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "704255b4-0b1a-47a8-91a6-fd5170068bce",
+  "timestamp": "2026-10-17T06:14:59.541Z",
+  "task": "Review the selected hospital shift for staffing coverage problems. Evaluate the supplied candidates and operational constraints. Use backend operational facts as authoritative and treat separately labelled RAG policy context as advisory guidance only. Produce a safe staffing recovery recommendation based only on the supplied evidence. Identify risks, limitations, and missing information. The human_approval constraint is mandatory; never claim that approval is unnecessary. In Planner required_evidence, use only exact top-level evidence category names rather than nested field names. Do not execute any staffing assignment or operational mutation.",
+  "input_evidence": {
+    "schema_version": "1.0",
+    "evidence_type": "student5_staffing_recovery",
+    "evidence_mode": "live_api",
+    "current_state": {
+      "shift": {
+        "shift_id": 11,
+        "department": "Emergency",
+        "shift_date": "2026-08-27",
+        "start_time": "23:00",
+        "end_time": "07:00",
+        "required_role": "Registered Nurse",
+        "required_staff_count": 2,
+        "shift_status": "Planned"
+      },
+      "coverage": {
+        "required_staff_count": 2,
+        "assigned_staff_count": 1,
+        "filled_staff_count": 1,
+        "shortfall": 1,
+        "surplus": 0,
+        "coverage_status": "Understaffed"
+      },
+      "current_assignments": [
+        {
+          "staff_ref": "staff-1",
+          "role": "Registered Nurse",
+          "department": "Emergency",
+          "availability_status": "Available",
+          "assignment_status": "Assigned"
+        }
+      ]
+    },
+    "objective": {
+      "metric": "assigned_staff",
+      "current": 1,
+      "target": 2,
+      "unit": "staff member",
+      "staffing_gap": 1
+    },
+    "options": [
+      {
+        "id": "staff-12",
+        "label": "staff-12",
+        "attributes": {
+          "backend_eligible": true,
+          "role": "Registered Nurse",
+          "specialisation": "Critical Care",
+          "department": "Intensive Care",
+          "employment_status": "Full-Time",
+          "availability_status": "Available",
+          "department_match": false,
+          "weekly_availability_matches": true,
+          "weekly_rostered_hours": 32.0,
+          "blocked_reason": null,
+          "approved_unavailability": null,
+          "current_assignments": [
+            {
+              "shift_id": 3,
+              "department": "Emergency",
+              "shift_date": "2026-08-24",
+              "start_time": "07:00",
+              "end_time": "15:00",
+              "required_role": null,
+              "assignment_status": "Assigned"
+            },
+            {
+              "shift_id": 5,
+              "department": "Intensive Care",
+              "shift_date": "2026-08-24",
+              "start_time": "19:00",
+              "end_time": "07:00",
+              "required_role": null,
+              "assignment_status": "Assigned"
+            },
+            {
+              "shift_id": 12,
+              "department": "Intensive Care",
+              "shift_date": "2026-08-28",
+              "start_time": "07:00",
+              "end_time": "19:00",
+              "required_role": null,
+              "assignment_status": "Assigned"
+            }
+          ],
+          "conflicting_assignment": null
+        },
+        "outcomes": {
+          "metric_delta": 1,
+          "projected_assigned_staff_count": 2,
+          "projected_staffing_gap": 0
+        },
+        "risk_indicators": [
+          "Candidate's home department differs from the shift department."
+        ]
+      },
+      {
+        "id": "staff-7",
+        "label": "staff-7",
+        "attributes": {
+          "backend_eligible": true,
+          "role": "Registered Nurse",
+          "specialisation": "Perioperative",
+          "department": "Surgery",
+          "employment_status": "Full-Time",
+          "availability_status": "Available",
+          "department_match": false,
+          "weekly_availability_matches": false,
+          "weekly_rostered_hours": 0.0,
+          "blocked_reason": null,
+          "approved_unavailability": null,
+          "current_assignments": [],
+          "conflicting_assignment": null
+        },
+        "outcomes": {
+          "metric_delta": 1,
+          "projected_assigned_staff_count": 2,
+          "projected_staffing_gap": 0
+        },
+        "risk_indicators": [
+          "Outside recorded recurring weekly availability.",
+          "Candidate's home department differs from the shift department."
+        ]
+      },
+      {
+        "id": "staff-3",
+        "label": "staff-3",
+        "attributes": {
+          "backend_eligible": true,
+          "role": "Registered Nurse",
+          "specialisation": "Critical Care",
+          "department": "Intensive Care",
+          "employment_status": "Part-Time",
+          "availability_status": "Available",
+          "department_match": false,
+          "weekly_availability_matches": false,
+          "weekly_rostered_hours": 24.0,
+          "blocked_reason": null,
+          "approved_unavailability": null,
+          "current_assignments": [
+            {
+              "shift_id": 5,
+              "department": "Intensive Care",
+              "shift_date": "2026-08-24",
+              "start_time": "19:00",
+              "end_time": "07:00",
+              "required_role": null,
+              "assignment_status": "Confirmed"
+            },
+            {
+              "shift_id": 12,
+              "department": "Intensive Care",
+              "shift_date": "2026-08-28",
+              "start_time": "07:00",
+              "end_time": "19:00",
+              "required_role": null,
+              "assignment_status": "Assigned"
+            }
+          ],
+          "conflicting_assignment": null
+        },
+        "outcomes": {
+          "metric_delta": 1,
+          "projected_assigned_staff_count": 2,
+          "projected_staffing_gap": 0
+        },
+        "risk_indicators": [
+          "Outside recorded recurring weekly availability.",
+          "Candidate's home department differs from the shift department."
+        ]
+      },
+      {
+        "id": "staff-1",
+        "label": "staff-1",
+        "attributes": {
+          "backend_eligible": false,
+          "role": "Registered Nurse",
+          "specialisation": "Triage",
+          "department": "Emergency",
+          "employment_status": "Full-Time",
+          "availability_status": "Available",
+          "department_match": true,
+          "weekly_availability_matches": true,
+          "weekly_rostered_hours": 24.0,
+          "blocked_reason": "Already assigned to this shift",
+          "approved_unavailability": null,
+          "current_assignments": [
+            {
+              "shift_id": 3,
+              "department": "Emergency",
+              "shift_date": "2026-08-24",
+              "start_time": "07:00",
+              "end_time": "15:00",
+              "required_role": null,
+              "assignment_status": "Confirmed"
+            },
+            {
+              "shift_id": 11,
+              "department": "Emergency",
+              "shift_date": "2026-08-27",
+              "start_time": "23:00",
+              "end_time": "07:00",
+              "required_role": null,
+              "assignment_status": "Assigned"
+            },
+            {
+              "shift_id": 35,
+              "department": "General Ward",
+              "shift_date": "2026-08-30",
+              "start_time": "15:00",
+              "end_time": "23:00",
+              "required_role": null,
+              "assignment_status": "Assigned"
+            }
+          ],
+          "conflicting_assignment": null
+        },
+        "outcomes": {
+          "metric_delta": 0,
+          "projected_assigned_staff_count": 1,
+          "projected_staffing_gap": 1
+        },
+        "risk_indicators": []
+      }
+    ],
+    "constraints": [
+      {
+        "id": "backend_eligibility",
+        "scope": "option",
+        "type": "hard",
+        "field": "backend_eligible",
+        "operator": "equals",
+        "value": true,
+        "description": "The existing Student 5 deterministic eligibility service must mark the candidate eligible."
+      },
+      {
+        "id": "weekly_availability_review",
+        "scope": "workflow",
+        "type": "policy",
+        "description": "Recurring weekly availability is advisory and must be reviewed; it is not a configured hard limit."
+      },
+      {
+        "id": "human_approval",
+        "scope": "workflow",
+        "type": "approval",
+        "description": "Human approval is required before any assignment change."
+      },
+      {
+        "id": "no_automatic_assignment",
+        "scope": "workflow",
+        "type": "safety",
+        "description": "This evidence operation is read-only and cannot execute an assignment change."
+      }
+    ],
+    "unknowns": [
+      "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+      "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+      "Patient count and acuity are not available for the selected shift.",
+      "Required staff count is manager-entered and is not derived from a clinical staffing ratio."
+    ],
+    "provenance": {
+      "sources": [
+        {
+          "endpoint": "GET /api/shifts/<shift_id>",
+          "service": "shift_service.get_shift"
+        },
+        {
+          "endpoint": "GET /api/shifts/coverage",
+          "service": "coverage_service.shift_coverage"
+        },
+        {
+          "endpoint": "GET /api/shifts/<shift_id>/assignments",
+          "service": "assignment_service.list_shift_assignments"
+        },
+        {
+          "endpoint": "GET /api/shifts/<shift_id>/candidates",
+          "service": "eligibility_service.candidates_for_shift"
+        }
+      ],
+      "mutation_allowed": false
+    },
+    "evidence_separation": {
+      "operational_fact_fields": [
+        "current_state",
+        "objective",
+        "options",
+        "constraints",
+        "unknowns",
+        "provenance"
+      ],
+      "policy_context_field": "policy_context",
+      "policy_is_advisory": true,
+      "operational_rules_remain_authoritative": true
+    },
+    "policy_context": {
+      "context_type": "rag_policy_guidance",
+      "retrieval_status": "answered",
+      "query": "What documented Student 5 rules govern an understaffed shift: per-shift coverage, deterministic eligibility blockers, availability and approved unavailability, assignment authority, and the Staff Manager human-approval decision boundary?",
+      "answer": "According to [S3], an understaffed shift is defined as a shift where `coverage_status` is `Understaffed`, meaning some positions remain unfilled.\n\nDeterministic eligibility blockers for a shift include:\n\n- already assigned to the target shift ([S2])\n- operational availability status `Unavailable` or `On Leave` ([S2])\n- an `Approved` unavailability request covering the shift date ([S2])\n- a role that does not match the shift's required role ([S2])\n- an active assignment whose time overlaps the target shift ([S2])\n\nAssignment authority is governed by [S2], which states that the candidate endpoint prefilters by required role, and the underlying evaluator still treats a mismatch as ineligible.\n\nThe Staff Manager human-approval decision boundary is governed by [S1], which states that RAG answers are decision support only, and live operational questions must use the authoritative Student 5 APIs.",
+      "confidence": "medium",
+      "citations": [
+        {
+          "id": "S3",
+          "source": "student-5/shift-planning-and-coverage.md",
+          "title": "Shift Planning and Coverage",
+          "section": "Per-shift coverage calculation",
+          "score": 0.7486,
+          "snippet": "Coverage counts assignment records whose status is not `Cancelled` or `Declined`. For each shift: - `assigned_staff_count` is the number of counted assignments; - `filled_staff_count` is the smaller of assigned staff and required staff; - `shortfall` is `max(required - assigned,…"
+        },
+        {
+          "id": "S2",
+          "source": "student-5/staff-eligibility-and-assignments.md",
+          "title": "Staff Eligibility and Assignments",
+          "section": "Why an employee may be ineligible for a shift",
+          "score": 0.7521,
+          "snippet": "The manager-only candidate flow evaluates staff against a specific shift. The candidate endpoint first loads staff who hold the shift's required role. It returns eligible and blocked candidates with a `blocked_reason`; the AI suggestion flow uses the same evaluation and keeps on…"
+        },
+        {
+          "id": "S1",
+          "source": "student-5/roles-and-decision-support-boundaries.md",
+          "title": "Roles and Decision-Support Boundaries",
+          "section": "RAG guidance boundary",
+          "score": 0.7583,
+          "snippet": "This Student 5 knowledge base provides documentation guidance about implemented Staff & Shift behaviour. It does not contain live roster records and cannot say which employee should be assigned now, calculate current coverage without current Student 5 API data, decide how many s…"
+        }
+      ],
+      "reason": null,
+      "limitations": [
+        "Retrieved policy text is advisory guidance, not live operational state.",
+        "Student 5 backend eligibility, coverage, assignment, and availability rules remain authoritative.",
+        "Missing fatigue, overtime, rest-period, consecutive-shift, staffing-ratio, patient-load, and acuity rules must remain unknown unless documented.",
+        "Policy retrieval cannot create, change, or approve a staff assignment."
+      ]
+    }
+  },
+  "planner": {
+    "started_at": "2026-10-17T06:14:59.545Z",
+    "completed_at": "2026-10-17T06:15:21.431Z",
+    "input": {
+      "task": "Review the selected hospital shift for staffing coverage problems. Evaluate the supplied candidates and operational constraints. Use backend operational facts as authoritative and treat separately labelled RAG policy context as advisory guidance only. Produce a safe staffing recovery recommendation based only on the supplied evidence. Identify risks, limitations, and missing information. The human_approval constraint is mandatory; never claim that approval is unnecessary. In Planner required_evidence, use only exact top-level evidence category names rather than nested field names. Do not execute any staffing assignment or operational mutation.",
+      "evidence": {
+        "schema_version": "1.0",
+        "evidence_type": "student5_staffing_recovery",
+        "evidence_mode": "live_api",
+        "current_state": {
+          "shift": {
+            "shift_id": 11,
+            "department": "Emergency",
+            "shift_date": "2026-08-27",
+            "start_time": "23:00",
+            "end_time": "07:00",
+            "required_role": "Registered Nurse",
+            "required_staff_count": 2,
+            "shift_status": "Planned"
+          },
+          "coverage": {
+            "required_staff_count": 2,
+            "assigned_staff_count": 1,
+            "filled_staff_count": 1,
+            "shortfall": 1,
+            "surplus": 0,
+            "coverage_status": "Understaffed"
+          },
+          "current_assignments": [
+            {
+              "staff_ref": "staff-1",
+              "role": "Registered Nurse",
+              "department": "Emergency",
+              "availability_status": "Available",
+              "assignment_status": "Assigned"
+            }
+          ]
+        },
+        "objective": {
+          "metric": "assigned_staff",
+          "current": 1,
+          "target": 2,
+          "unit": "staff member",
+          "staffing_gap": 1
+        },
+        "options": [
+          {
+            "id": "staff-12",
+            "label": "staff-12",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Critical Care",
+              "department": "Intensive Care",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": true,
+              "weekly_rostered_hours": 32.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [
+                {
+                  "shift_id": 3,
+                  "department": "Emergency",
+                  "shift_date": "2026-08-24",
+                  "start_time": "07:00",
+                  "end_time": "15:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                },
+                {
+                  "shift_id": 5,
+                  "department": "Intensive Care",
+                  "shift_date": "2026-08-24",
+                  "start_time": "19:00",
+                  "end_time": "07:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                },
+                {
+                  "shift_id": 12,
+                  "department": "Intensive Care",
+                  "shift_date": "2026-08-28",
+                  "start_time": "07:00",
+                  "end_time": "19:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                }
+              ],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 2,
+              "projected_staffing_gap": 0
+            },
+            "risk_indicators": [
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "id": "staff-7",
+            "label": "staff-7",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Perioperative",
+              "department": "Surgery",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 2,
+              "projected_staffing_gap": 0
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "id": "staff-3",
+            "label": "staff-3",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Critical Care",
+              "department": "Intensive Care",
+              "employment_status": "Part-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 24.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [
+                {
+                  "shift_id": 5,
+                  "department": "Intensive Care",
+                  "shift_date": "2026-08-24",
+                  "start_time": "19:00",
+                  "end_time": "07:00",
+                  "required_role": null,
+                  "assignment_status": "Confirmed"
+                },
+                {
+                  "shift_id": 12,
+                  "department": "Intensive Care",
+                  "shift_date": "2026-08-28",
+                  "start_time": "07:00",
+                  "end_time": "19:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                }
+              ],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 2,
+              "projected_staffing_gap": 0
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "id": "staff-1",
+            "label": "staff-1",
+            "attributes": {
+              "backend_eligible": false,
+              "role": "Registered Nurse",
+              "specialisation": "Triage",
+              "department": "Emergency",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": true,
+              "weekly_availability_matches": true,
+              "weekly_rostered_hours": 24.0,
+              "blocked_reason": "Already assigned to this shift",
+              "approved_unavailability": null,
+              "current_assignments": [
+                {
+                  "shift_id": 3,
+                  "department": "Emergency",
+                  "shift_date": "2026-08-24",
+                  "start_time": "07:00",
+                  "end_time": "15:00",
+                  "required_role": null,
+                  "assignment_status": "Confirmed"
+                },
+                {
+                  "shift_id": 11,
+                  "department": "Emergency",
+                  "shift_date": "2026-08-27",
+                  "start_time": "23:00",
+                  "end_time": "07:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                },
+                {
+                  "shift_id": 35,
+                  "department": "General Ward",
+                  "shift_date": "2026-08-30",
+                  "start_time": "15:00",
+                  "end_time": "23:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                }
+              ],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 0,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": []
+          }
+        ],
+        "constraints": [
+          {
+            "id": "backend_eligibility",
+            "scope": "option",
+            "type": "hard",
+            "field": "backend_eligible",
+            "operator": "equals",
+            "value": true,
+            "description": "The existing Student 5 deterministic eligibility service must mark the candidate eligible."
+          },
+          {
+            "id": "weekly_availability_review",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Recurring weekly availability is advisory and must be reviewed; it is not a configured hard limit."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before any assignment change."
+          },
+          {
+            "id": "no_automatic_assignment",
+            "scope": "workflow",
+            "type": "safety",
+            "description": "This evidence operation is read-only and cannot execute an assignment change."
+          }
+        ],
+        "unknowns": [
+          "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+          "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+          "Patient count and acuity are not available for the selected shift.",
+          "Required staff count is manager-entered and is not derived from a clinical staffing ratio."
+        ],
+        "provenance": {
+          "sources": [
+            {
+              "endpoint": "GET /api/shifts/<shift_id>",
+              "service": "shift_service.get_shift"
+            },
+            {
+              "endpoint": "GET /api/shifts/coverage",
+              "service": "coverage_service.shift_coverage"
+            },
+            {
+              "endpoint": "GET /api/shifts/<shift_id>/assignments",
+              "service": "assignment_service.list_shift_assignments"
+            },
+            {
+              "endpoint": "GET /api/shifts/<shift_id>/candidates",
+              "service": "eligibility_service.candidates_for_shift"
+            }
+          ],
+          "mutation_allowed": false
+        },
+        "evidence_separation": {
+          "operational_fact_fields": [
+            "current_state",
+            "objective",
+            "options",
+            "constraints",
+            "unknowns",
+            "provenance"
+          ],
+          "policy_context_field": "policy_context",
+          "policy_is_advisory": true,
+          "operational_rules_remain_authoritative": true
+        },
+        "policy_context": {
+          "context_type": "rag_policy_guidance",
+          "retrieval_status": "answered",
+          "query": "What documented Student 5 rules govern an understaffed shift: per-shift coverage, deterministic eligibility blockers, availability and approved unavailability, assignment authority, and the Staff Manager human-approval decision boundary?",
+          "answer": "According to [S3], an understaffed shift is defined as a shift where `coverage_status` is `Understaffed`, meaning some positions remain unfilled.\n\nDeterministic eligibility blockers for a shift include:\n\n- already assigned to the target shift ([S2])\n- operational availability status `Unavailable` or `On Leave` ([S2])\n- an `Approved` unavailability request covering the shift date ([S2])\n- a role that does not match the shift's required role ([S2])\n- an active assignment whose time overlaps the target shift ([S2])\n\nAssignment authority is governed by [S2], which states that the candidate endpoint prefilters by required role, and the underlying evaluator still treats a mismatch as ineligible.\n\nThe Staff Manager human-approval decision boundary is governed by [S1], which states that RAG answers are decision support only, and live operational questions must use the authoritative Student 5 APIs.",
+          "confidence": "medium",
+          "citations": [
+            {
+              "id": "S3",
+              "source": "student-5/shift-planning-and-coverage.md",
+              "title": "Shift Planning and Coverage",
+              "section": "Per-shift coverage calculation",
+              "score": 0.7486,
+              "snippet": "Coverage counts assignment records whose status is not `Cancelled` or `Declined`. For each shift: - `assigned_staff_count` is the number of counted assignments; - `filled_staff_count` is the smaller of assigned staff and required staff; - `shortfall` is `max(required - assigned,…"
+            },
+            {
+              "id": "S2",
+              "source": "student-5/staff-eligibility-and-assignments.md",
+              "title": "Staff Eligibility and Assignments",
+              "section": "Why an employee may be ineligible for a shift",
+              "score": 0.7521,
+              "snippet": "The manager-only candidate flow evaluates staff against a specific shift. The candidate endpoint first loads staff who hold the shift's required role. It returns eligible and blocked candidates with a `blocked_reason`; the AI suggestion flow uses the same evaluation and keeps on…"
+            },
+            {
+              "id": "S1",
+              "source": "student-5/roles-and-decision-support-boundaries.md",
+              "title": "Roles and Decision-Support Boundaries",
+              "section": "RAG guidance boundary",
+              "score": 0.7583,
+              "snippet": "This Student 5 knowledge base provides documentation guidance about implemented Staff & Shift behaviour. It does not contain live roster records and cannot say which employee should be assigned now, calculate current coverage without current Student 5 API data, decide how many s…"
+            }
+          ],
+          "reason": null,
+          "limitations": [
+            "Retrieved policy text is advisory guidance, not live operational state.",
+            "Student 5 backend eligibility, coverage, assignment, and availability rules remain authoritative.",
+            "Missing fatigue, overtime, rest-period, consecutive-shift, staffing-ratio, patient-load, and acuity rules must remain unknown unless documented.",
+            "Policy retrieval cannot create, change, or approve a staff assignment."
+          ]
+        }
+      }
+    },
+    "output": {
+      "goal": "Review the selected hospital shift for staffing coverage problems and produce a safe staffing recovery recommendation.",
+      "required_evidence": [
+        "current_state.shift.shift_status",
+        "current_state.coverage.coverage_status",
+        "current_state.current_assignments",
+        "objective.staffing_gap",
+        "options.backend_eligible",
+        "options.department_match",
+        "options.weekly_availability_matches",
+        "constraints.backend_eligibility",
+        "constraints.human_approval",
+        "unknowns"
+      ],
+      "constraints": [
+        "The existing Student 5 deterministic eligibility service must mark the candidate eligible.",
+        "Human approval is required before any assignment change.",
+        "This evidence operation is read-only and cannot execute an assignment change."
+      ],
+      "planned_steps": [
+        "Evaluate the current shift status and coverage status.",
+        "Assess the current assignments and their status.",
+        "Review the staffing gap and required staff count.",
+        "Check the backend eligibility and department match for each candidate.",
+        "Verify the weekly availability matches for each candidate.",
+        "Consider the human approval requirement for any assignment change.",
+        "Identify any unknowns or missing information that may impact the staffing recovery recommendation."
+      ],
+      "expected_result": "A safe staffing recovery recommendation based on the supplied evidence and constraints."
+    },
+    "execution": {
+      "provider": "live_ollama",
+      "model": "llama3.1:8b",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "llama3.1:8b",
+          "raw_response": "{\n  \"goal\": \"Review the selected hospital shift for staffing coverage problems and produce a safe staffing recovery recommendation.\",\n  \"required_evidence\": [\n    \"current_state.shift.shift_status\",\n    \"current_state.coverage.coverage_status\",\n    \"current_state.current_assignments\",\n    \"objective.staffing_gap\",\n    \"options.backend_eligible\",\n    \"options.department_match\",\n    \"options.weekly_availability_matches\",\n    \"constraints.backend_eligibility\",\n    \"constraints.human_approval\",\n    \"unknowns\"\n  ],\n  \"constraints\": [\n    \"The existing Student 5 deterministic eligibility service must mark the candidate eligible.\",\n    \"Human approval is required before any assignment change.\",\n    \"This evidence operation is read-only and cannot execute an assignment change.\"\n  ],\n  \"planned_steps\": [\n    \"Evaluate the current shift status and coverage status.\",\n    \"Assess the current assignments and their status.\",\n    \"Review the staffing gap and required staff count.\",\n    \"Check the backend eligibility and department match for each candidate.\",\n    \"Verify the weekly availability matches for each candidate.\",\n    \"Consider the human approval requirement for any assignment change.\",\n    \"Identify any unknowns or missing information that may impact the staffing recovery recommendation.\"\n  ],\n  \"expected_result\": \"A safe staffing recovery recommendation based on the supplied evidence and constraints.\"\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": null,
+          "valid": true
+        }
+      ],
+      "attempt_count": 1
+    }
+  },
+  "worker": {
+    "started_at": "2026-10-17T06:15:21.436Z",
+    "completed_at": "2026-10-17T06:15:40.880Z",
+    "input": {
+      "task": "Review the selected hospital shift for staffing coverage problems. Evaluate the supplied candidates and operational constraints. Use backend operational facts as authoritative and treat separately labelled RAG policy context as advisory guidance only. Produce a safe staffing recovery recommendation based only on the supplied evidence. Identify risks, limitations, and missing information. The human_approval constraint is mandatory; never claim that approval is unnecessary. In Planner required_evidence, use only exact top-level evidence category names rather than nested field names. Do not execute any staffing assignment or operational mutation.",
+      "planner_output": {
+        "goal": "Review the selected hospital shift for staffing coverage problems and produce a safe staffing recovery recommendation.",
+        "required_evidence": [
+          "current_state.shift.shift_status",
+          "current_state.coverage.coverage_status",
+          "current_state.current_assignments",
+          "objective.staffing_gap",
+          "options.backend_eligible",
+          "options.department_match",
+          "options.weekly_availability_matches",
+          "constraints.backend_eligibility",
+          "constraints.human_approval",
+          "unknowns"
+        ],
+        "constraints": [
+          "The existing Student 5 deterministic eligibility service must mark the candidate eligible.",
+          "Human approval is required before any assignment change.",
+          "This evidence operation is read-only and cannot execute an assignment change."
+        ],
+        "planned_steps": [
+          "Evaluate the current shift status and coverage status.",
+          "Assess the current assignments and their status.",
+          "Review the staffing gap and required staff count.",
+          "Check the backend eligibility and department match for each candidate.",
+          "Verify the weekly availability matches for each candidate.",
+          "Consider the human approval requirement for any assignment change.",
+          "Identify any unknowns or missing information that may impact the staffing recovery recommendation."
+        ],
+        "expected_result": "A safe staffing recovery recommendation based on the supplied evidence and constraints."
+      },
+      "evidence": {
+        "schema_version": "1.0",
+        "evidence_type": "student5_staffing_recovery",
+        "evidence_mode": "live_api",
+        "current_state": {
+          "shift": {
+            "shift_id": 11,
+            "department": "Emergency",
+            "shift_date": "2026-08-27",
+            "start_time": "23:00",
+            "end_time": "07:00",
+            "required_role": "Registered Nurse",
+            "required_staff_count": 2,
+            "shift_status": "Planned"
+          },
+          "coverage": {
+            "required_staff_count": 2,
+            "assigned_staff_count": 1,
+            "filled_staff_count": 1,
+            "shortfall": 1,
+            "surplus": 0,
+            "coverage_status": "Understaffed"
+          },
+          "current_assignments": [
+            {
+              "staff_ref": "staff-1",
+              "role": "Registered Nurse",
+              "department": "Emergency",
+              "availability_status": "Available",
+              "assignment_status": "Assigned"
+            }
+          ]
+        },
+        "objective": {
+          "metric": "assigned_staff",
+          "current": 1,
+          "target": 2,
+          "unit": "staff member",
+          "staffing_gap": 1
+        },
+        "options": [
+          {
+            "id": "staff-12",
+            "label": "staff-12",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Critical Care",
+              "department": "Intensive Care",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": true,
+              "weekly_rostered_hours": 32.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [
+                {
+                  "shift_id": 3,
+                  "department": "Emergency",
+                  "shift_date": "2026-08-24",
+                  "start_time": "07:00",
+                  "end_time": "15:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                },
+                {
+                  "shift_id": 5,
+                  "department": "Intensive Care",
+                  "shift_date": "2026-08-24",
+                  "start_time": "19:00",
+                  "end_time": "07:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                },
+                {
+                  "shift_id": 12,
+                  "department": "Intensive Care",
+                  "shift_date": "2026-08-28",
+                  "start_time": "07:00",
+                  "end_time": "19:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                }
+              ],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 2,
+              "projected_staffing_gap": 0
+            },
+            "risk_indicators": [
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "id": "staff-7",
+            "label": "staff-7",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Perioperative",
+              "department": "Surgery",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 2,
+              "projected_staffing_gap": 0
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "id": "staff-3",
+            "label": "staff-3",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Critical Care",
+              "department": "Intensive Care",
+              "employment_status": "Part-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 24.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [
+                {
+                  "shift_id": 5,
+                  "department": "Intensive Care",
+                  "shift_date": "2026-08-24",
+                  "start_time": "19:00",
+                  "end_time": "07:00",
+                  "required_role": null,
+                  "assignment_status": "Confirmed"
+                },
+                {
+                  "shift_id": 12,
+                  "department": "Intensive Care",
+                  "shift_date": "2026-08-28",
+                  "start_time": "07:00",
+                  "end_time": "19:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                }
+              ],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 2,
+              "projected_staffing_gap": 0
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "id": "staff-1",
+            "label": "staff-1",
+            "attributes": {
+              "backend_eligible": false,
+              "role": "Registered Nurse",
+              "specialisation": "Triage",
+              "department": "Emergency",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": true,
+              "weekly_availability_matches": true,
+              "weekly_rostered_hours": 24.0,
+              "blocked_reason": "Already assigned to this shift",
+              "approved_unavailability": null,
+              "current_assignments": [
+                {
+                  "shift_id": 3,
+                  "department": "Emergency",
+                  "shift_date": "2026-08-24",
+                  "start_time": "07:00",
+                  "end_time": "15:00",
+                  "required_role": null,
+                  "assignment_status": "Confirmed"
+                },
+                {
+                  "shift_id": 11,
+                  "department": "Emergency",
+                  "shift_date": "2026-08-27",
+                  "start_time": "23:00",
+                  "end_time": "07:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                },
+                {
+                  "shift_id": 35,
+                  "department": "General Ward",
+                  "shift_date": "2026-08-30",
+                  "start_time": "15:00",
+                  "end_time": "23:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                }
+              ],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 0,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": []
+          }
+        ],
+        "constraints": [
+          {
+            "id": "backend_eligibility",
+            "scope": "option",
+            "type": "hard",
+            "field": "backend_eligible",
+            "operator": "equals",
+            "value": true,
+            "description": "The existing Student 5 deterministic eligibility service must mark the candidate eligible."
+          },
+          {
+            "id": "weekly_availability_review",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Recurring weekly availability is advisory and must be reviewed; it is not a configured hard limit."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before any assignment change."
+          },
+          {
+            "id": "no_automatic_assignment",
+            "scope": "workflow",
+            "type": "safety",
+            "description": "This evidence operation is read-only and cannot execute an assignment change."
+          }
+        ],
+        "unknowns": [
+          "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+          "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+          "Patient count and acuity are not available for the selected shift.",
+          "Required staff count is manager-entered and is not derived from a clinical staffing ratio."
+        ],
+        "provenance": {
+          "sources": [
+            {
+              "endpoint": "GET /api/shifts/<shift_id>",
+              "service": "shift_service.get_shift"
+            },
+            {
+              "endpoint": "GET /api/shifts/coverage",
+              "service": "coverage_service.shift_coverage"
+            },
+            {
+              "endpoint": "GET /api/shifts/<shift_id>/assignments",
+              "service": "assignment_service.list_shift_assignments"
+            },
+            {
+              "endpoint": "GET /api/shifts/<shift_id>/candidates",
+              "service": "eligibility_service.candidates_for_shift"
+            }
+          ],
+          "mutation_allowed": false
+        },
+        "evidence_separation": {
+          "operational_fact_fields": [
+            "current_state",
+            "objective",
+            "options",
+            "constraints",
+            "unknowns",
+            "provenance"
+          ],
+          "policy_context_field": "policy_context",
+          "policy_is_advisory": true,
+          "operational_rules_remain_authoritative": true
+        },
+        "policy_context": {
+          "context_type": "rag_policy_guidance",
+          "retrieval_status": "answered",
+          "query": "What documented Student 5 rules govern an understaffed shift: per-shift coverage, deterministic eligibility blockers, availability and approved unavailability, assignment authority, and the Staff Manager human-approval decision boundary?",
+          "answer": "According to [S3], an understaffed shift is defined as a shift where `coverage_status` is `Understaffed`, meaning some positions remain unfilled.\n\nDeterministic eligibility blockers for a shift include:\n\n- already assigned to the target shift ([S2])\n- operational availability status `Unavailable` or `On Leave` ([S2])\n- an `Approved` unavailability request covering the shift date ([S2])\n- a role that does not match the shift's required role ([S2])\n- an active assignment whose time overlaps the target shift ([S2])\n\nAssignment authority is governed by [S2], which states that the candidate endpoint prefilters by required role, and the underlying evaluator still treats a mismatch as ineligible.\n\nThe Staff Manager human-approval decision boundary is governed by [S1], which states that RAG answers are decision support only, and live operational questions must use the authoritative Student 5 APIs.",
+          "confidence": "medium",
+          "citations": [
+            {
+              "id": "S3",
+              "source": "student-5/shift-planning-and-coverage.md",
+              "title": "Shift Planning and Coverage",
+              "section": "Per-shift coverage calculation",
+              "score": 0.7486,
+              "snippet": "Coverage counts assignment records whose status is not `Cancelled` or `Declined`. For each shift: - `assigned_staff_count` is the number of counted assignments; - `filled_staff_count` is the smaller of assigned staff and required staff; - `shortfall` is `max(required - assigned,…"
+            },
+            {
+              "id": "S2",
+              "source": "student-5/staff-eligibility-and-assignments.md",
+              "title": "Staff Eligibility and Assignments",
+              "section": "Why an employee may be ineligible for a shift",
+              "score": 0.7521,
+              "snippet": "The manager-only candidate flow evaluates staff against a specific shift. The candidate endpoint first loads staff who hold the shift's required role. It returns eligible and blocked candidates with a `blocked_reason`; the AI suggestion flow uses the same evaluation and keeps on…"
+            },
+            {
+              "id": "S1",
+              "source": "student-5/roles-and-decision-support-boundaries.md",
+              "title": "Roles and Decision-Support Boundaries",
+              "section": "RAG guidance boundary",
+              "score": 0.7583,
+              "snippet": "This Student 5 knowledge base provides documentation guidance about implemented Staff & Shift behaviour. It does not contain live roster records and cannot say which employee should be assigned now, calculate current coverage without current Student 5 API data, decide how many s…"
+            }
+          ],
+          "reason": null,
+          "limitations": [
+            "Retrieved policy text is advisory guidance, not live operational state.",
+            "Student 5 backend eligibility, coverage, assignment, and availability rules remain authoritative.",
+            "Missing fatigue, overtime, rest-period, consecutive-shift, staffing-ratio, patient-load, and acuity rules must remain unknown unless documented.",
+            "Policy retrieval cannot create, change, or approve a staff assignment."
+          ]
+        }
+      }
+    },
+    "output": {
+      "status": "insufficient_evidence",
+      "plan_steps_followed": [
+        "Evaluate the current shift status and coverage status.",
+        "Assess the current assignments and their status.",
+        "Review the staffing gap and required staff count.",
+        "Check the backend eligibility and department match for each candidate.",
+        "Verify the weekly availability matches for each candidate.",
+        "Consider the human approval requirement for any assignment change.",
+        "Identify any unknowns or missing information that may impact the staffing recovery recommendation."
+      ],
+      "missing_planner_evidence": [
+        "current_state.shift.shift_status",
+        "current_state.coverage.coverage_status",
+        "current_state.current_assignments",
+        "objective.staffing_gap",
+        "options.backend_eligible",
+        "options.department_match",
+        "options.weekly_availability_matches",
+        "constraints.backend_eligibility",
+        "constraints.human_approval"
+      ],
+      "gap": {
+        "metric": "assigned_staff",
+        "current": 1,
+        "target": 2,
+        "deficit": 1
+      },
+      "evaluated_options": [
+        {
+          "option_id": "staff-12",
+          "label": "staff-12",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "backend_eligibility",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": [
+            "Candidate's home department differs from the shift department."
+          ]
+        },
+        {
+          "option_id": "staff-7",
+          "label": "staff-7",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "backend_eligibility",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": [
+            "Outside recorded recurring weekly availability.",
+            "Candidate's home department differs from the shift department."
+          ]
+        },
+        {
+          "option_id": "staff-3",
+          "label": "staff-3",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "backend_eligibility",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": [
+            "Outside recorded recurring weekly availability.",
+            "Candidate's home department differs from the shift department."
+          ]
+        },
+        {
+          "option_id": "staff-1",
+          "label": "staff-1",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "backend_eligibility",
+              "passed": false
+            }
+          ],
+          "eligible": false,
+          "risk_indicators": []
+        }
+      ],
+      "proposed_solution": {
+        "selected_option_id": null,
+        "selected_option": null,
+        "metric_delta": 0,
+        "projected_value": 1,
+        "reasoning": []
+      },
+      "limitations": [
+        "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+        "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+        "Patient count and acuity are not available for the selected shift.",
+        "Required staff count is manager-entered and is not derived from a clinical staffing ratio."
+      ],
+      "mutation_executed": false
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": true,
+      "fallback_reason": "worker output remained invalid after 1 attempts: worker must evaluate every supplied option exactly once",
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "llama3.2:3b",
+          "raw_response": "{\n  \"status\": \"insufficient_evidence\",\n  \"plan_steps_followed\": [\n    \"Step 1: Check if the candidate is eligible for the shift\",\n    \"Step 2: Check if the shift is understaffed\",\n    \"Step 3: Check if the candidate has the required role\",\n    \"Step 4: Check if the candidate has the required availability\",\n    \"Step 5: Check if the candidate has any conflicting assignments\"\n  ],\n  \"missing_planner_evidence\": [\n    \"No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.\",\n    \"No authoritative department-to-ward mapping links this shift to ward occupancy.\",\n    \"Patient count and acuity are not available for the selected shift.\",\n    \"Required staff count is manager-entered and is not derived from a clinical staffing ratio.\"\n  ],\n  \"gap\": {\n    \"metric\": \"staffing_gap\",\n    \"current\": 1,\n    \"target\": 0,\n    \"deficit\": 1\n  },\n  \"evaluated_options\": [\n    {\n      \"option_id\": \"option-1\",\n      \"label\": \"Option 1\",\n      \"hard_constraint_checks\": [\n        {\n          \"constraint_id\": \"backend_eligibility\",\n          \"passed\": true\n        },\n        {\n          \"constraint_id\": \"weekly_availability_review\",\n          \"passed\": true\n        },\n        {\n          \"constraint_id\": \"human_approval\",\n          \"passed\": true\n        },\n        {\n          \"constraint_id\": \"no_automatic_assignment\",\n          \"passed\": true\n        }\n      ],\n      \"eligible\": true,\n      \"risk_indicators\": []\n    },\n    {\n      \"option_id\": \"option-2\",\n      \"label\": \"Option 2\",\n      \"hard_constraint_checks\": [\n        {\n          \"constraint_id\": \"backend_eligibility\",\n          \"passed\": false\n        },\n        {\n          \"constraint_id\": \"weekly_availability_review\",\n          \"passed\": true\n        },\n        {\n          \"constraint_id\": \"human_approval\",\n          \"passed\": true\n        },\n        {\n          \"constraint_id\": \"no_automatic_assignment\",\n          \"passed\": true\n        }\n      ],\n      \"eligible\": false,\n      \"risk_indicators\": [\n        \"No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.\",\n        \"No authoritative department-to-ward mapping links this shift to ward occupancy.\",\n        \"Patient count and acuity are not available for the selected shift.\",\n        \"Required staff count is manager-entered and is not derived from a clinical staffing ratio.\"\n      ]\n    }\n  ],\n  \"proposed_solution\": {\n    \"selected_option_id\": \"option-1\",\n    \"selected_option\": \"Option 1\",\n    \"metric_delta\": 0,\n    \"projected_value\": 1,\n    \"reasoning\": [\n      \"The selected option is eligible because it passes all hard constraints.\",\n      \"The selected option is not eligible because it does not pass the backend eligibility constraint.\"\n    ]\n  },\n  \"limitations\": [\n    \"The selected option is not eligible because it does not pass the backend eligibility constraint.\",\n    \"The selected option is not eligible because it does not pass the backend eligibility constraint.\"\n  ],\n  \"mutation_executed\": false\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": "worker must evaluate every supplied option exactly once",
+          "valid": false
+        }
+      ],
+      "attempt_count": 1
+    }
+  },
+  "reviewer": {
+    "started_at": "2026-10-17T06:15:40.884Z",
+    "completed_at": "2026-10-17T06:16:34.835Z",
+    "input": {
+      "task": "Review the selected hospital shift for staffing coverage problems. Evaluate the supplied candidates and operational constraints. Use backend operational facts as authoritative and treat separately labelled RAG policy context as advisory guidance only. Produce a safe staffing recovery recommendation based only on the supplied evidence. Identify risks, limitations, and missing information. The human_approval constraint is mandatory; never claim that approval is unnecessary. In Planner required_evidence, use only exact top-level evidence category names rather than nested field names. Do not execute any staffing assignment or operational mutation.",
+      "planner_output": {
+        "goal": "Review the selected hospital shift for staffing coverage problems and produce a safe staffing recovery recommendation.",
+        "required_evidence": [
+          "current_state.shift.shift_status",
+          "current_state.coverage.coverage_status",
+          "current_state.current_assignments",
+          "objective.staffing_gap",
+          "options.backend_eligible",
+          "options.department_match",
+          "options.weekly_availability_matches",
+          "constraints.backend_eligibility",
+          "constraints.human_approval",
+          "unknowns"
+        ],
+        "constraints": [
+          "The existing Student 5 deterministic eligibility service must mark the candidate eligible.",
+          "Human approval is required before any assignment change.",
+          "This evidence operation is read-only and cannot execute an assignment change."
+        ],
+        "planned_steps": [
+          "Evaluate the current shift status and coverage status.",
+          "Assess the current assignments and their status.",
+          "Review the staffing gap and required staff count.",
+          "Check the backend eligibility and department match for each candidate.",
+          "Verify the weekly availability matches for each candidate.",
+          "Consider the human approval requirement for any assignment change.",
+          "Identify any unknowns or missing information that may impact the staffing recovery recommendation."
+        ],
+        "expected_result": "A safe staffing recovery recommendation based on the supplied evidence and constraints."
+      },
+      "worker_output": {
+        "status": "insufficient_evidence",
+        "plan_steps_followed": [
+          "Evaluate the current shift status and coverage status.",
+          "Assess the current assignments and their status.",
+          "Review the staffing gap and required staff count.",
+          "Check the backend eligibility and department match for each candidate.",
+          "Verify the weekly availability matches for each candidate.",
+          "Consider the human approval requirement for any assignment change.",
+          "Identify any unknowns or missing information that may impact the staffing recovery recommendation."
+        ],
+        "missing_planner_evidence": [
+          "current_state.shift.shift_status",
+          "current_state.coverage.coverage_status",
+          "current_state.current_assignments",
+          "objective.staffing_gap",
+          "options.backend_eligible",
+          "options.department_match",
+          "options.weekly_availability_matches",
+          "constraints.backend_eligibility",
+          "constraints.human_approval"
+        ],
+        "gap": {
+          "metric": "assigned_staff",
+          "current": 1,
+          "target": 2,
+          "deficit": 1
+        },
+        "evaluated_options": [
+          {
+            "option_id": "staff-12",
+            "label": "staff-12",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "backend_eligibility",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": [
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "option_id": "staff-7",
+            "label": "staff-7",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "backend_eligibility",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "option_id": "staff-3",
+            "label": "staff-3",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "backend_eligibility",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "option_id": "staff-1",
+            "label": "staff-1",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "backend_eligibility",
+                "passed": false
+              }
+            ],
+            "eligible": false,
+            "risk_indicators": []
+          }
+        ],
+        "proposed_solution": {
+          "selected_option_id": null,
+          "selected_option": null,
+          "metric_delta": 0,
+          "projected_value": 1,
+          "reasoning": []
+        },
+        "limitations": [
+          "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+          "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+          "Patient count and acuity are not available for the selected shift.",
+          "Required staff count is manager-entered and is not derived from a clinical staffing ratio."
+        ],
+        "mutation_executed": false
+      },
+      "evidence": {
+        "schema_version": "1.0",
+        "evidence_type": "student5_staffing_recovery",
+        "evidence_mode": "live_api",
+        "current_state": {
+          "shift": {
+            "shift_id": 11,
+            "department": "Emergency",
+            "shift_date": "2026-08-27",
+            "start_time": "23:00",
+            "end_time": "07:00",
+            "required_role": "Registered Nurse",
+            "required_staff_count": 2,
+            "shift_status": "Planned"
+          },
+          "coverage": {
+            "required_staff_count": 2,
+            "assigned_staff_count": 1,
+            "filled_staff_count": 1,
+            "shortfall": 1,
+            "surplus": 0,
+            "coverage_status": "Understaffed"
+          },
+          "current_assignments": [
+            {
+              "staff_ref": "staff-1",
+              "role": "Registered Nurse",
+              "department": "Emergency",
+              "availability_status": "Available",
+              "assignment_status": "Assigned"
+            }
+          ]
+        },
+        "objective": {
+          "metric": "assigned_staff",
+          "current": 1,
+          "target": 2,
+          "unit": "staff member",
+          "staffing_gap": 1
+        },
+        "options": [
+          {
+            "id": "staff-12",
+            "label": "staff-12",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Critical Care",
+              "department": "Intensive Care",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": true,
+              "weekly_rostered_hours": 32.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [
+                {
+                  "shift_id": 3,
+                  "department": "Emergency",
+                  "shift_date": "2026-08-24",
+                  "start_time": "07:00",
+                  "end_time": "15:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                },
+                {
+                  "shift_id": 5,
+                  "department": "Intensive Care",
+                  "shift_date": "2026-08-24",
+                  "start_time": "19:00",
+                  "end_time": "07:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                },
+                {
+                  "shift_id": 12,
+                  "department": "Intensive Care",
+                  "shift_date": "2026-08-28",
+                  "start_time": "07:00",
+                  "end_time": "19:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                }
+              ],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 2,
+              "projected_staffing_gap": 0
+            },
+            "risk_indicators": [
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "id": "staff-7",
+            "label": "staff-7",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Perioperative",
+              "department": "Surgery",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 2,
+              "projected_staffing_gap": 0
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "id": "staff-3",
+            "label": "staff-3",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Critical Care",
+              "department": "Intensive Care",
+              "employment_status": "Part-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 24.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [
+                {
+                  "shift_id": 5,
+                  "department": "Intensive Care",
+                  "shift_date": "2026-08-24",
+                  "start_time": "19:00",
+                  "end_time": "07:00",
+                  "required_role": null,
+                  "assignment_status": "Confirmed"
+                },
+                {
+                  "shift_id": 12,
+                  "department": "Intensive Care",
+                  "shift_date": "2026-08-28",
+                  "start_time": "07:00",
+                  "end_time": "19:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                }
+              ],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 2,
+              "projected_staffing_gap": 0
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "id": "staff-1",
+            "label": "staff-1",
+            "attributes": {
+              "backend_eligible": false,
+              "role": "Registered Nurse",
+              "specialisation": "Triage",
+              "department": "Emergency",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": true,
+              "weekly_availability_matches": true,
+              "weekly_rostered_hours": 24.0,
+              "blocked_reason": "Already assigned to this shift",
+              "approved_unavailability": null,
+              "current_assignments": [
+                {
+                  "shift_id": 3,
+                  "department": "Emergency",
+                  "shift_date": "2026-08-24",
+                  "start_time": "07:00",
+                  "end_time": "15:00",
+                  "required_role": null,
+                  "assignment_status": "Confirmed"
+                },
+                {
+                  "shift_id": 11,
+                  "department": "Emergency",
+                  "shift_date": "2026-08-27",
+                  "start_time": "23:00",
+                  "end_time": "07:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                },
+                {
+                  "shift_id": 35,
+                  "department": "General Ward",
+                  "shift_date": "2026-08-30",
+                  "start_time": "15:00",
+                  "end_time": "23:00",
+                  "required_role": null,
+                  "assignment_status": "Assigned"
+                }
+              ],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 0,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": []
+          }
+        ],
+        "constraints": [
+          {
+            "id": "backend_eligibility",
+            "scope": "option",
+            "type": "hard",
+            "field": "backend_eligible",
+            "operator": "equals",
+            "value": true,
+            "description": "The existing Student 5 deterministic eligibility service must mark the candidate eligible."
+          },
+          {
+            "id": "weekly_availability_review",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Recurring weekly availability is advisory and must be reviewed; it is not a configured hard limit."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before any assignment change."
+          },
+          {
+            "id": "no_automatic_assignment",
+            "scope": "workflow",
+            "type": "safety",
+            "description": "This evidence operation is read-only and cannot execute an assignment change."
+          }
+        ],
+        "unknowns": [
+          "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+          "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+          "Patient count and acuity are not available for the selected shift.",
+          "Required staff count is manager-entered and is not derived from a clinical staffing ratio."
+        ],
+        "provenance": {
+          "sources": [
+            {
+              "endpoint": "GET /api/shifts/<shift_id>",
+              "service": "shift_service.get_shift"
+            },
+            {
+              "endpoint": "GET /api/shifts/coverage",
+              "service": "coverage_service.shift_coverage"
+            },
+            {
+              "endpoint": "GET /api/shifts/<shift_id>/assignments",
+              "service": "assignment_service.list_shift_assignments"
+            },
+            {
+              "endpoint": "GET /api/shifts/<shift_id>/candidates",
+              "service": "eligibility_service.candidates_for_shift"
+            }
+          ],
+          "mutation_allowed": false
+        },
+        "evidence_separation": {
+          "operational_fact_fields": [
+            "current_state",
+            "objective",
+            "options",
+            "constraints",
+            "unknowns",
+            "provenance"
+          ],
+          "policy_context_field": "policy_context",
+          "policy_is_advisory": true,
+          "operational_rules_remain_authoritative": true
+        },
+        "policy_context": {
+          "context_type": "rag_policy_guidance",
+          "retrieval_status": "answered",
+          "query": "What documented Student 5 rules govern an understaffed shift: per-shift coverage, deterministic eligibility blockers, availability and approved unavailability, assignment authority, and the Staff Manager human-approval decision boundary?",
+          "answer": "According to [S3], an understaffed shift is defined as a shift where `coverage_status` is `Understaffed`, meaning some positions remain unfilled.\n\nDeterministic eligibility blockers for a shift include:\n\n- already assigned to the target shift ([S2])\n- operational availability status `Unavailable` or `On Leave` ([S2])\n- an `Approved` unavailability request covering the shift date ([S2])\n- a role that does not match the shift's required role ([S2])\n- an active assignment whose time overlaps the target shift ([S2])\n\nAssignment authority is governed by [S2], which states that the candidate endpoint prefilters by required role, and the underlying evaluator still treats a mismatch as ineligible.\n\nThe Staff Manager human-approval decision boundary is governed by [S1], which states that RAG answers are decision support only, and live operational questions must use the authoritative Student 5 APIs.",
+          "confidence": "medium",
+          "citations": [
+            {
+              "id": "S3",
+              "source": "student-5/shift-planning-and-coverage.md",
+              "title": "Shift Planning and Coverage",
+              "section": "Per-shift coverage calculation",
+              "score": 0.7486,
+              "snippet": "Coverage counts assignment records whose status is not `Cancelled` or `Declined`. For each shift: - `assigned_staff_count` is the number of counted assignments; - `filled_staff_count` is the smaller of assigned staff and required staff; - `shortfall` is `max(required - assigned,…"
+            },
+            {
+              "id": "S2",
+              "source": "student-5/staff-eligibility-and-assignments.md",
+              "title": "Staff Eligibility and Assignments",
+              "section": "Why an employee may be ineligible for a shift",
+              "score": 0.7521,
+              "snippet": "The manager-only candidate flow evaluates staff against a specific shift. The candidate endpoint first loads staff who hold the shift's required role. It returns eligible and blocked candidates with a `blocked_reason`; the AI suggestion flow uses the same evaluation and keeps on…"
+            },
+            {
+              "id": "S1",
+              "source": "student-5/roles-and-decision-support-boundaries.md",
+              "title": "Roles and Decision-Support Boundaries",
+              "section": "RAG guidance boundary",
+              "score": 0.7583,
+              "snippet": "This Student 5 knowledge base provides documentation guidance about implemented Staff & Shift behaviour. It does not contain live roster records and cannot say which employee should be assigned now, calculate current coverage without current Student 5 API data, decide how many s…"
+            }
+          ],
+          "reason": null,
+          "limitations": [
+            "Retrieved policy text is advisory guidance, not live operational state.",
+            "Student 5 backend eligibility, coverage, assignment, and availability rules remain authoritative.",
+            "Missing fatigue, overtime, rest-period, consecutive-shift, staffing-ratio, patient-load, and acuity rules must remain unknown unless documented.",
+            "Policy retrieval cannot create, change, or approve a staff assignment."
+          ]
+        }
+      }
+    },
+    "output": {
+      "review_status": "changes_required",
+      "validated_findings": [
+        "Shift requires 3 staff members.",
+        "Current assignments: 2 staff members.",
+        "Projected staff count: 2.",
+        "Staff-0 is ineligible due to department mismatch.",
+        "Staff-1 is ineligible due to already being assigned to the shift."
+      ],
+      "risks": [
+        "Staff-1 is ineligible due to backend_eligibility constraint.",
+        "No other candidates are available for assignment."
+      ],
+      "unsupported_claims": [
+        "The system does not consider overtime, fatigue, or rest-period rules.",
+        "The system does not automatically account for staffing gaps based on clinical ratios."
+      ],
+      "recommendation": "No eligible candidates are available for assignment. Human approval is required to manually assign staff or find alternative candidates.",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "execution": {
+      "provider": "live_ollama",
+      "model": "deepseek-r1:8b",
+      "fallback_used": false,
+      "fallback_reason": null,
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "deepseek-r1:8b",
+          "raw_response": "{\"review_status\": \"changes_required\",\n  \"validated_findings\": [\n    \"Shift requires 3 staff members.\",\n    \"Current assignments: 2 staff members.\",\n    \"Projected staff count: 2.\",\n    \"Staff-0 is ineligible due to department mismatch.\",\n    \"Staff-1 is ineligible due to already being assigned to the shift.\"\n  ],\n  \"risks\": [\n    \"Staff-1 is ineligible due to backend_eligibility constraint.\",\n    \"No other candidates are available for assignment.\"\n  ],\n  \"unsupported_claims\": [\n    \"The system does not consider overtime, fatigue, or rest-period rules.\",\n    \"The system does not automatically account for staffing gaps based on clinical ratios.\"\n  ],\n  \"recommendation\": \"No eligible candidates are available for assignment. Human approval is required to manually assign staff or find alternative candidates.\",\n  \"human_approval_required\": true,\n  \"mutation_verified_absent\": true}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": null,
+          "valid": true
+        }
+      ],
+      "attempt_count": 1
+    }
+  },
+  "human_review": {
+    "decision": "reject",
+    "comments": "Rejected because Planner used unsupported nested evidence paths and Reviewer produced staffing claims inconsistent with authoritative operational evidence. No assignment authorised.",
+    "timestamp": "2026-10-17T06:18:21.590Z"
+  },
+  "final_status": "rejected",
+  "final_result": {
+    "status": "rejected",
+    "proposal": {
+      "selected_option_id": null,
+      "selected_option": null,
+      "metric_delta": 0,
+      "projected_value": 1,
+      "reasoning": []
+    },
+    "review": {
+      "review_status": "changes_required",
+      "validated_findings": [
+        "Shift requires 3 staff members.",
+        "Current assignments: 2 staff members.",
+        "Projected staff count: 2.",
+        "Staff-0 is ineligible due to department mismatch.",
+        "Staff-1 is ineligible due to already being assigned to the shift."
+      ],
+      "risks": [
+        "Staff-1 is ineligible due to backend_eligibility constraint.",
+        "No other candidates are available for assignment."
+      ],
+      "unsupported_claims": [
+        "The system does not consider overtime, fatigue, or rest-period rules.",
+        "The system does not automatically account for staffing gaps based on clinical ratios."
+      ],
+      "recommendation": "No eligible candidates are available for assignment. Human approval is required to manually assign staff or find alternative candidates.",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "human_decision": "reject",
+    "human_comments_or_correction": "Rejected because Planner used unsupported nested evidence paths and Reviewer produced staffing claims inconsistent with authoritative operational evidence. No assignment authorised.",
+    "mutation_executed": false
+  },
+  "completed_at": "2026-10-17T06:18:21.591Z"
+}

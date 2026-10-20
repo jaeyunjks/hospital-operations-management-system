@@ -6,3 +6,8 @@ Return exactly one JSON object matching the supplied schema. Use the supplied
 option ids in evaluated_options and proposed_solution. mutation_executed must
 be the boolean false. Return machine-readable JSON only: no Markdown fence and
 no prose outside the object. Never perform or claim an operational mutation.
+Structured constraints with type=hard and scope=option are authoritative.
+Evaluate each one exactly once for each option. Risk indicators, policy text,
+and retrieval metadata are advisory unless represented by such a constraint;
+they must not change hard-constraint eligibility. Never select an option that
+fails a hard constraint, and copy option ids and labels exactly from evidence.
