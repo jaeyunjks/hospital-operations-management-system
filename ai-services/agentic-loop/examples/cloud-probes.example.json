@@ -1,0 +1,39 @@
+{
+  "platform": "azure",
+  "environment": "homs-release2 (Azure Container Apps)",
+  "base_urls": {
+    "frontend": "https://student4-frontend.REPLACE.australiaeast.azurecontainerapps.io",
+    "backend": "https://student4-backend.REPLACE.australiaeast.azurecontainerapps.io"
+  },
+  "headers": {},
+  "probes": [
+    {"id": "FE1", "kind": "core", "description": "Frontend UI loads",
+     "url": "${frontend}/", "expect_status": [200]},
+    {"id": "BE1", "kind": "core", "description": "Backend reaches its database",
+     "url": "${backend}/health", "expect_status": [200], "expect_json": {"data.database.ok": true}},
+    {"id": "BE2", "kind": "core", "description": "Backend lists beds from the cloud database",
+     "url": "${backend}/api/beds", "expect_status": [200], "expect_json": {"success": true}},
+
+    {"id": "CR1", "kind": "crud", "method": "POST", "description": "Create a test bed",
+     "url": "${backend}/api/beds", "body": {"room_id": 1, "bed_number": "CLOUD-TEST-01"},
+     "expect_status": [201], "save": {"bed_id": "data.id"}},
+    {"id": "CR2", "kind": "crud", "description": "Read the test bed back",
+     "url": "${backend}/api/beds/{bed_id}", "expect_status": [200],
+     "expect_json": {"data.bed_number": "CLOUD-TEST-01"}},
+    {"id": "CR3", "kind": "crud", "method": "PUT", "description": "Update the test bed",
+     "url": "${backend}/api/beds/{bed_id}", "body": {"status": "maintenance"},
+     "expect_status": [200], "expect_json": {"data.status": "maintenance"}},
+    {"id": "CR4", "kind": "crud", "method": "DELETE", "description": "Delete the test bed",
+     "url": "${backend}/api/beds/{bed_id}", "expect_status": [200, 204]},
+
+    {"id": "AI1", "kind": "ai_disabled", "service": "ai-mode", "description": "No Ollama in the cloud",
+     "url": "${backend}/health", "expect_json": {"data.ai.ok": false}},
+    {"id": "AI2", "kind": "ai_disabled", "service": "mcp",
+     "url": "${backend}/api/mcp/status", "expect_json": {"data.enabled": false}},
+    {"id": "AI3", "kind": "ai_disabled", "service": "rag",
+     "url": "${backend}/api/rag/status", "expect_json": {"data.enabled": false}},
+    {"id": "AI4", "kind": "ai_disabled", "service": "multi-agent",
+     "description": "Needs the Multi-Agent status route in the backend",
+     "url": "${backend}/api/multi-agent/status", "expect_json": {"data.enabled": false}}
+  ]
+}
