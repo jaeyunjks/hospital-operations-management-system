@@ -48,33 +48,56 @@
     <dl class="recovery-coverage-metrics">
       <div><dt>Required</dt><dd>{{ coverage.required_staff_count }}</dd></div>
       <div><dt>Assigned</dt><dd>{{ coverage.assigned_staff_count }}</dd></div>
-      <div><dt>Shortfall</dt><dd>{{ coverage.shortfall }}</dd></div>
+      <div class="recovery-metric--attention"><dt>Shortfall</dt><dd>{{ coverage.shortfall }}</dd></div>
       <div><dt>Eligible options</dt><dd>{{ evidence.options|selectattr('attributes.backend_eligible')|list|length }}</dd></div>
     </dl>
   </section>
 
+  <section class="panel recovery-history" aria-labelledby="recovery-history-heading">
+    <div class="recovery-history__heading">
+      <div>
+        <span class="u-label">Persisted audit history</span>
+        <h2 id="recovery-history-heading">Recovery History</h2>
+      </div>
+      <span class="badge-neutral">Latest {{ recovery_history|length }}</span>
+    </div>
+    {% if history_error %}
+    <p class="recovery-history__empty">{{ history_error }}</p>
+    {% elif recovery_history %}
+    <ul class="recovery-history__list" role="list">
+      {% for run in recovery_history %}
+      <li>
+        <div class="recovery-history__identity">
+          <strong class="u-mono">{{ run.workflow_id[:8] }}</strong>
+          <span>{{ format_timestamp(run.started_at) }}</span>
+        </div>
+        <span class="badge-{{ 'danger' if run.status in ('failed', 'rejected') else 'success' if run.status in ('approved', 'corrected', 'partially_accepted') else 'info' }}">
+          {{ recovery_status_label(run.status) }}
+        </span>
+        <span class="recovery-history__decision">
+          {{ run.human_decision|replace('_', ' ')|title if run.human_decision else 'No decision recorded' }}
+        </span>
+        <a class="btn-secondary" href="{{ url_for('recovery_workflow_page', shift_id=shift.shift_id, workflow_id=run.workflow_id) }}">
+          {{ 'Resume Review' if run.status == 'awaiting_human_review' else 'Open Previous Run' }}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="recovery-history__empty">No previous recovery analysis has been recorded for this shift.</p>
+    {% endif %}
+  </section>
+
   <div id="recovery-workspace" aria-live="polite">
     {% if initial_workflow %}
-    <div class="recovery-safety-note recovery-safety-note--prominent" role="status">
-      <strong>No roster changes have been made.</strong>
-      This persisted workflow state was retrieved through the manager-only Student 5 backend proxy.
-    </div>
-    {% with workflow=initial_workflow %}
-      {% include "partials/recovery_state.html" %}
+    {% with workflow=initial_workflow, evidence=workflow_evidence %}
+      {% include "partials/recovery_workspace.html" %}
     {% endwith %}
-    <section class="panel recovery-restored-note">
-      <p>
-        Authoritative shift coverage is shown above. Detailed RAG and MCP
-        provenance is presented from the exact submitted evidence during the
-        live workflow view; the generic workflow GET contract does not repeat
-        that evidence payload.
-      </p>
-    </section>
     {% else %}
     <section class="panel recovery-start-panel">
       <div>
         <span class="u-label">Manager action</span>
-        <h2>Run recovery analysis</h2>
+        <h2>Start recovery analysis</h2>
         <p>
           The backend will prepare authoritative operational evidence, retrieve
           advisory policy guidance, use the registered read-only MCP tool, and
@@ -85,7 +108,7 @@
             hx-target="#recovery-workspace" hx-swap="innerHTML"
             hx-indicator="#recovery-starting"
             hx-disabled-elt="find button">
-        <button class="btn-primary" type="submit">Run Staffing Recovery</button>
+        <button class="btn-primary" type="submit">Start Recovery Analysis</button>
         <span class="htmx-indicator recovery-starting" id="recovery-starting" role="status">
           Preparing evidence and starting workflow…
         </span>

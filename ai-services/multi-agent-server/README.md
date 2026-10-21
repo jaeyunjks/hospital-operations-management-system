@@ -150,6 +150,7 @@ The HTTP API exposes:
 |--------|------|--------|
 | `GET` | `/health` | Lightweight service health; never calls Ollama |
 | `POST` | `/workflows` | Persists and returns a new `in_progress` workflow immediately |
+| `GET` | `/workflows?evidence_type=...&evidence_path=...&evidence_value=...&limit=...` | Lists recent persisted runs for an explicitly scoped integration/context |
 | `GET` | `/workflows/{workflow_id}` | Polls current persisted stage/lifecycle state |
 | `POST` | `/workflows/{workflow_id}/review` | Records Human Review and finalises the workflow |
 
@@ -189,7 +190,12 @@ Review decisions are `approve`, `correct`, `reject`, and `partially_accept`.
 `correct` requires a non-blank `comment`. Unknown workflows return `404`, and
 reviewing a workflow before its review gate or after completion returns `409`.
 The JSON audit files remain the source of truth, so workflows can be retrieved
-and reviewed after a server restart without a separate database.
+and reviewed after a server restart without a separate database. The default
+workflow GET remains the compact lifecycle contract. Trusted local adapters
+may request `?include_evidence=true` to restore the exact submitted evidence.
+History listing requires an `evidence_type`, supports a scalar evidence-path
+filter, is bounded to at most 100 results, and does not return evidence or an
+unrestricted audit-directory view.
 
 Server configuration uses `HOMS_MULTI_AGENT_HOST` and
 `HOMS_MULTI_AGENT_PORT`. A wildcard bind requires the explicit

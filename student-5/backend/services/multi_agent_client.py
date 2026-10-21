@@ -13,7 +13,7 @@ import socket
 import urllib.error
 import urllib.request
 from typing import Any, Dict, Optional
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 from uuid import UUID
 
 from config import Config
@@ -28,6 +28,11 @@ WORKFLOW_FIELDS = {
     "schema_version", "workflow_id", "status", "task", "planner", "worker",
     "reviewer", "human_review", "final_result",
 }
+WORKFLOW_EVIDENCE_FIELD = "submitted_evidence"
+HISTORY_FIELDS = {
+    "workflow_id", "status", "started_at", "human_review",
+}
+HISTORY_RESPONSE_FIELDS = {"schema_version", "count", "workflows"}
 WORKFLOW_STATUSES = {
     "in_progress", "awaiting_human_review", "approved", "corrected",
     "rejected", "partially_accepted", "failed",
@@ -182,8 +187,12 @@ def _validated_workflow(
     expected_task: Optional[str] = None,
     expected_status: Optional[str] = None,
     require_completed_stages: bool = False,
+    require_evidence: bool = False,
 ) -> Dict[str, Any]:
-    if not isinstance(body, dict) or set(body) != WORKFLOW_FIELDS:
+    expected_fields = set(WORKFLOW_FIELDS)
+    if require_evidence:
+        expected_fields.add(WORKFLOW_EVIDENCE_FIELD)
+    if not isinstance(body, dict) or set(body) != expected_fields:
         raise MultiAgentInvalidResponse()
     if body.get("schema_version") != SCHEMA_VERSION:
         raise MultiAgentInvalidResponse()
@@ -226,6 +235,42 @@ def _validated_workflow(
             or final_result.get("status") != "failed"
             or final_result.get("mutation_executed") is not False
         ):
+            raise MultiAgentInvalidResponse()
+    if require_evidence:
+        evidence = body.get(WORKFLOW_EVIDENCE_FIELD)
+        if (
+            not isinstance(evidence, dict)
+            or not _nonblank(evidence.get("evidence_type"))
+        ):
+            raise MultiAgentInvalidResponse()
+    return body
+
+
+def _validated_history(body: Any) -> Dict[str, Any]:
+    if not isinstance(body, dict) or set(body) != HISTORY_RESPONSE_FIELDS:
+        raise MultiAgentInvalidResponse()
+    workflows = body.get("workflows")
+    if (
+        body.get("schema_version") != SCHEMA_VERSION
+        or not isinstance(workflows, list)
+        or isinstance(body.get("count"), bool)
+        or not isinstance(body.get("count"), int)
+        or body["count"] != len(workflows)
+    ):
+        raise MultiAgentInvalidResponse()
+    for item in workflows:
+        if not isinstance(item, dict) or set(item) != HISTORY_FIELDS:
+            raise MultiAgentInvalidResponse()
+        _canonical_workflow_id(item.get("workflow_id"))
+        status = item.get("status")
+        if status not in WORKFLOW_STATUSES or not _nonblank(item.get("started_at")):
+            raise MultiAgentInvalidResponse()
+        human_review = item.get("human_review")
+        if status in FINAL_STATUS_DECISIONS:
+            _validated_human_review(
+                human_review, FINAL_STATUS_DECISIONS[status]
+            )
+        elif human_review is not None:
             raise MultiAgentInvalidResponse()
     return body
 
@@ -319,8 +364,41 @@ class MultiAgentClient:
     def get_workflow(self, workflow_id: str) -> Dict[str, Any]:
         workflow_id = _validated_workflow_id(workflow_id)
         body = self._request(
-            f"{WORKFLOWS_PATH}/{workflow_id}", method="GET")
-        return _validated_workflow(body)
+            f"{WORKFLOWS_PATH}/{workflow_id}?include_evidence=true",
+            method="GET",
+        )
+        return _validated_workflow(body, require_evidence=True)
+
+    def list_workflows(
+        self,
+        evidence_type: str,
+        *,
+        evidence_path: str,
+        evidence_value: str,
+        limit: int = 10,
+    ) -> Dict[str, Any]:
+        if (
+            not _nonblank(evidence_type)
+            or len(evidence_type) > 120
+            or not _nonblank(evidence_path)
+            or len(evidence_path) > 160
+            or not _nonblank(evidence_value)
+            or len(evidence_value) > 120
+            or isinstance(limit, bool)
+            or not isinstance(limit, int)
+            or not 1 <= limit <= 100
+        ):
+            raise MultiAgentInputError()
+        query = urlencode(
+            {
+                "evidence_type": evidence_type,
+                "evidence_path": evidence_path,
+                "evidence_value": evidence_value,
+                "limit": limit,
+            }
+        )
+        body = self._request(f"{WORKFLOWS_PATH}?{query}", method="GET")
+        return _validated_history(body)
 
     def submit_review(
         self, workflow_id: str, decision: str, comment: str = ""

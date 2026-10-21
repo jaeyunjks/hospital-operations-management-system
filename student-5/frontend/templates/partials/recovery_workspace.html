@@ -2,6 +2,7 @@
 {% set coverage = current.coverage %}
 {% set policy = evidence.policy_context %}
 {% set mcp = evidence.mcp_context %}
+{% set staff_display_names = staff_display_names|default({}) %}
 
 <div class="recovery-safety-note recovery-safety-note--prominent" role="status">
   <strong>No roster changes have been made.</strong>
@@ -11,10 +12,10 @@
 {% include "partials/recovery_state.html" %}
 
 <div class="recovery-evidence-grid">
-  <details class="panel recovery-evidence" open>
+  <details class="panel recovery-evidence recovery-evidence--authoritative" open>
     <summary>
-      <span><span class="u-label">Authoritative</span> Operational evidence</span>
-      <span class="badge-info">Backend facts</span>
+      <span><span class="u-label">Source of truth</span> Operational evidence</span>
+      <span class="badge-info">Authoritative backend facts</span>
     </summary>
     <div class="recovery-evidence__body">
       <dl class="recovery-coverage-metrics recovery-coverage-metrics--compact">
@@ -23,24 +24,31 @@
         <div><dt>Shortfall</dt><dd>{{ coverage.shortfall }}</dd></div>
         <div><dt>Status</dt><dd>{{ coverage.coverage_status }}</dd></div>
       </dl>
-      <h3>Candidate evidence</h3>
+      <div class="recovery-section-heading">
+        <div><span class="u-label">Backend comparison</span><h3>Candidate evidence</h3></div>
+        <p>Eligibility is shown exactly as returned by Student 5 business rules.</p>
+      </div>
       {% if evidence.options %}
       <ul class="recovery-candidates" role="list">
         {% for option in evidence.options %}
         <li>
           <div class="recovery-candidates__heading">
-            <strong class="u-mono">{{ option.id }}</strong>
+            <div class="recovery-candidate-identity">
+              {% if staff_display_names.get(option.id) %}<strong>{{ staff_display_names.get(option.id) }}</strong>{% endif %}
+              <span class="u-mono">{{ option.id }}</span>
+            </div>
             <span class="badge-{{ 'success' if option.attributes.backend_eligible else 'danger' }}">
               {{ 'Backend eligible' if option.attributes.backend_eligible else 'Not eligible' }}
             </span>
           </div>
-          <p>{{ option.attributes.role or 'Role unavailable' }} · {{ option.attributes.department or 'Department unavailable' }}</p>
-          <p>
-            Availability: {{ option.attributes.availability_status or 'Unknown' }}
-            · Weekly pattern: {{ 'matches' if option.attributes.weekly_availability_matches else 'review required' }}
-          </p>
+          <dl class="recovery-candidate-facts">
+            <div><dt>Role</dt><dd>{{ option.attributes.role or 'Unavailable' }}</dd></div>
+            <div><dt>Department</dt><dd>{{ option.attributes.department or 'Unavailable' }}</dd></div>
+            <div><dt>Availability</dt><dd>{{ option.attributes.availability_status or 'Unknown' }}</dd></div>
+            <div><dt>Weekly pattern</dt><dd>{{ 'Matches' if option.attributes.weekly_availability_matches else 'Review required' }}</dd></div>
+          </dl>
           {% if option.risk_indicators %}
-          <ul>{% for risk in option.risk_indicators %}<li>{{ risk }}</li>{% endfor %}</ul>
+          <div class="recovery-candidate-risks"><span class="u-label">Risk indicators</span><ul>{% for risk in option.risk_indicators %}<li>{{ risk }}</li>{% endfor %}</ul></div>
           {% endif %}
           {% if option.attributes.blocked_reason %}<p class="recovery-risk">{{ option.attributes.blocked_reason }}</p>{% endif %}
         </li>
@@ -50,15 +58,17 @@
       <p class="u-muted">No candidate options were supplied.</p>
       {% endif %}
       {% if evidence.unknowns %}
-      <h3>Known limitations</h3>
-      <ul>{% for unknown in evidence.unknowns %}<li>{{ unknown }}</li>{% endfor %}</ul>
+      <aside class="recovery-limitations" aria-labelledby="recovery-limitations-heading">
+        <h3 id="recovery-limitations-heading">Known limitations</h3>
+        <ul>{% for unknown in evidence.unknowns %}<li>{{ unknown }}</li>{% endfor %}</ul>
+      </aside>
       {% endif %}
     </div>
   </details>
 
   <details class="panel recovery-evidence">
     <summary>
-      <span><span class="u-label">Advisory</span> Policy Guidance</span>
+      <span><span class="u-label">RAG documentation</span> Advisory Policy Guidance</span>
       <span class="badge-{{ 'success' if policy.retrieval_status == 'answered' else 'neutral' }}">
         {{ 'Retrieved' if policy.retrieval_status == 'answered' else policy.retrieval_status|replace('_', ' ')|title }}
       </span>
@@ -77,11 +87,11 @@
       <div class="recovery-citations">
         {% for citation in policy.citations %}
         <article>
-          <span class="u-mono">[{{ citation.id }}]</span>
+          <div class="recovery-citation__heading"><span class="badge-neutral">[{{ citation.id }}]</span>{% if citation.score is not none %}<span class="u-mono">Score {{ citation.score }}</span>{% endif %}</div>
           <h3>{{ citation.title }}</h3>
-          <p>{{ citation.section }}</p>
-          <p class="u-muted">{{ citation.source }}{% if citation.score is not none %} · score {{ citation.score }}{% endif %}</p>
-          <p>{{ citation.snippet }}</p>
+          <p class="recovery-citation__section">{{ citation.section }}</p>
+          <p class="u-muted">{{ citation.source }}</p>
+          {% if citation.snippet %}<details class="recovery-citation__excerpt"><summary>View cited excerpt</summary><p>{{ citation.snippet }}</p></details>{% endif %}
         </article>
         {% endfor %}
       </div>
@@ -96,7 +106,7 @@
 
   <details class="panel recovery-evidence">
     <summary>
-      <span><span class="u-label">Controlled access</span> Controlled Tool Access</span>
+      <span><span class="u-label">Read-only provenance</span> Controlled Tool Access</span>
       <span class="badge-{{ 'success' if mcp.retrieval_status == 'available' else 'neutral' }}">
         {{ mcp.retrieval_status|replace('_', ' ')|title }}
       </span>
@@ -105,10 +115,11 @@
       {% if mcp.retrieval_status == 'available' %}
       <dl class="recovery-provenance-list">
         <div><dt>Tool</dt><dd class="u-mono">{{ mcp.tool_name }}</dd></div>
-        <div><dt>Input</dt><dd class="u-mono">shift_id: {{ mcp.tool_input.shift_id }}</dd></div>
-        <div><dt>Access</dt><dd>{{ 'Read-only' if mcp.tool_result.mutation_allowed is sameas false else 'Unknown' }}</dd></div>
+        <div><dt>Shift input</dt><dd class="u-mono">shift_id: {{ mcp.tool_input.shift_id }}</dd></div>
+        <div><dt>Access</dt><dd><span class="badge-success">{{ 'Read-only' if mcp.tool_result.mutation_allowed is sameas false else 'Unknown' }}</span></dd></div>
         <div><dt>Source</dt><dd>{{ mcp.source }}</dd></div>
         <div><dt>Consistency</dt><dd>{{ mcp.consistency_status|replace('_', ' ')|title }}</dd></div>
+        <div><dt>Mutation</dt><dd>{{ 'Prohibited' if mcp.tool_result.mutation_allowed is sameas false else 'Not confirmed' }}</dd></div>
       </dl>
       <p class="recovery-boundary-copy">
         The registered tool returned the same authoritative evidence. Its
@@ -118,7 +129,7 @@
       <p>Unavailable – workflow continued using authoritative backend evidence.</p>
       <dl class="recovery-provenance-list">
         <div><dt>Tool</dt><dd class="u-mono">{{ mcp.tool_name }}</dd></div>
-        <div><dt>Input</dt><dd class="u-mono">shift_id: {{ mcp.tool_input.shift_id }}</dd></div>
+        <div><dt>Shift input</dt><dd class="u-mono">shift_id: {{ mcp.tool_input.shift_id }}</dd></div>
         <div><dt>Consistency</dt><dd>Not checked</dd></div>
       </dl>
       {% endif %}

@@ -286,6 +286,15 @@ def get_recovery_workflow(workflow_id: str) -> Dict[str, Any]:
     )
 
 
+def list_recovery_workflows(shift_id: int) -> Dict[str, Any]:
+    """GET recent persisted Staffing Recovery runs for one selected shift."""
+    return _request(
+        "GET", "/api/recovery-workflows",
+        params={"shift_id": shift_id},
+        timeout=RECOVERY_WORKFLOW_API_TIMEOUT,
+    )
+
+
 def submit_recovery_review(
     workflow_id: str, decision: str, comment: str = ""
 ) -> Dict[str, Any]:

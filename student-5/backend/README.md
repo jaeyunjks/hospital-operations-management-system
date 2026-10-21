@@ -83,6 +83,7 @@ SQLite file** — every read and write crosses the HTTP boundary in
 | DELETE | `/api/shifts/<id>` | Delete a shift (assignments cascade) |
 | GET | `/api/shifts/<id>/recovery-evidence` | Assemble read-only Staffing Recovery evidence (Staff Manager only) |
 | POST | `/api/shifts/<id>/recovery-workflow` | Return a new shared workflow ID with `in_progress` status |
+| GET | `/api/recovery-workflows?shift_id=<id>` | List recent persisted recovery runs for one shift |
 | GET | `/api/recovery-workflows/<workflow_id>` | Poll Planner, Worker, Reviewer and lifecycle state |
 | POST | `/api/recovery-workflows/<workflow_id>/review` | Record advisory Human Review without changing the roster |
 
@@ -235,8 +236,9 @@ The request returns HTTP `202` with the validated shared `in_progress`
 response, real `workflow_id`, polling `Location`, and `Retry-After: 1`. At the
 Student 5 boundary only, the response also includes `submitted_evidence`: the
 exact privacy-safe operational, RAG, and MCP evidence sent to the shared
-workflow. The shared API itself remains generic and unchanged, and later GET
-responses continue to mirror its workflow envelope exactly. Clients
+workflow. The shared API remains generic; later GET responses restore the exact
+`submitted_evidence` from its existing audit so operational facts, RAG
+citations, and MCP provenance survive refresh and history reopening. Clients
 poll `GET /api/recovery-workflows/<workflow_id>` until the workflow reaches
 `awaiting_human_review` or `failed`; completed agent stages appear in the same
 response contract. It never submits a review or changes a roster. Connection failure returns
@@ -245,7 +247,9 @@ an upstream failure or invalid workflow contract returns a safe `502` response.
 The shared service is not part of Docker Compose and is not included in the
 backend health check.
 
-`GET /api/recovery-workflows/<workflow_id>` and
+`GET /api/recovery-workflows?shift_id=<id>` projects a bounded, manager-only
+history list from the shared audit source without creating another workflow
+database. `GET /api/recovery-workflows/<workflow_id>` and
 `POST /api/recovery-workflows/<workflow_id>/review` proxy the remaining shared
 lifecycle for Staff Managers. The review body mirrors the shared API exactly:
 

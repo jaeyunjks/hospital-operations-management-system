@@ -2,14 +2,20 @@
 {% set planner = workflow.planner %}
 {% set worker = workflow.worker %}
 {% set reviewer = workflow.reviewer %}
-<section id="recovery-state" class="panel recovery-state"
+<section id="recovery-state" class="panel recovery-state recovery-state--{{ status }}"
          {% if poll %}hx-get="{{ url_for('recovery_workflow_state_partial', workflow_id=workflow.workflow_id) }}"
          hx-trigger="load delay:1.5s" hx-target="this" hx-swap="outerHTML"{% endif %}>
   <div class="recovery-state__header">
     <div>
-      <span class="u-label">Workflow status</span>
-      <h2>{{ recovery_status_label(status) }}</h2>
-      <p class="u-mono recovery-workflow-id">{{ workflow.workflow_id }}</p>
+      <span class="u-label">Decision-support workflow</span>
+      <h2>
+        {%- if status == 'in_progress' -%}Analysis in progress
+        {%- elif status == 'awaiting_human_review' -%}Manager decision required
+        {%- elif status == 'failed' -%}Analysis stopped
+        {%- else -%}Review complete
+        {%- endif -%}
+      </h2>
+      <p class="recovery-workflow-id"><span>Workflow ID</span><code>{{ workflow.workflow_id }}</code></p>
     </div>
     <span class="badge-{{ 'danger' if status == 'failed' or status == 'rejected' else 'success' if status in ('approved', 'corrected', 'partially_accepted') else 'info' }}">
       {{ recovery_status_label(status) }}
@@ -18,9 +24,10 @@
 
   <ol class="recovery-progress" aria-label="Workflow stage progress">
     {% for stage in stage_states %}
-    <li class="recovery-progress__item recovery-progress__item--{{ stage.state }}">
+    <li class="recovery-progress__item recovery-progress__item--{{ stage.state }} recovery-progress__item--{{ stage.role }}"
+        {% if stage.state == 'running' %}aria-current="step"{% endif %}>
       <span class="recovery-progress__marker" aria-hidden="true">
-        {{ '✓' if stage.state == 'complete' else '●' if stage.state == 'running' else '○' }}
+        {% if stage.state == 'complete' %}✓{% elif stage.state == 'running' %}<span class="recovery-spinner"></span>{% else %}<span class="recovery-waiting-dot"></span>{% endif %}
       </span>
       <span><strong>{{ stage.label }}</strong><small>{{ stage.state_label }}</small></span>
     </li>
@@ -33,69 +40,133 @@
   </p>
   {% endif %}
 
-  {% if planner or worker or reviewer %}
-  <div class="recovery-agent-grid">
+  <div class="recovery-agent-grid recovery-agent-grid--3">
     {% if planner %}
-    <article class="recovery-agent-card">
-      <div class="recovery-agent-card__heading"><h3>Planner</h3>
+    <article class="recovery-agent-card recovery-agent-card--complete">
+      <div class="recovery-agent-card__heading">
+        <div><span class="u-label">Decision support</span><h3>Planner</h3></div>
         {% if planner.execution and planner.execution.fallback_used %}<span class="badge-neutral">Safety fallback</span>{% endif %}
       </div>
       {% if planner.execution and planner.execution.fallback_used %}<p class="recovery-fallback">Completed using deterministic safety fallback.</p>{% endif %}
-      <p><strong>Goal</strong><br>{{ planner.output.goal or 'No goal summary supplied.' }}</p>
-      {% if planner.output.planned_steps %}<ol>{% for step in planner.output.planned_steps %}<li>{{ step }}</li>{% endfor %}</ol>{% endif %}
-      {% if planner.output.expected_result %}<p><strong>Expected result</strong><br>{{ planner.output.expected_result }}</p>{% endif %}
+      <div class="recovery-agent-card__body">
+        <section class="recovery-agent-section">
+          <h4>Goal</h4>
+          {% set planner_goal = planner.output.goal or 'No goal summary supplied.' %}
+          <p>{{ planner_goal.split('. ')[0] }}{% if '. ' in planner_goal %}.{% endif %}</p>
+          {% if '. ' in planner_goal %}
+          <details class="recovery-agent-detail"><summary>View full planning goal</summary><p>{{ planner_goal }}</p></details>
+          {% endif %}
+        </section>
+        {% if planner.output.planned_steps %}
+        <section class="recovery-agent-section">
+          <h4>Main steps</h4>
+          <ol class="recovery-compact-list">{% for step in planner.output.planned_steps %}<li>{{ step }}</li>{% endfor %}</ol>
+        </section>
+        {% endif %}
+        {% if planner.output.expected_result %}
+        <section class="recovery-agent-section recovery-agent-section--result">
+          <h4>Expected result</h4><p>{{ planner.output.expected_result }}</p>
+        </section>
+        {% endif %}
+      </div>
+    </article>
+    {% else %}
+    <article class="recovery-agent-card recovery-agent-card--{{ stage_states[0].state }}">
+      <div class="recovery-agent-card__heading">
+        <div><span class="u-label">Decision support</span><h3>Planner</h3></div>
+        <span class="badge-neutral">{{ stage_states[0].state_label }}</span>
+      </div>
+      <div class="recovery-agent-placeholder" role="status">
+        <span class="recovery-agent-placeholder__icon" aria-hidden="true"></span>
+        <p>{{ 'Structuring the recovery goal and evidence requirements…' if stage_states[0].state == 'running' else 'Waiting for analysis to begin.' }}</p>
+      </div>
     </article>
     {% endif %}
 
     {% if worker %}
-    <article class="recovery-agent-card">
-      <div class="recovery-agent-card__heading"><h3>Worker</h3>
+    <article class="recovery-agent-card recovery-agent-card--complete">
+      <div class="recovery-agent-card__heading">
+        <div><span class="u-label">Recommendation</span><h3>Worker</h3></div>
         {% if worker.execution and worker.execution.fallback_used %}<span class="badge-neutral">Safety fallback</span>{% endif %}
       </div>
       {% if worker.execution and worker.execution.fallback_used %}<p class="recovery-fallback">Completed using deterministic safety fallback.</p>{% endif %}
+      <div class="recovery-agent-card__body">
       {% if worker.output.gap %}
-      <p><strong>Coverage finding</strong><br>Current {{ worker.output.gap.current }} / target {{ worker.output.gap.target }} · deficit {{ worker.output.gap.deficit }}</p>
+      <dl class="recovery-result-metrics" aria-label="Worker coverage finding">
+        <div><dt>Current</dt><dd>{{ worker.output.gap.current }}</dd></div>
+        <div><dt>Target</dt><dd>{{ worker.output.gap.target }}</dd></div>
+        <div><dt>Shortfall</dt><dd>{{ worker.output.gap.deficit }}</dd></div>
+      </dl>
       {% endif %}
       {% if worker.output.proposed_solution %}
-      <p><strong>Proposed option</strong><br><span class="u-mono">{{ worker.output.proposed_solution.selected_option_id or worker.output.proposed_solution.selected_option }}</span></p>
-      <p>Projected coverage: {{ worker.output.proposed_solution.projected_value }} / {{ worker.output.gap.target if worker.output.gap else '—' }}</p>
-      {% if worker.output.proposed_solution.reasoning %}<ul>{% for reason in worker.output.proposed_solution.reasoning %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
+      <section class="recovery-agent-section recovery-agent-section--result">
+        <h4>Proposed option</h4>
+        <p class="recovery-option-result"><strong class="u-mono">{{ worker.output.proposed_solution.selected_option_id or worker.output.proposed_solution.selected_option }}</strong><span class="badge-info">Projected {{ worker.output.proposed_solution.projected_value }} / {{ worker.output.gap.target if worker.output.gap else '—' }}</span></p>
+      </section>
+      {% if worker.output.proposed_solution.reasoning %}<section class="recovery-agent-section"><h4>Reasoning</h4><ul class="recovery-compact-list">{% for reason in worker.output.proposed_solution.reasoning %}<li>{{ reason }}</li>{% endfor %}</ul></section>{% endif %}
       {% else %}<p>No assignment option was proposed.</p>{% endif %}
-      {% if worker.output.limitations %}<p><strong>Limitations</strong></p><ul>{% for item in worker.output.limitations %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+      {% if worker.output.limitations %}<section class="recovery-agent-section"><h4>Risks and limitations</h4><ul class="recovery-compact-list">{% for item in worker.output.limitations %}<li>{{ item }}</li>{% endfor %}</ul></section>{% endif %}
+      </div>
       <p class="recovery-no-mutation">{{ 'No mutation executed.' if worker.output.mutation_executed is sameas false else 'Mutation status was not supplied.' }}</p>
+    </article>
+    {% else %}
+    <article class="recovery-agent-card recovery-agent-card--{{ stage_states[1].state }}">
+      <div class="recovery-agent-card__heading">
+        <div><span class="u-label">Recommendation</span><h3>Worker</h3></div>
+        <span class="badge-neutral">{{ stage_states[1].state_label }}</span>
+      </div>
+      <div class="recovery-agent-placeholder" role="status">
+        <span class="recovery-agent-placeholder__icon" aria-hidden="true"></span>
+        <p>{{ 'Evaluating the supplied options and constraints…' if stage_states[1].state == 'running' else 'Waiting for the Planner output.' }}</p>
+      </div>
     </article>
     {% endif %}
 
     {% if reviewer %}
-    <article class="recovery-agent-card recovery-agent-card--reviewer">
-      <div class="recovery-agent-card__heading"><h3>Reviewer</h3>
+    <article class="recovery-agent-card recovery-agent-card--reviewer recovery-agent-card--complete">
+      <div class="recovery-agent-card__heading">
+        <div><span class="u-label">Independent check</span><h3>Reviewer</h3></div>
         {% if reviewer.execution and reviewer.execution.fallback_used %}<span class="badge-neutral">Safety fallback</span>{% endif %}
       </div>
       {% if reviewer.execution and reviewer.execution.fallback_used %}<p class="recovery-fallback">Safety validation corrected an inconsistent model response using deterministic fallback.</p>{% endif %}
-      <p><strong>Review status</strong><br>{{ reviewer.output.review_status|replace('_', ' ')|title }}</p>
-      <p><strong>Recommendation</strong><br>{{ reviewer.output.recommendation }}</p>
-      {% if reviewer.output.recommended_option_id %}<p><strong>Reviewed option</strong><br><span class="u-mono">{{ reviewer.output.recommended_option_id }}</span></p>{% endif %}
-      {% if reviewer.output.risks %}<p><strong>Risks</strong></p><ul>{% for risk in reviewer.output.risks %}<li>{{ risk }}</li>{% endfor %}</ul>{% endif %}
-      {% if reviewer.output.unsupported_claims %}<p><strong>Unsupported claims</strong></p><ul>{% for claim in reviewer.output.unsupported_claims %}<li>{{ claim }}</li>{% endfor %}</ul>{% endif %}
+      <div class="recovery-agent-card__body">
+        <p class="recovery-review-status"><span class="badge-info">{{ reviewer.output.review_status|replace('_', ' ')|title }}</span>{% if reviewer.output.recommended_option_id %}<span>Option <strong class="u-mono">{{ reviewer.output.recommended_option_id }}</strong></span>{% endif %}</p>
+        <section class="recovery-agent-section recovery-agent-section--result"><h4>Recommendation</h4><p>{{ reviewer.output.recommendation }}</p></section>
+        {% if reviewer.output.risks %}<section class="recovery-agent-section"><h4>Important risks</h4><ul class="recovery-compact-list">{% for risk in reviewer.output.risks %}<li>{{ risk }}</li>{% endfor %}</ul></section>{% endif %}
+        {% if reviewer.output.unsupported_claims %}<section class="recovery-agent-section"><h4>Unsupported claims</h4><ul class="recovery-compact-list">{% for claim in reviewer.output.unsupported_claims %}<li>{{ claim }}</li>{% endfor %}</ul></section>{% endif %}
+      </div>
       <p class="recovery-no-mutation">
         Human approval {{ 'is required' if reviewer.output.human_approval_required else 'was not confirmed' }}.
         {{ 'No mutation verified.' if reviewer.output.mutation_verified_absent else '' }}
       </p>
     </article>
+    {% else %}
+    <article class="recovery-agent-card recovery-agent-card--reviewer recovery-agent-card--{{ stage_states[2].state }}">
+      <div class="recovery-agent-card__heading">
+        <div><span class="u-label">Independent check</span><h3>Reviewer</h3></div>
+        <span class="badge-neutral">{{ stage_states[2].state_label }}</span>
+      </div>
+      <div class="recovery-agent-placeholder" role="status">
+        <span class="recovery-agent-placeholder__icon" aria-hidden="true"></span>
+        <p>{{ 'Checking the proposal against evidence and safety constraints…' if stage_states[2].state == 'running' else 'Waiting for the Worker proposal.' }}</p>
+      </div>
+    </article>
     {% endif %}
   </div>
-  {% endif %}
 
   {% if status == 'awaiting_human_review' %}
   <section class="recovery-human-review" aria-labelledby="human-review-heading">
-    <div>
-      <span class="u-label">Required manager decision</span>
-      <h3 id="human-review-heading">Human Review</h3>
-      <p>Accept or reject the AI recommendation, or record a correction/partial acceptance.</p>
+    <div class="recovery-human-review__heading">
+      <div>
+        <span class="u-label">Required manager decision</span>
+        <h3 id="human-review-heading">Human Review</h3>
+        <p>Review the evidence and record your decision on the recommendation.</p>
+      </div>
+      <span class="badge-info">Decision required</span>
     </div>
-    <div class="recovery-safety-note">
-      <strong>Human Review records your decision on this recommendation.</strong>
-      It does not automatically change the roster.
+    <div class="recovery-review-boundary" role="note">
+      <strong>Advisory decision only.</strong>
+      Human Review records a decision on the recommendation. It does not automatically modify the roster.
     </div>
     <form hx-post="{{ url_for('recovery_workflow_review_partial', workflow_id=workflow.workflow_id) }}"
           hx-target="#recovery-state" hx-swap="outerHTML"
@@ -111,23 +182,28 @@
         <button class="btn-primary" type="submit" name="decision" value="approve">Approve</button>
         <button class="btn-secondary" type="submit" name="decision" value="correct">Request Correction</button>
         <button class="btn-secondary" type="submit" name="decision" value="partially_accept">Partially Accept</button>
-        <button class="btn-danger" type="submit" name="decision" value="reject">Reject</button>
+        <button class="btn-danger recovery-review-actions__reject" type="submit" name="decision" value="reject">Reject</button>
       </div>
     </form>
   </section>
   {% elif status in ('approved', 'corrected', 'rejected', 'partially_accepted') %}
   <section class="recovery-final" aria-labelledby="recovery-final-heading">
-    <span class="u-label">Human Review recorded</span>
-    <h3 id="recovery-final-heading">{{ recovery_status_label(status) }}</h3>
+    <div class="recovery-final__heading">
+      <div><span class="u-label">Human Review recorded</span><h3 id="recovery-final-heading">{{ recovery_status_label(status) }}</h3></div>
+      <span class="badge-{{ 'danger' if status == 'rejected' else 'success' }}">Final</span>
+    </div>
     <dl class="recovery-provenance-list">
       <div><dt>Decision</dt><dd>{{ workflow.human_review.decision|replace('_', ' ')|title }}</dd></div>
       <div><dt>Manager comment</dt><dd>{{ workflow.human_review.comments or 'No comment supplied.' }}</dd></div>
       <div><dt>Recorded</dt><dd>{{ format_timestamp(workflow.human_review.timestamp) }}</dd></div>
       <div><dt>Roster mutation</dt><dd>{{ 'None' if workflow.final_result.mutation_executed is sameas false else 'Not confirmed' }}</dd></div>
     </dl>
+    {% if reviewer and reviewer.output.recommendation %}
+    <div class="recovery-final__recommendation"><span class="u-label">Reviewed recommendation</span><p>{{ reviewer.output.recommendation }}</p></div>
+    {% endif %}
     <div class="recovery-safety-note recovery-safety-note--prominent">
       <strong>No roster changes have been made.</strong>
-                    Human Review records a decision on the recommendation only; any later roster action remains separate.
+      Human Review records a decision on the recommendation only; any later roster action remains separate.
     </div>
   </section>
   {% elif status == 'failed' %}

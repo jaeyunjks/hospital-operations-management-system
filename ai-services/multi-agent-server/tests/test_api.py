@@ -226,6 +226,57 @@ def test_get_reconstructs_persisted_workflow_after_app_restart(
     assert response.get_json()["workflow_id"] == created["workflow_id"]
 
 
+def test_get_can_restore_submitted_evidence_without_changing_default_view(
+    tmp_path, sample_evidence
+):
+    client = build_client(tmp_path)
+    created = create_workflow(client, sample_evidence).get_json()
+
+    default = client.get(
+        f"/workflows/{created['workflow_id']}", headers=LOCAL
+    ).get_json()
+    restored = client.get(
+        f"/workflows/{created['workflow_id']}?include_evidence=true",
+        headers=LOCAL,
+    ).get_json()
+
+    assert "submitted_evidence" not in default
+    assert restored["submitted_evidence"] == sample_evidence
+    assert restored["workflow_id"] == created["workflow_id"]
+
+
+def test_history_requires_evidence_scope_and_returns_only_matching_audits(
+    tmp_path, sample_evidence
+):
+    client = build_client(tmp_path)
+    first_evidence = {
+        **sample_evidence,
+        "evidence_type": "student5_staffing_recovery",
+        "current_state": {"shift": {"shift_id": 11}},
+    }
+    second_evidence = {
+        **sample_evidence,
+        "evidence_type": "student5_staffing_recovery",
+        "current_state": {"shift": {"shift_id": 12}},
+    }
+    first = create_workflow(client, first_evidence).get_json()
+    create_workflow(client, second_evidence)
+
+    missing_scope = client.get("/workflows", headers=LOCAL)
+    response = client.get(
+        "/workflows?evidence_type=student5_staffing_recovery"
+        "&evidence_path=current_state.shift.shift_id&evidence_value=11&limit=10",
+        headers=LOCAL,
+    )
+    body = response.get_json()
+
+    assert missing_scope.status_code == 400
+    assert response.status_code == 200
+    assert body["count"] == 1
+    assert body["workflows"][0]["workflow_id"] == first["workflow_id"]
+    assert "submitted_evidence" not in body["workflows"][0]
+
+
 def test_app_restart_resumes_a_persisted_in_progress_workflow(
     tmp_path, sample_evidence
 ):
