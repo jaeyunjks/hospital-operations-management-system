@@ -29,12 +29,27 @@ class DatabaseClient:
         self.base_url = (base_url or Config.DATABASE_SERVICE_URL).rstrip("/")
         self.timeout = timeout if timeout is not None else Config.DATABASE_SERVICE_TIMEOUT
 
+    def _validated_base_url(self) -> str:
+        try:
+            parsed_url = urllib.parse.urlsplit(self.base_url)
+            valid_url = (
+                parsed_url.scheme.lower() in {"http", "https"}
+                and parsed_url.hostname
+            )
+        except (TypeError, ValueError):
+            valid_url = False
+        if not valid_url:
+            raise DatabaseServiceError(
+                "Database service URL must use http or https and include a host."
+            )
+        return self.base_url
+
     # ------------------------------------------------------------- internals
     def _request(self, method: str, path: str,
                  params: Optional[Dict[str, Any]] = None,
                  payload: Optional[Dict[str, Any]] = None) -> Any:
         """Perform one HTTP call and translate transport errors into ApiErrors."""
-        url = f"{self.base_url}{path}"
+        url = f"{self._validated_base_url()}{path}"
 
         if params:
             filtered = {k: v for k, v in params.items() if v is not None}
@@ -47,10 +62,14 @@ class DatabaseClient:
             body = json.dumps(payload).encode("utf-8")
             headers["Content-Type"] = "application/json"
 
-        request = urllib.request.Request(url, data=body, headers=headers, method=method)
+        request = urllib.request.Request(  # noqa: S310 - base URL validated above.
+            url, data=body, headers=headers, method=method
+        )
 
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with urllib.request.urlopen(  # noqa: S310 - request URL validated above.
+                request, timeout=self.timeout
+            ) as response:
                 if response.status == 204:
                     return None
                 raw = response.read().decode("utf-8")

@@ -131,10 +131,23 @@ def set_identity_provider(provider) -> None:
     _identity_provider = provider
 
 
+def _validated_api_base_url() -> str:
+    try:
+        parsed_url = urllib.parse.urlsplit(API_BASE_URL)
+        valid_url = parsed_url.scheme.lower() in {"http", "https"} and parsed_url.hostname
+    except (TypeError, ValueError):
+        valid_url = False
+    if not valid_url:
+        raise BackendUnavailableError(
+            "The Staff & Shift service URL must use http or https and include a host."
+        )
+    return API_BASE_URL.rstrip("/")
+
+
 def _request(method: str, path: str, params: Optional[Dict[str, Any]] = None,
              payload: Optional[Dict[str, Any]] = None,
              timeout: Optional[float] = None) -> Any:
-    url = f"{API_BASE_URL}{path}"
+    url = f"{_validated_api_base_url()}{path}"
 
     if params:
         filtered = {key: value for key, value in params.items() if value is not None}
@@ -153,10 +166,12 @@ def _request(method: str, path: str, params: Optional[Dict[str, Any]] = None,
         body = json.dumps(payload).encode("utf-8")
         headers["Content-Type"] = "application/json"
 
-    request = urllib.request.Request(url, data=body, headers=headers, method=method)
+    request = urllib.request.Request(  # noqa: S310 - base URL validated above.
+        url, data=body, headers=headers, method=method
+    )
 
     try:
-        with urllib.request.urlopen(
+        with urllib.request.urlopen(  # noqa: S310 - request URL validated above.
                 request, timeout=API_TIMEOUT if timeout is None else timeout) as response:
             raw = response.read().decode("utf-8")
             return json.loads(raw) if raw else None

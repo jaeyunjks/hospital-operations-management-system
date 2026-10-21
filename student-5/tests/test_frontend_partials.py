@@ -5101,6 +5101,25 @@ def test_frontend_rag_client_posts_only_question_with_dedicated_timeout(
     assert fe_api_client.RAG_API_TIMEOUT > fe_api_client.API_TIMEOUT
 
 
+@pytest.mark.parametrize("base_url", [
+    "file:///tmp/backend.sock",
+    "ftp://localhost/backend",
+    "data:text/plain,backend",
+    "javascript:alert(1)",
+])
+def test_frontend_api_client_rejects_non_http_urls_before_network(
+        fe_api_client, monkeypatch, base_url):
+    def forbidden_network(*_args, **_kwargs):
+        raise AssertionError("urlopen must not run for an unsupported URL scheme")
+
+    monkeypatch.setattr(fe_api_client, "API_BASE_URL", base_url)
+    monkeypatch.setattr(fe_api_client.urllib.request, "urlopen", forbidden_network)
+
+    with pytest.raises(fe_api_client.BackendUnavailableError,
+                       match="must use http or https"):
+        fe_api_client._request("GET", "/health")
+
+
 def test_demand_callout_spacing_is_not_an_inline_style(
         frontend_client, fe_api_client, monkeypatch):
     _daily_stubs(monkeypatch, fe_api_client, [

@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Callable, Dict, Mapping, Optional, Protocol
 
@@ -453,6 +454,16 @@ class OllamaModelClient:
     ):
         if not 1 <= max_attempts <= 5:
             raise ValueError("max_attempts must be between 1 and 5")
+        try:
+            parsed_url = urllib.parse.urlsplit(base_url)
+            valid_url = (
+                parsed_url.scheme.lower() in {"http", "https"}
+                and parsed_url.hostname
+            )
+        except (TypeError, ValueError):
+            valid_url = False
+        if not valid_url:
+            raise ValueError("base_url must use http or https and include a host")
         self.model = model
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -460,14 +471,16 @@ class OllamaModelClient:
         self.transport = transport or self._post_generate
 
     def _post_generate(self, payload: Dict[str, Any], timeout: float) -> Dict[str, Any]:
-        request = urllib.request.Request(
+        request = urllib.request.Request(  # noqa: S310 - base_url validated in __init__.
             f"{self.base_url}/api/generate",
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json", "Accept": "application/json"},
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with urllib.request.urlopen(  # noqa: S310 - request URL validated in __init__.
+                request, timeout=timeout
+            ) as response:
                 envelope = json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace").strip()

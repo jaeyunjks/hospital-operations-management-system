@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Dict, Optional
 
@@ -56,6 +57,22 @@ class OllamaClient:
         self.model = model or Config.OLLAMA_MODEL
         self.timeout = timeout if timeout is not None else Config.OLLAMA_TIMEOUT
 
+    def _validated_base_url(self) -> str:
+        try:
+            parsed_url = urllib.parse.urlsplit(self.base_url)
+            valid_url = (
+                parsed_url.scheme.lower() in {"http", "https"}
+                and parsed_url.hostname
+            )
+        except (TypeError, ValueError):
+            valid_url = False
+        if not valid_url:
+            raise OllamaError(
+                REASON_UNAVAILABLE,
+                "Ollama URL must use http or https and include a host",
+            )
+        return self.base_url
+
     def generate_json(self, prompt: str, system: Optional[str] = None,
                       model: Optional[str] = None) -> Dict[str, Any]:
         """Ask the model for one JSON object and return it parsed.
@@ -79,8 +96,8 @@ class OllamaClient:
         if system:
             payload["system"] = system
 
-        request = urllib.request.Request(
-            f"{self.base_url}/api/generate",
+        request = urllib.request.Request(  # noqa: S310 - helper validates base URL.
+            f"{self._validated_base_url()}/api/generate",
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json",
                      "Accept": "application/json"},
@@ -88,7 +105,9 @@ class OllamaClient:
         )
 
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with urllib.request.urlopen(  # noqa: S310 - request URL validated above.
+                request, timeout=self.timeout
+            ) as response:
                 raw = response.read().decode("utf-8")
         except urllib.error.HTTPError as error:
             # A 404 here usually means the model name is not pulled. That is an
