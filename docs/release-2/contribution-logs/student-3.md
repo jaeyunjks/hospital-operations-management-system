@@ -1,0 +1,59 @@
+# Release 2 Contribution Log — Student 3
+
+| | |
+|---|---|
+| Student | Tirth Patel (GitHub `tirth676`) |
+| Feature | Pharmacy & Medication Inventory Management (`student-3/`) |
+| Feature branch | `pharmacy-inventory-management`, merged into `develop` |
+| Release 2 period | 19 October 2026 – |
+| Release 2 commits | Listed below; merged into `develop` on 19 October |
+
+Commit links: `https://github.com/jaeyunjks/hospital-operations-management-system/commit/<id>`.
+
+## Summary
+
+| Brief responsibility | Outcome |
+|---|---|
+| Multi-Agent integration | "Reorder decision review" on the pharmacy dashboard: the backend sends backend-calculated evidence for one low-stock medicine to the shared Multi-Agent Server, which runs Planner → Worker → Reviewer; a Pharmacy Manager then approves, corrects, partially accepts or rejects. Pharmacists can start and read a review but not decide. The workflow never creates or changes a purchase order. |
+| Release 1 integration retained | AI-Mode, MCP (stock and purchase-order alerts) and RAG (pharmacy assistant) unchanged and still tested |
+| Post-commit CI/CD endpoint tests | `student-3/tests/test_endpoints_ci.py`: `POST /api/stock/issue` (FEFO) and `POST /api/purchase-orders/{id}/approve` (manager approval), 6 tests run against the backend container in `student-3.yml` |
+| GitHub Actions workflow | `student-3.yml` also runs the endpoint tests and checks that Multi-Agent is retained but disabled (backend 503, dashboard "Multi-Agent disabled") |
+| Pre-commit security testing | Ruff security rules, detect-secrets and pip-audit on the pharmacy services and the shared components Student 3 owns. Flask upgraded from 3.0.3 to 3.1.3 for a known vulnerability; configured service URLs restricted to http(s); SQL and bind findings reviewed and documented. With the team pre-commit configuration (root `.pre-commit-config.yaml`, `ruff.toml`) all three hooks pass on the 173 Student 3 files. |
+| Agentic-loop review evidence | Multi-Agent Workflow Review of the pharmacy workflow: 9/9 checks passed. `student-3.yml` uploads the endpoint-test JUnit report (`student-3-junit`) that the Testing Review mode reads. |
+| Local deployment | Pharmacy containers reach the host-local Multi-Agent Server (8200), MCP (8000), RAG (8100) and Ollama through `host.docker.internal` |
+| Cloud readiness | New `AI_ENABLED` switch; with AI-Mode, MCP, RAG and Multi-Agent all off (the cloud baseline) every pharmacy page and create/read/update/delete action works |
+
+## Commits
+
+| Date | Commit | Change |
+|---|---|---|
+| 19 Oct | [`2357fb4`](https://github.com/jaeyunjks/hospital-operations-management-system/commit/2357fb4) | Multi-Agent reorder review (backend client, evidence builder, routes, dashboard panel, tests), post-commit endpoint tests and workflow steps, security fixes (Flask 3.1.3, URL checks), `AI_ENABLED` switch, Compose settings, READMEs and evidence |
+
+## Integration and validation
+
+- Live run through the pharmacy frontend in Docker: all three agents ran on local models
+  (`llama3.1:8b` Planner and Reviewer, `llama3.2:3b` Worker) in about 70 seconds; a Pharmacy
+  Manager correction was recorded and a second decision was refused. With `deepseek-r1:8b` as
+  Reviewer the same run took 8 minutes and failed on invalid JSON, so the demo uses `llama3.1:8b`.
+- Unit tests: 128 passing (database 4, backend 63, frontend 61), on Python 3.12 and Flask 3.1.3.
+- `student-3.yml` and `integration-ci` passed on `pharmacy-inventory-management` and on `develop`
+  for `2357fb4`, including the endpoint-test and Multi-Agent steps:
+  [student-3 run](https://github.com/jaeyunjks/hospital-operations-management-system/actions/runs/39202088578).
+- Cloud-baseline check: backend and frontend run with every AI feature off; pages load, CRUD
+  works and the advisories use their rule-based fallback.
+
+| Evidence | Location |
+|---|---|
+| Pre-commit security scan report | `docs/ai-evidence/student-3/pre-commit-security-scan.txt` |
+| Team pre-commit hooks on Student 3 files | `docs/ai-evidence/student-3/pre-commit-group-hooks.txt` |
+| Multi-Agent Workflow Review (agentic loop) | `docs/agent-logs/student-3/*-multi-agent-review.md` / `.json` |
+| Post-commit endpoint test run | `docs/ai-evidence/student-3/post-commit-endpoint-tests.txt` |
+| Multi-Agent workflow audit (Planner, Worker, Reviewer, human review) | `reports/multi-agent/workflow-bfe70705-87c4-49c2-b372-50e7031594bb.json` |
+| Feature documentation | `student-3/README.md`, `student-3/backend/README.md`, `student-3/frontend/README.md`, `student-3/tests/README.md` |
+
+## Outstanding (group dependencies)
+
+- Cloud deployment of the pharmacy services once the group selects Azure or AWS and
+  `cloud-deployment.yml` is implemented; then the Cloud Deployment Review evidence.
+- Testing Review run: needs the `student-3-junit` artefact and run summary from the next
+  `student-3.yml` run in `docs/test-evidence/student-3/`.

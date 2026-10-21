@@ -78,9 +78,11 @@ agentic loop's RAG validation mode (`ai-services/agentic-loop/rag_loop.py`).
 - Post-commit endpoint tests: `student-3/tests/test_endpoints_ci.py` tests
   `POST /api/stock/issue` and `POST /api/purchase-orders/{id}/approve` against the running
   backend container in `student-3.yml`.
-- Pre-commit security scans (Ruff security rules, detect-secrets, pip-audit): Flask upgraded to
-  3.1.3 for a known vulnerability; see
-  [`docs/ai-evidence/student-3/pre-commit-security-scan.txt`](../docs/ai-evidence/student-3/pre-commit-security-scan.txt).
+- Pre-commit security scans (Ruff security rules, detect-secrets, pip-audit) run on every commit
+  through the team configuration (root `.pre-commit-config.yaml`, `ruff.toml`; see `SECURITY.md`).
+  Flask was upgraded to 3.1.3 for a known vulnerability; see
+  [`docs/ai-evidence/student-3/pre-commit-security-scan.txt`](../docs/ai-evidence/student-3/pre-commit-security-scan.txt)
+  and [`docs/ai-evidence/student-3/pre-commit-group-hooks.txt`](../docs/ai-evidence/student-3/pre-commit-group-hooks.txt).
 
 ## Run
 
@@ -144,7 +146,11 @@ Multi-Agent are present but disabled in both the backend and the dashboard.
 - MCP server terminal validation: [`docs/ai-evidence/mcp-server/terminal-validation.txt`](../docs/ai-evidence/mcp-server/terminal-validation.txt)
 - RAG server terminal validation: [`docs/ai-evidence/rag-server/terminal-validation.txt`](../docs/ai-evidence/rag-server/terminal-validation.txt)
 - Pre-commit security scans: [`docs/ai-evidence/student-3/pre-commit-security-scan.txt`](../docs/ai-evidence/student-3/pre-commit-security-scan.txt)
+  and the team hooks on Student 3 files: [`docs/ai-evidence/student-3/pre-commit-group-hooks.txt`](../docs/ai-evidence/student-3/pre-commit-group-hooks.txt)
+- Post-commit endpoint tests: [`docs/ai-evidence/student-3/post-commit-endpoint-tests.txt`](../docs/ai-evidence/student-3/post-commit-endpoint-tests.txt);
+  CI uploads the JUnit report as the `student-3-junit` artefact for the Testing Review mode
 - Multi-Agent workflow audit (Planner → Worker → Reviewer → human review): [`reports/multi-agent/`](../reports/multi-agent/) (task `Pharmacy reorder decision: …`)
+- Multi-Agent Workflow Review of that workflow (9/9 checks): [`docs/agent-logs/student-3/`](../docs/agent-logs/student-3/) (`*-multi-agent-review.*`)
 
 ## Known limitations
 
