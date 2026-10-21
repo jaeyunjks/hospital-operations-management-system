@@ -1,0 +1,63 @@
+target-version = "py312"
+
+[lint]
+select = ["S"]
+
+[lint.per-file-ignores]
+# Assertions are the expected verification mechanism in pytest suites.
+"**/tests/**" = ["S101"]
+
+# These tests deliberately exercise wildcard-host rejection or use a wildcard
+# host in an isolated test configuration.
+"ai-services/mcp-server/tests/test_transport_security.py" = ["S104"]
+"ai-services/multi-agent-server/tests/test_api.py" = ["S104"]
+"ai-services/rag-server/tests/test_server.py" = ["S104"]
+
+# The Student 3 live endpoint suite calls the operator-supplied backend URL;
+# that URL is constrained by the CI/test environment rather than user input.
+"student-3/tests/test_endpoints_ci.py" = ["S310"]
+
+# Seed validators construct COUNT queries only from fixed, source-controlled
+# table-name tuples.
+"student-1/tests/test_seed_data.py" = ["S608"]
+"student-4/tests/test_seed_data.py" = ["S608"]
+
+# This file contains only explicit test keys used to exercise Flask session
+# and configuration behaviour; they are not credentials.
+"student-5/tests/test_frontend_partials.py" = ["S105", "S106"]
+
+# Each service must bind to all interfaces inside its container. Compose controls
+# host publication; host-local shared services independently validate wildcard
+# binds before permitting them.
+"ai-services/mcp-server/server.py" = ["S104"]
+"ai-services/multi-agent-server/api.py" = ["S104"]
+"student-1/backend/config.py" = ["S104"]
+"student-1/database/app.py" = ["S104", "S608"]
+"student-1/frontend/app.py" = ["S104"]
+"student-2/backend/app.py" = ["S104"]
+"student-2/database/app.py" = ["S104", "S608"]
+"student-2/frontend/app.py" = ["S104"]
+"student-4/backend/config.py" = ["S104"]
+"student-4/database/app.py" = ["S104", "S608"]
+"student-4/frontend/app.py" = ["S104"]
+"student-5/backend/app.py" = ["S104"]
+"student-5/database/service.py" = ["S104"]
+"student-5/frontend/app.py" = ["S104"]
+
+# Dynamic SQL in these database modules interpolates identifiers selected from
+# source-controlled metadata/allowlists. User-provided values remain bound SQL
+# parameters. Keep this exception confined to the reviewed database modules.
+"student-1/database/init_database.py" = ["S608"]
+"student-4/database/init_db.py" = ["S608"]
+"student-5/database/repository.py" = ["S608"]
+
+# The validation command is explicitly supplied by the local developer, split
+# into argv without a shell, and executed by the agentic-loop CLI by design.
+"ai-services/agentic-loop/agentic_loop.py" = ["S603"]
+
+# These clients validate scheme, authority, credentials and URL shape before
+# urllib is called. Ruff cannot infer that validation across statements.
+"student-1/backend/services/rag_client.py" = ["S310"]
+"student-5/backend/services/multi_agent_client.py" = ["S310"]
+"student-5/backend/services/rag_client.py" = ["S310"]
+
