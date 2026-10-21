@@ -77,6 +77,10 @@ PLAN_CHECKS = [
     "MA7 Audit log is ordered and covers every actor",
     "MA8 Workflow status matches the human decision (advisory)",
     "MA9 Agents ran on the live model, not the deterministic fallback (advisory)",
+    "MA10 Final result agrees with the persisted workflow outcome when present",
+    "MA11 Explicit mutation-safety fields prohibit and deny operational mutation",
+    "MA12 RAG provenance is grounded, advisory and separated from operational facts (advisory)",
+    "MA13 MCP provenance identifies controlled retrieval and backend consistency (advisory)",
 ]
 
 
@@ -139,6 +143,47 @@ def _homs_worker(output: Dict[str, Any], required: Sequence[str]) -> Dict[str, A
             "missing_evidence": sorted(missing), "plan_steps_followed": output.get("plan_steps_followed")}
 
 
+def _homs_rag_provenance(evidence: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    context = evidence.get("policy_context")
+    if not isinstance(context, dict):
+        return None
+    separation = evidence.get("evidence_separation")
+    separation = separation if isinstance(separation, dict) else {}
+    citations = context.get("citations") if isinstance(context.get("citations"), list) else []
+    sources = [
+        citation.get("source") for citation in citations
+        if isinstance(citation, dict) and isinstance(citation.get("source"), str)
+    ]
+    return {
+        "context_type": context.get("context_type"),
+        "retrieval_status": context.get("retrieval_status") or context.get("status"),
+        "confidence": context.get("confidence"),
+        "citation_count": len(citations),
+        "sources": sources,
+        "policy_is_advisory": separation.get("policy_is_advisory"),
+        "operational_rules_remain_authoritative": separation.get(
+            "operational_rules_remain_authoritative"
+        ),
+        "limitations": context.get("limitations") if isinstance(context.get("limitations"), list) else [],
+    }
+
+
+def _homs_mcp_provenance(evidence: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    context = evidence.get("mcp_context")
+    if not isinstance(context, dict):
+        return None
+    return {
+        "context_type": context.get("context_type"),
+        "retrieval_status": context.get("retrieval_status") or context.get("status"),
+        "tool_name": context.get("tool_name"),
+        "source": context.get("source"),
+        "consistency_status": context.get("consistency_status"),
+        "read_only": context.get("read_only"),
+        "mutation_allowed": context.get("mutation_allowed"),
+        "limitations": context.get("limitations") if isinstance(context.get("limitations"), list) else [],
+    }
+
+
 def from_homs(record: Dict[str, Any]) -> Dict[str, Any]:
     """Map the Multi-Agent Server's audit record onto the steps + audit_log contract.
 
@@ -151,6 +196,21 @@ def from_homs(record: Dict[str, Any]) -> Dict[str, Any]:
     audit: List[Dict[str, Any]] = []
     fallbacks: List[str] = []
     required: List[str] = []
+    mutation_safety = {
+        "worker_mutation_executed": None,
+        "reviewer_mutation_verified_absent": None,
+        "provenance_mutation_allowed": None,
+        "final_mutation_executed": None,
+    }
+    evidence = record.get("input_evidence")
+    evidence = evidence if isinstance(evidence, dict) else {}
+    provenance = evidence.get("provenance")
+    provenance = provenance if isinstance(provenance, dict) else {}
+    mutation_safety["provenance_mutation_allowed"] = provenance.get("mutation_allowed")
+    final_result = record.get("final_result")
+    final_result = final_result if isinstance(final_result, dict) else None
+    if final_result is not None:
+        mutation_safety["final_mutation_executed"] = final_result.get("mutation_executed")
     if record.get("timestamp"):
         audit.append({"timestamp": record["timestamp"], "actor": "system", "event": "workflow_created"})
     for role in ("planner", "worker", "reviewer"):
@@ -166,10 +226,14 @@ def from_homs(record: Dict[str, Any]) -> Dict[str, Any]:
             output = {"plan": raw.get("planned_steps"), "required_evidence": required, "goal": raw.get("goal")}
         elif role == "worker":
             output = _homs_worker(raw, required)
+            mutation_safety["worker_mutation_executed"] = raw.get("mutation_executed")
         else:
             output = {"verdict": raw.get("review_status"), "risks": raw.get("risks"),
                       "recommendations": [raw["recommendation"]] if raw.get("recommendation") else [],
                       "unsupported_claims": raw.get("unsupported_claims")}
+            mutation_safety["reviewer_mutation_verified_absent"] = raw.get(
+                "mutation_verified_absent"
+            )
         if stage.get("output") is None:
             output = {"error": execution.get("error")}
         steps.append({"agent": role, "started_at": stage.get("started_at"),
@@ -186,6 +250,9 @@ def from_homs(record: Dict[str, Any]) -> Dict[str, Any]:
     return {"workflow_id": record.get("workflow_id"), "feature": record.get("feature"),
             "request": record.get("task"), "status": record.get("final_status") or record.get("status"),
             "steps": steps, "audit_log": audit, "fallback_stages": fallbacks,
+            "final_result": final_result, "mutation_safety": mutation_safety,
+            "rag_provenance": _homs_rag_provenance(evidence),
+            "mcp_provenance": _homs_mcp_provenance(evidence),
             "source_format": "homs-multi-agent-server/" + str(record.get("schema_version", "?"))}
 
 
@@ -226,6 +293,14 @@ def observe(workflow: Dict[str, Any], origin: str) -> Dict[str, Any]:
     planner, worker = last_output("planner"), last_output("worker")
     reviewer, human = last_output("reviewer"), last_output("human")
     audit = [e for e in workflow.get("audit_log") or [] if isinstance(e, dict)]
+    final = workflow.get("final_result")
+    final = final if isinstance(final, dict) else None
+    mutation_safety = workflow.get("mutation_safety")
+    mutation_safety = mutation_safety if isinstance(mutation_safety, dict) else {}
+    rag_provenance = workflow.get("rag_provenance")
+    rag_provenance = rag_provenance if isinstance(rag_provenance, dict) else None
+    mcp_provenance = workflow.get("mcp_provenance")
+    mcp_provenance = mcp_provenance if isinstance(mcp_provenance, dict) else None
     return {
         "origin": origin,
         "workflow_id": workflow.get("workflow_id") or workflow.get("id"),
@@ -242,6 +317,17 @@ def observe(workflow: Dict[str, Any], origin: str) -> Dict[str, Any]:
                      "recommendations": _list(reviewer.get("recommendations"))},
         "human": {"decision": _decision(human.get("decision")),
                   "reviewer": human.get("reviewer"), "comment": human.get("comment")},
+        "final_result": {
+            "present": final is not None,
+            "status": final.get("status") if final else None,
+            "proposal": (final.get("proposal") or final.get("recommendation")) if final else None,
+            "review": (final.get("review") or final.get("reviewer")) if final else None,
+            "human_decision": _decision(final.get("human_decision")) if final else None,
+            "mutation_executed": final.get("mutation_executed") if final else None,
+        },
+        "mutation_safety": mutation_safety,
+        "rag_provenance": rag_provenance,
+        "mcp_provenance": mcp_provenance,
         "audit_log": audit,
         "fallback_stages": list(workflow.get("fallback_stages") or []),
         "source_format": workflow.get("source_format", "steps"),
@@ -353,6 +439,116 @@ def check_workflow(obs: Dict[str, Any]) -> List[Dict[str, Any]]:
     results.append(check("MA9", "Live model", not fallbacks,
                          f"deterministic fallback used by: {', '.join(fallbacks)}" if fallbacks
                          else "no fallback recorded", severity=ADVISORY, subject=subject))
+
+    final = obs["final_result"]
+    problems = []
+    if final["present"]:
+        if not final["status"]:
+            problems.append("final result has no status")
+        elif final["status"] != obs["status"]:
+            problems.append(
+                f"final status {final['status']!r} does not match workflow status {obs['status']!r}"
+            )
+        if final["human_decision"] and final["human_decision"] != human["decision"]:
+            problems.append(
+                f"final human decision {final['human_decision']!r} does not match "
+                f"Human Review {human['decision']!r}"
+            )
+    final_detail = (
+        "optional final result not present"
+        if not final["present"]
+        else (
+            f"status={final['status']!r}, proposal "
+            f"{'present' if final['proposal'] is not None else 'absent'}, reviewer result "
+            f"{'present' if final['review'] is not None else 'absent'}"
+        )
+    )
+    results.append(check("MA10", "Final result", not problems,
+                         "; ".join(problems) or final_detail, subject=subject))
+
+    safety = obs["mutation_safety"]
+    safety_rules = (
+        ("worker_mutation_executed", False, "Worker mutation_executed"),
+        ("reviewer_mutation_verified_absent", True, "Reviewer mutation_verified_absent"),
+        ("provenance_mutation_allowed", False, "Provenance mutation_allowed"),
+        ("final_mutation_executed", False, "Final mutation_executed"),
+    )
+    present_safety, safety_problems = [], []
+    for field, safe_value, label in safety_rules:
+        value = safety.get(field)
+        if value is None:
+            continue
+        present_safety.append(f"{field}={value!r}")
+        if not isinstance(value, bool):
+            safety_problems.append(f"{label} is not boolean")
+        elif value is not safe_value:
+            safety_problems.append(f"{label}={value!r} indicates mutation is not safely absent")
+    results.append(check(
+        "MA11", "Mutation safety", not safety_problems,
+        "; ".join(safety_problems)
+        or (", ".join(present_safety) if present_safety else "optional mutation fields not present"),
+        subject=subject,
+    ))
+
+    rag = obs["rag_provenance"]
+    rag_problems = []
+    if rag is not None:
+        rag_status = str(rag.get("retrieval_status") or "").strip().lower()
+        if not rag_status:
+            rag_problems.append("retrieval status is missing")
+        if rag_status in {"answered", "available", "success", "succeeded"}:
+            citation_count = rag.get("citation_count") or 0
+            if citation_count == 0 or len(rag.get("sources") or []) != citation_count:
+                rag_problems.append("successful retrieval has no citation sources")
+        if rag.get("policy_is_advisory") is not True:
+            rag_problems.append("policy context is not explicitly advisory")
+        if rag.get("operational_rules_remain_authoritative") is not True:
+            rag_problems.append("operational evidence is not explicitly authoritative")
+    rag_detail = (
+        "optional RAG provenance not present"
+        if rag is None
+        else (
+            f"status={rag.get('retrieval_status')!r}, confidence={rag.get('confidence')!r}, "
+            f"citations={rag.get('citation_count', 0)}, sources={len(rag.get('sources') or [])}"
+        )
+    )
+    results.append(check("MA12", "RAG provenance", not rag_problems,
+                         "; ".join(rag_problems) or rag_detail,
+                         severity=ADVISORY, subject=subject))
+
+    mcp = obs["mcp_provenance"]
+    mcp_problems = []
+    if mcp is not None:
+        mcp_status = str(mcp.get("retrieval_status") or "").strip().lower()
+        consistency = str(mcp.get("consistency_status") or "").strip().lower()
+        if not mcp_status:
+            mcp_problems.append("retrieval status is missing")
+        if mcp_status in {"answered", "available", "success", "succeeded"}:
+            if not mcp.get("tool_name"):
+                mcp_problems.append("successful retrieval has no registered tool name")
+            if not mcp.get("source"):
+                mcp_problems.append("successful retrieval has no source")
+            if not consistency or consistency == "not_checked":
+                mcp_problems.append("successful retrieval was not checked against authoritative evidence")
+        if (any(term in consistency for term in ("mismatch", "inconsistent"))
+                or consistency.startswith("conflict")):
+            mcp_problems.append(f"consistency result indicates a mismatch: {consistency}")
+        if mcp.get("read_only") is False:
+            mcp_problems.append("MCP context is explicitly not read-only")
+        if mcp.get("mutation_allowed") is True:
+            mcp_problems.append("MCP context explicitly permits mutation")
+    mcp_detail = (
+        "optional MCP provenance not present"
+        if mcp is None
+        else (
+            f"status={mcp.get('retrieval_status')!r}, tool={mcp.get('tool_name')!r}, "
+            f"source={mcp.get('source')!r}, consistency={mcp.get('consistency_status')!r}, "
+            f"limitations={len(mcp.get('limitations') or [])}"
+        )
+    )
+    results.append(check("MA13", "MCP provenance", not mcp_problems,
+                         "; ".join(mcp_problems) or mcp_detail,
+                         severity=ADVISORY, subject=subject))
     return results
 
 
