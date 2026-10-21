@@ -73,18 +73,17 @@
 
   {% if is_manager and coverage and coverage.difference < 0 %}
   <section class="drawer__section recovery-entry" aria-labelledby="recovery-entry-heading">
-    <div>
-      <span class="u-label">Decision support</span>
-      <h3 id="recovery-entry-heading">Staffing Recovery</h3>
-      <p class="drawer__muted">
-        Review this coverage gap with policy guidance, controlled read-only
-        evidence, independent agent review, and explicit Human Review.
-      </p>
+    <div class="recovery-entry__heading">
+      <div><span class="u-label">Decision support</span><h3 id="recovery-entry-heading">Staffing Recovery</h3></div>
+      <span class="badge-danger">{{ coverage.label }}</span>
     </div>
+    <p class="drawer__muted">
+      Compare eligible staff using authoritative facts, policy guidance and an independent safety review.
+    </p>
     <a class="btn-primary" href="{{ url_for('recovery_workflow_page', shift_id=shift.shift_id) }}">
-      Run Staffing Recovery
+      Open Staffing Recovery
     </a>
-    <p class="drawer__muted">Analysis only. No roster changes are made automatically.</p>
+    <p class="recovery-entry__boundary">Advisory analysis only. The roster is never changed automatically.</p>
   </section>
   {% endif %}
 
