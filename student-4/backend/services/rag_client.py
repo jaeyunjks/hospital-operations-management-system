@@ -27,6 +27,7 @@ CONFIDENCE = {"answered": ("high", "medium", "low"), "insufficient_context": ("n
 
 RAG_ENABLED = os.environ.get("RAG_ENABLED", "false").strip().lower() == "true"
 RAG_SERVER_URL = os.environ.get("RAG_SERVER_URL", "http://127.0.0.1:8100").strip().rstrip("/")
+ALLOWED_SCHEMES = ("http", "https")
 try:
     RAG_TIMEOUT = float(os.environ.get("RAG_TIMEOUT", "100"))
 except ValueError:
@@ -69,14 +70,26 @@ class RAGResult:
         return {key: value for key, value in asdict(self).items() if value is not None}
 
 
+def _server_url(path: str) -> str:
+    """Return the RAG URL for ``path``, refusing anything but http(s) to a host.
+
+    urllib would also open ``file:`` and custom schemes, so the configured
+    base URL is checked before every request (Ruff S310).
+    """
+    parts = urllib.parse.urlsplit(RAG_SERVER_URL)
+    if parts.scheme not in ALLOWED_SCHEMES or not parts.netloc:
+        raise urllib.error.URLError("RAG_SERVER_URL must be an http(s) URL")
+    return RAG_SERVER_URL + path
+
+
 def _request(method: str, path: str, payload: dict | None = None, timeout: float | None = None):
     data = json.dumps(payload).encode() if payload is not None else None
-    call = urllib.request.Request(
-        RAG_SERVER_URL + path, data=data, method=method,
+    call = urllib.request.Request(  # noqa: S310 - scheme validated by _server_url
+        _server_url(path), data=data, method=method,
         headers={"Content-Type": "application/json"} if data else {},
     )
     try:
-        with urllib.request.urlopen(call, timeout=timeout or RAG_TIMEOUT) as response:
+        with urllib.request.urlopen(call, timeout=timeout or RAG_TIMEOUT) as response:  # noqa: S310
             return response.status, json.load(response)
     except urllib.error.HTTPError as exc:
         try:

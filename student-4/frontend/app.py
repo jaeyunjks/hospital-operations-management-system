@@ -302,7 +302,50 @@ def open_shortage():
 @app.get("/shortages/<int:case_id>")
 def shortage_detail(case_id):
     detail, error = api("GET", "/api/shortage-cases/{}/options".format(case_id))
-    return render_template("shortage_detail.html", detail=detail, error=error)
+    multi_agent, _ = api("GET", "/api/multi-agent/status")
+    history = None
+    if (multi_agent or {}).get("enabled"):
+        history, _ = api("GET", "/api/shortage-cases/{}/multi-agent".format(case_id))
+    return render_template("shortage_detail.html", detail=detail, error=error,
+                           multi_agent=multi_agent or {"enabled": False},
+                           history=history or [])
+
+
+# ---------------------------------------------------------------------
+# Multi-Agent review of a shortage case: frontend -> backend -> shared
+# Multi-Agent Server (Planner -> Worker -> Reviewer -> Human Review)
+# ---------------------------------------------------------------------
+REVIEW_DECISIONS = (("approve", "Approve"), ("partially_accept", "Partially accept"),
+                    ("correct", "Correct"), ("reject", "Reject"))
+
+
+def _workflow_panel(workflow, error):
+    return render_template("partials/multi_agent_workflow.html", workflow=workflow,
+                           error=error, decisions=REVIEW_DECISIONS)
+
+
+@app.post("/shortages/<int:case_id>/multi-agent")
+def start_multi_agent(case_id):
+    workflow, error = api("POST", "/api/shortage-cases/{}/multi-agent".format(case_id), json={})
+    return _workflow_panel(workflow, error)
+
+
+@app.get("/multi-agent/<workflow_id>")
+def multi_agent_workflow(workflow_id):
+    workflow, error = api("GET", "/api/multi-agent/workflows/{}".format(workflow_id))
+    return _workflow_panel(workflow, error)
+
+
+@app.post("/multi-agent/<workflow_id>/review")
+def review_multi_agent(workflow_id):
+    workflow, error = api("POST", "/api/multi-agent/workflows/{}/review".format(workflow_id), json={
+        "decision": request.form.get("decision", ""),
+        "comment": request.form.get("comment", ""),
+    })
+    if error:
+        current, _ = api("GET", "/api/multi-agent/workflows/{}".format(workflow_id))
+        return _workflow_panel(current, error)
+    return _workflow_panel(workflow, None)
 
 
 @app.post("/shortages/<int:case_id>/decide")

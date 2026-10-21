@@ -308,3 +308,69 @@ CI keeps both disabled and asserts it: `student-4.yml` checks that the routes
 report `enabled: false`, that the tool allowlist is still present, and that a
 call and a question are refused with 503. The shared servers are never started
 in CI.
+
+## Release 2: shared Multi-Agent Server
+
+A bed shortage case can be reviewed by the shared Multi-Agent Server
+(`ai-services/multi-agent-server`, port 8200), always through this backend:
+
+```text
+Frontend UI (/shortages/<id>) -> Backend/API (5400) -> Multi-Agent Server (8200)
+  -> Planner -> Worker -> Reviewer -> Human Review (coordinator) -> Response to the UI
+```
+
+- The backend sends the case and its compatible options (the same options shown
+  on screen, at most 6 beds plus escalation) as generic evidence
+  (`evidence_type: student-4-bed-shortage`). No patient id is sent.
+- The agents only advise. Nothing is reserved until the coordinator approves the
+  proposal **and** records it through `PUT /api/shortage-cases/<id>/decide`.
+- A workflow started by another feature is refused (404).
+- Off by default, which is the cloud baseline (`MULTI_AGENT_ENABLED=false`).
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/multi-agent/status` | Enabled flag and server reachability |
+| GET | `/api/shortage-cases/<id>/multi-agent/evidence` | Task and evidence the agents receive |
+| POST | `/api/shortage-cases/<id>/multi-agent` | Start a workflow (202) |
+| GET | `/api/shortage-cases/<id>/multi-agent` | Earlier workflows for the case |
+| GET | `/api/multi-agent/workflows/<workflow_id>` | Stages, recommendation and status |
+| POST | `/api/multi-agent/workflows/<workflow_id>/review` | Human Review: `approve`, `correct`, `reject`, `partially_accept` |
+
+Run locally (four terminals, from the repository root):
+
+```bash
+python ai-services/multi-agent-server/api.py --model-mode ollama     # 8200
+cd student-4/database && python init_db.py --check && python app.py    # 6400
+cd student-4/backend && MULTI_AGENT_ENABLED=true python app.py         # 5400
+cd student-4/frontend && python app.py                                 # 3400
+```
+
+With Docker Compose, start the server with `HOMS_MULTI_AGENT_HOST=0.0.0.0
+HOMS_MULTI_AGENT_ALLOW_DOCKER_HOST=true` and the stack with
+`STUDENT4_MULTI_AGENT_ENABLED=true docker compose up`.
+
+From the terminal only, with the same evidence the UI sends:
+
+```bash
+curl -s localhost:5400/api/shortage-cases/2/multi-agent/evidence \
+  | python -c "import json,sys; json.dump(json.load(sys.stdin)['data']['evidence'], open('case-2.json','w'))"
+python ai-services/multi-agent-server/main.py --model-mode ollama \
+  --task "Recommend how to place the patient waiting in shortage case 2." --evidence case-2.json
+```
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `MULTI_AGENT_ENABLED` | `false` | Turn the integration on |
+| `MULTI_AGENT_SERVER_URL` | `http://127.0.0.1:8200` | Shared server (http/https only) |
+| `MULTI_AGENT_TIMEOUT` | `30` | Seconds per request |
+
+### Post-commit endpoint tests (student-4.yml)
+
+`tests/test_endpoints_ci.py` tests two endpoint functions against the running
+containers after every push: `create_bed` (`POST /api/beds`) and `decide_case`
+(`PUT /api/shortage-cases/<id>/decide`). The JUnit result is uploaded as the
+`student-4-junit` artifact. Locally:
+
+```bash
+STUDENT4_API_URL=http://localhost:5400 python -m pytest student-4/tests/test_endpoints_ci.py
+```
