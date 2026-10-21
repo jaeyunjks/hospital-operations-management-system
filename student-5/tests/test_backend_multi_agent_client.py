@@ -69,6 +69,10 @@ def workflow(status="awaiting_human_review", task=TASK):
     }
 
 
+def workflow_with_evidence(status="awaiting_human_review", task=TASK):
+    return {**workflow(status=status, task=task), "submitted_evidence": EVIDENCE}
+
+
 class FakeResponse:
     def __init__(self, body):
         self.raw = body if isinstance(body, bytes) else json.dumps(body).encode("utf-8")
@@ -122,7 +126,7 @@ def test_start_posts_only_task_and_unchanged_evidence(monkeypatch):
 
 def test_get_and_review_use_the_existing_lifecycle_endpoints(monkeypatch):
     calls = []
-    responses = [workflow(), workflow(status="approved")]
+    responses = [workflow_with_evidence(), workflow(status="approved")]
 
     def fake_urlopen(request, timeout):
         calls.append((request, timeout))
@@ -136,7 +140,8 @@ def test_get_and_review_use_the_existing_lifecycle_endpoints(monkeypatch):
     assert client.submit_review(
         WORKFLOW_ID, "approve", "Reviewed by manager."
     )["status"] == "approved"
-    assert calls[0][0].full_url.endswith(f"/workflows/{WORKFLOW_ID}")
+    assert calls[0][0].full_url.endswith(
+        f"/workflows/{WORKFLOW_ID}?include_evidence=true")
     assert calls[0][0].method == "GET"
     assert calls[1][0].full_url.endswith(
         f"/workflows/{WORKFLOW_ID}/review")
@@ -264,11 +269,35 @@ def test_malformed_shared_lifecycle_error_is_rejected(monkeypatch, status):
 
 
 def test_get_accepts_a_persisted_failure_with_incomplete_stages(monkeypatch):
-    body = workflow(status="failed")
+    body = workflow_with_evidence(status="failed")
     body["reviewer"] = None
     install_response(monkeypatch, body)
 
     assert adapter().get_workflow(WORKFLOW_ID) == body
+
+
+def test_list_workflows_uses_scoped_history_contract(monkeypatch):
+    history = {
+        "schema_version": "1.0",
+        "count": 1,
+        "workflows": [{
+            "workflow_id": WORKFLOW_ID,
+            "status": "awaiting_human_review",
+            "started_at": "2026-10-20T01:00:00Z",
+            "human_review": None,
+        }],
+    }
+    calls = install_response(monkeypatch, history)
+
+    assert adapter().list_workflows(
+        "student5_staffing_recovery",
+        evidence_path="current_state.shift.shift_id",
+        evidence_value="11",
+        limit=10,
+    ) == history
+    assert calls[0][0].full_url.endswith(
+        "/workflows?evidence_type=student5_staffing_recovery"
+        "&evidence_path=current_state.shift.shift_id&evidence_value=11&limit=10")
 
 
 def test_connection_failure_has_no_fake_fallback(monkeypatch):

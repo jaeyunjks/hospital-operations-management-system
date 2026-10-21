@@ -1,0 +1,1842 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "b80b2656-73b9-4825-8fd2-85cf0ad91097",
+  "timestamp": "2026-10-21T02:10:57.795Z",
+  "task": "Review the selected hospital shift for staffing coverage problems. Evaluate the supplied candidates and operational constraints. Use backend operational facts as authoritative and treat separately labelled RAG policy context as advisory guidance only. Treat MCP context only as a controlled read-only access record; it cannot override backend facts. Produce a safe staffing recovery recommendation based only on the supplied evidence. Identify risks, limitations, and missing information. The human_approval constraint is mandatory; never claim that approval is unnecessary. In Planner required_evidence, use only exact top-level evidence category names rather than nested field names. Do not execute any staffing assignment or operational mutation.",
+  "input_evidence": {
+    "schema_version": "1.0",
+    "evidence_type": "student5_staffing_recovery",
+    "evidence_mode": "live_api",
+    "current_state": {
+      "shift": {
+        "shift_id": 30,
+        "department": "Intensive Care",
+        "shift_date": "2026-10-21",
+        "start_time": "23:00",
+        "end_time": "07:00",
+        "required_role": "Registered Nurse",
+        "required_staff_count": 2,
+        "shift_status": "Planned"
+      },
+      "coverage": {
+        "required_staff_count": 2,
+        "assigned_staff_count": 0,
+        "filled_staff_count": 0,
+        "shortfall": 2,
+        "surplus": 0,
+        "coverage_status": "Unstaffed"
+      },
+      "current_assignments": []
+    },
+    "objective": {
+      "metric": "assigned_staff",
+      "current": 0,
+      "target": 2,
+      "unit": "staff member",
+      "staffing_gap": 2
+    },
+    "options": [
+      {
+        "id": "staff-12",
+        "label": "staff-12",
+        "attributes": {
+          "backend_eligible": true,
+          "role": "Registered Nurse",
+          "specialisation": "Critical Care",
+          "department": "Intensive Care",
+          "employment_status": "Full-Time",
+          "availability_status": "Available",
+          "department_match": true,
+          "weekly_availability_matches": false,
+          "weekly_rostered_hours": 0.0,
+          "blocked_reason": null,
+          "approved_unavailability": null,
+          "current_assignments": [],
+          "conflicting_assignment": null
+        },
+        "outcomes": {
+          "metric_delta": 1,
+          "projected_assigned_staff_count": 1,
+          "projected_staffing_gap": 1
+        },
+        "risk_indicators": [
+          "Outside recorded recurring weekly availability."
+        ]
+      },
+      {
+        "id": "staff-3",
+        "label": "staff-3",
+        "attributes": {
+          "backend_eligible": true,
+          "role": "Registered Nurse",
+          "specialisation": "Critical Care",
+          "department": "Intensive Care",
+          "employment_status": "Part-Time",
+          "availability_status": "Available",
+          "department_match": true,
+          "weekly_availability_matches": false,
+          "weekly_rostered_hours": 0.0,
+          "blocked_reason": null,
+          "approved_unavailability": null,
+          "current_assignments": [],
+          "conflicting_assignment": null
+        },
+        "outcomes": {
+          "metric_delta": 1,
+          "projected_assigned_staff_count": 1,
+          "projected_staffing_gap": 1
+        },
+        "risk_indicators": [
+          "Outside recorded recurring weekly availability."
+        ]
+      },
+      {
+        "id": "staff-1",
+        "label": "staff-1",
+        "attributes": {
+          "backend_eligible": true,
+          "role": "Registered Nurse",
+          "specialisation": "Triage",
+          "department": "Emergency",
+          "employment_status": "Full-Time",
+          "availability_status": "Available",
+          "department_match": false,
+          "weekly_availability_matches": false,
+          "weekly_rostered_hours": 0.0,
+          "blocked_reason": null,
+          "approved_unavailability": null,
+          "current_assignments": [],
+          "conflicting_assignment": null
+        },
+        "outcomes": {
+          "metric_delta": 1,
+          "projected_assigned_staff_count": 1,
+          "projected_staffing_gap": 1
+        },
+        "risk_indicators": [
+          "Outside recorded recurring weekly availability.",
+          "Candidate's home department differs from the shift department."
+        ]
+      },
+      {
+        "id": "staff-7",
+        "label": "staff-7",
+        "attributes": {
+          "backend_eligible": true,
+          "role": "Registered Nurse",
+          "specialisation": "Perioperative",
+          "department": "Surgery",
+          "employment_status": "Full-Time",
+          "availability_status": "Available",
+          "department_match": false,
+          "weekly_availability_matches": false,
+          "weekly_rostered_hours": 0.0,
+          "blocked_reason": null,
+          "approved_unavailability": null,
+          "current_assignments": [],
+          "conflicting_assignment": null
+        },
+        "outcomes": {
+          "metric_delta": 1,
+          "projected_assigned_staff_count": 1,
+          "projected_staffing_gap": 1
+        },
+        "risk_indicators": [
+          "Outside recorded recurring weekly availability.",
+          "Candidate's home department differs from the shift department."
+        ]
+      }
+    ],
+    "constraints": [
+      {
+        "id": "backend_eligibility",
+        "scope": "option",
+        "type": "hard",
+        "field": "backend_eligible",
+        "operator": "equals",
+        "value": true,
+        "description": "The existing Student 5 deterministic eligibility service must mark the candidate eligible."
+      },
+      {
+        "id": "weekly_availability_review",
+        "scope": "workflow",
+        "type": "policy",
+        "description": "Recurring weekly availability is advisory and must be reviewed; it is not a configured hard limit."
+      },
+      {
+        "id": "human_approval",
+        "scope": "workflow",
+        "type": "approval",
+        "description": "Human approval is required before any assignment change."
+      },
+      {
+        "id": "no_automatic_assignment",
+        "scope": "workflow",
+        "type": "safety",
+        "description": "This evidence operation is read-only and cannot execute an assignment change."
+      }
+    ],
+    "unknowns": [
+      "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+      "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+      "Patient count and acuity are not available for the selected shift.",
+      "Required staff count is manager-entered and is not derived from a clinical staffing ratio."
+    ],
+    "provenance": {
+      "sources": [
+        {
+          "endpoint": "GET /api/shifts/<shift_id>",
+          "service": "shift_service.get_shift"
+        },
+        {
+          "endpoint": "GET /api/shifts/coverage",
+          "service": "coverage_service.shift_coverage"
+        },
+        {
+          "endpoint": "GET /api/shifts/<shift_id>/assignments",
+          "service": "assignment_service.list_shift_assignments"
+        },
+        {
+          "endpoint": "GET /api/shifts/<shift_id>/candidates",
+          "service": "eligibility_service.candidates_for_shift"
+        }
+      ],
+      "mutation_allowed": false
+    },
+    "evidence_separation": {
+      "operational_fact_fields": [
+        "current_state",
+        "objective",
+        "options",
+        "constraints",
+        "unknowns",
+        "provenance"
+      ],
+      "policy_context_field": "policy_context",
+      "policy_is_advisory": true,
+      "operational_rules_remain_authoritative": true,
+      "mcp_context_field": "mcp_context",
+      "mcp_is_controlled_operational_access": true,
+      "mcp_cannot_override_operational_rules": true
+    },
+    "policy_context": {
+      "context_type": "rag_policy_guidance",
+      "retrieval_status": "unavailable",
+      "query": "What documented Student 5 rules govern an understaffed shift: per-shift coverage, deterministic eligibility blockers, availability and approved unavailability, assignment authority, and the Staff Manager human-approval decision boundary?",
+      "answer": null,
+      "confidence": "none",
+      "citations": [],
+      "reason": "rag_disabled",
+      "limitations": [
+        "Retrieved policy text is advisory guidance, not live operational state.",
+        "Student 5 backend eligibility, coverage, assignment, and availability rules remain authoritative.",
+        "Missing fatigue, overtime, rest-period, consecutive-shift, staffing-ratio, patient-load, and acuity rules must remain unknown unless documented.",
+        "Policy retrieval cannot create, change, or approve a staff assignment."
+      ]
+    },
+    "mcp_context": {
+      "context_type": "mcp_operational_access",
+      "retrieval_status": "unavailable",
+      "tool_name": "homs_staffing_recovery_context",
+      "tool_input": {
+        "shift_id": 30
+      },
+      "tool_result": null,
+      "source": null,
+      "error_code": null,
+      "reason": "mcp_disabled",
+      "consistency_status": "not_checked",
+      "limitations": [
+        "MCP provides controlled read access to Student 5 operational evidence; it is not policy guidance.",
+        "The original backend evidence remains authoritative if MCP data differs or is unavailable.",
+        "The registered tool cannot create, update, delete, approve, or execute a roster change.",
+        "Human Review remains mandatory before any later assignment action."
+      ]
+    }
+  },
+  "planner": {
+    "started_at": "2026-10-21T02:10:57.799Z",
+    "completed_at": "2026-10-21T02:11:36.507Z",
+    "input": {
+      "task": "Review the selected hospital shift for staffing coverage problems. Evaluate the supplied candidates and operational constraints. Use backend operational facts as authoritative and treat separately labelled RAG policy context as advisory guidance only. Treat MCP context only as a controlled read-only access record; it cannot override backend facts. Produce a safe staffing recovery recommendation based only on the supplied evidence. Identify risks, limitations, and missing information. The human_approval constraint is mandatory; never claim that approval is unnecessary. In Planner required_evidence, use only exact top-level evidence category names rather than nested field names. Do not execute any staffing assignment or operational mutation.",
+      "evidence": {
+        "schema_version": "1.0",
+        "evidence_type": "student5_staffing_recovery",
+        "evidence_mode": "live_api",
+        "current_state": {
+          "shift": {
+            "shift_id": 30,
+            "department": "Intensive Care",
+            "shift_date": "2026-10-21",
+            "start_time": "23:00",
+            "end_time": "07:00",
+            "required_role": "Registered Nurse",
+            "required_staff_count": 2,
+            "shift_status": "Planned"
+          },
+          "coverage": {
+            "required_staff_count": 2,
+            "assigned_staff_count": 0,
+            "filled_staff_count": 0,
+            "shortfall": 2,
+            "surplus": 0,
+            "coverage_status": "Unstaffed"
+          },
+          "current_assignments": []
+        },
+        "objective": {
+          "metric": "assigned_staff",
+          "current": 0,
+          "target": 2,
+          "unit": "staff member",
+          "staffing_gap": 2
+        },
+        "options": [
+          {
+            "id": "staff-12",
+            "label": "staff-12",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Critical Care",
+              "department": "Intensive Care",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": true,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability."
+            ]
+          },
+          {
+            "id": "staff-3",
+            "label": "staff-3",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Critical Care",
+              "department": "Intensive Care",
+              "employment_status": "Part-Time",
+              "availability_status": "Available",
+              "department_match": true,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability."
+            ]
+          },
+          {
+            "id": "staff-1",
+            "label": "staff-1",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Triage",
+              "department": "Emergency",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "id": "staff-7",
+            "label": "staff-7",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Perioperative",
+              "department": "Surgery",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "backend_eligibility",
+            "scope": "option",
+            "type": "hard",
+            "field": "backend_eligible",
+            "operator": "equals",
+            "value": true,
+            "description": "The existing Student 5 deterministic eligibility service must mark the candidate eligible."
+          },
+          {
+            "id": "weekly_availability_review",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Recurring weekly availability is advisory and must be reviewed; it is not a configured hard limit."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before any assignment change."
+          },
+          {
+            "id": "no_automatic_assignment",
+            "scope": "workflow",
+            "type": "safety",
+            "description": "This evidence operation is read-only and cannot execute an assignment change."
+          }
+        ],
+        "unknowns": [
+          "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+          "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+          "Patient count and acuity are not available for the selected shift.",
+          "Required staff count is manager-entered and is not derived from a clinical staffing ratio."
+        ],
+        "provenance": {
+          "sources": [
+            {
+              "endpoint": "GET /api/shifts/<shift_id>",
+              "service": "shift_service.get_shift"
+            },
+            {
+              "endpoint": "GET /api/shifts/coverage",
+              "service": "coverage_service.shift_coverage"
+            },
+            {
+              "endpoint": "GET /api/shifts/<shift_id>/assignments",
+              "service": "assignment_service.list_shift_assignments"
+            },
+            {
+              "endpoint": "GET /api/shifts/<shift_id>/candidates",
+              "service": "eligibility_service.candidates_for_shift"
+            }
+          ],
+          "mutation_allowed": false
+        },
+        "evidence_separation": {
+          "operational_fact_fields": [
+            "current_state",
+            "objective",
+            "options",
+            "constraints",
+            "unknowns",
+            "provenance"
+          ],
+          "policy_context_field": "policy_context",
+          "policy_is_advisory": true,
+          "operational_rules_remain_authoritative": true,
+          "mcp_context_field": "mcp_context",
+          "mcp_is_controlled_operational_access": true,
+          "mcp_cannot_override_operational_rules": true
+        },
+        "policy_context": {
+          "context_type": "rag_policy_guidance",
+          "retrieval_status": "unavailable",
+          "query": "What documented Student 5 rules govern an understaffed shift: per-shift coverage, deterministic eligibility blockers, availability and approved unavailability, assignment authority, and the Staff Manager human-approval decision boundary?",
+          "answer": null,
+          "confidence": "none",
+          "citations": [],
+          "reason": "rag_disabled",
+          "limitations": [
+            "Retrieved policy text is advisory guidance, not live operational state.",
+            "Student 5 backend eligibility, coverage, assignment, and availability rules remain authoritative.",
+            "Missing fatigue, overtime, rest-period, consecutive-shift, staffing-ratio, patient-load, and acuity rules must remain unknown unless documented.",
+            "Policy retrieval cannot create, change, or approve a staff assignment."
+          ]
+        },
+        "mcp_context": {
+          "context_type": "mcp_operational_access",
+          "retrieval_status": "unavailable",
+          "tool_name": "homs_staffing_recovery_context",
+          "tool_input": {
+            "shift_id": 30
+          },
+          "tool_result": null,
+          "source": null,
+          "error_code": null,
+          "reason": "mcp_disabled",
+          "consistency_status": "not_checked",
+          "limitations": [
+            "MCP provides controlled read access to Student 5 operational evidence; it is not policy guidance.",
+            "The original backend evidence remains authoritative if MCP data differs or is unavailable.",
+            "The registered tool cannot create, update, delete, approve, or execute a roster change.",
+            "Human Review remains mandatory before any later assignment action."
+          ]
+        }
+      }
+    },
+    "output": {
+      "goal": "Review the selected hospital shift for staffing coverage problems. Evaluate the supplied candidates and operational constraints. Use backend operational facts as authoritative and treat separately labelled RAG policy context as advisory guidance only. Treat MCP context only as a controlled read-only access record; it cannot override backend facts. Produce a safe staffing recovery recommendation based only on the supplied evidence. Identify risks, limitations, and missing information. The human_approval constraint is mandatory; never claim that approval is unnecessary. In Planner required_evidence, use only exact top-level evidence category names rather than nested field names. Do not execute any staffing assignment or operational mutation.",
+      "required_evidence": [
+        "objective",
+        "options",
+        "constraints",
+        "unknowns"
+      ],
+      "planned_steps": [
+        "Measure the gap between the current and target state.",
+        "Evaluate each supplied option against every hard constraint.",
+        "Compare eligible options using supplied risks and policy context.",
+        "Propose a reversible recommendation without executing a mutation.",
+        "Send the proposal and evidence to an independent reviewer."
+      ],
+      "constraints": [
+        "The existing Student 5 deterministic eligibility service must mark the candidate eligible.",
+        "Recurring weekly availability is advisory and must be reviewed; it is not a configured hard limit.",
+        "Human approval is required before any assignment change.",
+        "This evidence operation is read-only and cannot execute an assignment change."
+      ],
+      "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": true,
+      "fallback_reason": "planner output remained invalid after 1 attempts: planner semantic validation failed: planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.shift_id'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.department'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.shift_date'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.start_time'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.end_time'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.required_role'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.required_staff_count'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.shift_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.coverage.required_staff_count'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.coverage.assigned_staff_count'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.coverage.filled_staff_count'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.coverage.shortfall'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.coverage.surplus'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.coverage.coverage_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'objective.metric'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'objective.current'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'objective.target'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'objective.unit'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'objective.staffing_gap'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.id'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.label'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.backend_eligible'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.role'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.specialisation'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.department'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.employment_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.availability_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.department_match'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.weekly_availability_matches'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.weekly_rostered_hours'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.blocked_reason'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.approved_unavailability'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.current_assignments'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.conflicting_assignment'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.outcomes.metric_delta'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.outcomes.projected_assigned_staff_count'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.outcomes.projected_staffing_gap'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.risk_indicators'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.id'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.scope'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.type'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.field'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.operator'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.value'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.description'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'provenance.sources'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'provenance.mutation_allowed'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.context_type'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.retrieval_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.query'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.answer'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.confidence'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.citations'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.reason'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.limitations'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.context_type'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.retrieval_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.tool_name'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.tool_input'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.tool_result'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.source'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.error_code'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.reason'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.consistency_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.limitations'",
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "llama3.1:8b",
+          "raw_response": "{\n  \"goal\": \"Review the selected hospital shift for staffing coverage problems.\",\n  \"required_evidence\": [\n    \"current_state.shift.shift_id\",\n    \"current_state.shift.department\",\n    \"current_state.shift.shift_date\",\n    \"current_state.shift.start_time\",\n    \"current_state.shift.end_time\",\n    \"current_state.shift.required_role\",\n    \"current_state.shift.required_staff_count\",\n    \"current_state.shift.shift_status\",\n    \"current_state.coverage.required_staff_count\",\n    \"current_state.coverage.assigned_staff_count\",\n    \"current_state.coverage.filled_staff_count\",\n    \"current_state.coverage.shortfall\",\n    \"current_state.coverage.surplus\",\n    \"current_state.coverage.coverage_status\",\n    \"objective.metric\",\n    \"objective.current\",\n    \"objective.target\",\n    \"objective.unit\",\n    \"objective.staffing_gap\",\n    \"options.id\",\n    \"options.label\",\n    \"options.attributes.backend_eligible\",\n    \"options.attributes.role\",\n    \"options.attributes.specialisation\",\n    \"options.attributes.department\",\n    \"options.attributes.employment_status\",\n    \"options.attributes.availability_status\",\n    \"options.attributes.department_match\",\n    \"options.attributes.weekly_availability_matches\",\n    \"options.attributes.weekly_rostered_hours\",\n    \"options.attributes.blocked_reason\",\n    \"options.attributes.approved_unavailability\",\n    \"options.attributes.current_assignments\",\n    \"options.attributes.conflicting_assignment\",\n    \"options.outcomes.metric_delta\",\n    \"options.outcomes.projected_assigned_staff_count\",\n    \"options.outcomes.projected_staffing_gap\",\n    \"options.risk_indicators\",\n    \"constraints.id\",\n    \"constraints.scope\",\n    \"constraints.type\",\n    \"constraints.field\",\n    \"constraints.operator\",\n    \"constraints.value\",\n    \"constraints.description\",\n    \"unknowns\",\n    \"provenance.sources\",\n    \"provenance.mutation_allowed\",\n    \"policy_context.context_type\",\n    \"policy_context.retrieval_status\",\n    \"policy_context.query\",\n    \"policy_context.answer\",\n    \"policy_context.confidence\",\n    \"policy_context.citations\",\n    \"policy_context.reason\",\n    \"policy_context.limitations\",\n    \"mcp_context.context_type\",\n    \"mcp_context.retrieval_status\",\n    \"mcp_context.tool_name\",\n    \"mcp_context.tool_input\",\n    \"mcp_context.tool_result\",\n    \"mcp_context.source\",\n    \"mcp_context.error_code\",\n    \"mcp_context.reason\",\n    \"mcp_context.consistency_status\",\n    \"mcp_context.limitations\"\n  ],\n  \"constraints\": [\n    \"The existing Student 5 deterministic eligibility service must mark the candidate eligible.\",\n    \"Recurring weekly availability is advisory and must be reviewed; it is not a configured hard limit.\",\n    \"Human approval is required before any assignment change.\",\n    \"This evidence operation is read-only and cannot execute an assignment change.\"\n  ],\n  \"planned_steps\": [\n    \"Evaluate the supplied candidates and operational constraints.\",\n    \"Use backend operational facts as authoritative and treat separately labelled RAG policy context as advisory guidance only.\",\n    \"Treat MCP context only as a controlled read-only access record; it cannot override backend facts.\",\n    \"Produce a safe staffing recovery recommendation based only on the supplied evidence.\",\n    \"Identify risks, limitations, and missing information.\"\n  ],\n  \"expected_result\": \"A safe staffing recovery recommendation based on the supplied evidence.\"\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": "planner semantic validation failed: planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.shift_id'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.department'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.shift_date'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.start_time'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.end_time'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.required_role'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.required_staff_count'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.shift.shift_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.coverage.required_staff_count'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.coverage.assigned_staff_count'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.coverage.filled_staff_count'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.coverage.shortfall'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.coverage.surplus'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'current_state.coverage.coverage_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'objective.metric'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'objective.current'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'objective.target'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'objective.unit'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'objective.staffing_gap'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.id'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.label'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.backend_eligible'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.role'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.specialisation'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.department'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.employment_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.availability_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.department_match'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.weekly_availability_matches'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.weekly_rostered_hours'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.blocked_reason'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.approved_unavailability'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.current_assignments'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.attributes.conflicting_assignment'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.outcomes.metric_delta'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.outcomes.projected_assigned_staff_count'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.outcomes.projected_staffing_gap'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'options.risk_indicators'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.id'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.scope'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.type'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.field'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.operator'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.value'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'constraints.description'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'provenance.sources'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'provenance.mutation_allowed'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.context_type'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.retrieval_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.query'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.answer'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.confidence'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.citations'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.reason'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'policy_context.limitations'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.context_type'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.retrieval_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.tool_name'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.tool_input'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.tool_result'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.source'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.error_code'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.reason'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.consistency_status'; planner_nested_path_not_allowed: required_evidence must use a top-level key, not 'mcp_context.limitations'",
+          "validation_type": "semantic_invalid",
+          "semantic_validation": {
+            "stage": "planner",
+            "valid": false,
+            "issues": [
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.shift.shift_id'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.shift.department'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.shift.shift_date'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.shift.start_time'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.shift.end_time'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.shift.required_role'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.shift.required_staff_count'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.shift.shift_status'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.coverage.required_staff_count'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.coverage.assigned_staff_count'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.coverage.filled_staff_count'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.coverage.shortfall'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.coverage.surplus'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'current_state.coverage.coverage_status'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'objective.metric'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'objective.current'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'objective.target'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'objective.unit'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'objective.staffing_gap'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.id'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.label'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.attributes.backend_eligible'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.attributes.role'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.attributes.specialisation'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.attributes.department'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.attributes.employment_status'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.attributes.availability_status'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.attributes.department_match'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.attributes.weekly_availability_matches'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.attributes.weekly_rostered_hours'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.attributes.blocked_reason'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.attributes.approved_unavailability'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.attributes.current_assignments'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.attributes.conflicting_assignment'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.outcomes.metric_delta'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.outcomes.projected_assigned_staff_count'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.outcomes.projected_staffing_gap'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'options.risk_indicators'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'constraints.id'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'constraints.scope'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'constraints.type'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'constraints.field'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'constraints.operator'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'constraints.value'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'constraints.description'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'provenance.sources'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'provenance.mutation_allowed'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'policy_context.context_type'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'policy_context.retrieval_status'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'policy_context.query'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'policy_context.answer'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'policy_context.confidence'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'policy_context.citations'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'policy_context.reason'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'policy_context.limitations'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'mcp_context.context_type'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'mcp_context.retrieval_status'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'mcp_context.tool_name'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'mcp_context.tool_input'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'mcp_context.tool_result'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'mcp_context.source'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'mcp_context.error_code'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'mcp_context.reason'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'mcp_context.consistency_status'"
+              },
+              {
+                "code": "planner_nested_path_not_allowed",
+                "reason": "required_evidence must use a top-level key, not 'mcp_context.limitations'"
+              }
+            ]
+          },
+          "valid": false
+        }
+      ],
+      "semantic_validation": {
+        "stage": "planner",
+        "valid": true,
+        "issues": [],
+        "retry_triggered": false,
+        "fallback_triggered": true,
+        "rejected_attempts": [
+          {
+            "attempt": 1,
+            "validation_type": "semantic_invalid",
+            "issue_codes": [
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed",
+              "planner_nested_path_not_allowed"
+            ]
+          }
+        ]
+      },
+      "attempt_count": 1
+    }
+  },
+  "worker": {
+    "started_at": "2026-10-21T02:11:36.511Z",
+    "completed_at": "2026-10-21T02:11:53.051Z",
+    "input": {
+      "task": "Review the selected hospital shift for staffing coverage problems. Evaluate the supplied candidates and operational constraints. Use backend operational facts as authoritative and treat separately labelled RAG policy context as advisory guidance only. Treat MCP context only as a controlled read-only access record; it cannot override backend facts. Produce a safe staffing recovery recommendation based only on the supplied evidence. Identify risks, limitations, and missing information. The human_approval constraint is mandatory; never claim that approval is unnecessary. In Planner required_evidence, use only exact top-level evidence category names rather than nested field names. Do not execute any staffing assignment or operational mutation.",
+      "planner_output": {
+        "goal": "Review the selected hospital shift for staffing coverage problems. Evaluate the supplied candidates and operational constraints. Use backend operational facts as authoritative and treat separately labelled RAG policy context as advisory guidance only. Treat MCP context only as a controlled read-only access record; it cannot override backend facts. Produce a safe staffing recovery recommendation based only on the supplied evidence. Identify risks, limitations, and missing information. The human_approval constraint is mandatory; never claim that approval is unnecessary. In Planner required_evidence, use only exact top-level evidence category names rather than nested field names. Do not execute any staffing assignment or operational mutation.",
+        "required_evidence": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ],
+        "planned_steps": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "constraints": [
+          "The existing Student 5 deterministic eligibility service must mark the candidate eligible.",
+          "Recurring weekly availability is advisory and must be reviewed; it is not a configured hard limit.",
+          "Human approval is required before any assignment change.",
+          "This evidence operation is read-only and cannot execute an assignment change."
+        ],
+        "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+      },
+      "evidence": {
+        "schema_version": "1.0",
+        "evidence_type": "student5_staffing_recovery",
+        "evidence_mode": "live_api",
+        "current_state": {
+          "shift": {
+            "shift_id": 30,
+            "department": "Intensive Care",
+            "shift_date": "2026-10-21",
+            "start_time": "23:00",
+            "end_time": "07:00",
+            "required_role": "Registered Nurse",
+            "required_staff_count": 2,
+            "shift_status": "Planned"
+          },
+          "coverage": {
+            "required_staff_count": 2,
+            "assigned_staff_count": 0,
+            "filled_staff_count": 0,
+            "shortfall": 2,
+            "surplus": 0,
+            "coverage_status": "Unstaffed"
+          },
+          "current_assignments": []
+        },
+        "objective": {
+          "metric": "assigned_staff",
+          "current": 0,
+          "target": 2,
+          "unit": "staff member",
+          "staffing_gap": 2
+        },
+        "options": [
+          {
+            "id": "staff-12",
+            "label": "staff-12",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Critical Care",
+              "department": "Intensive Care",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": true,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability."
+            ]
+          },
+          {
+            "id": "staff-3",
+            "label": "staff-3",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Critical Care",
+              "department": "Intensive Care",
+              "employment_status": "Part-Time",
+              "availability_status": "Available",
+              "department_match": true,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability."
+            ]
+          },
+          {
+            "id": "staff-1",
+            "label": "staff-1",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Triage",
+              "department": "Emergency",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "id": "staff-7",
+            "label": "staff-7",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Perioperative",
+              "department": "Surgery",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "backend_eligibility",
+            "scope": "option",
+            "type": "hard",
+            "field": "backend_eligible",
+            "operator": "equals",
+            "value": true,
+            "description": "The existing Student 5 deterministic eligibility service must mark the candidate eligible."
+          },
+          {
+            "id": "weekly_availability_review",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Recurring weekly availability is advisory and must be reviewed; it is not a configured hard limit."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before any assignment change."
+          },
+          {
+            "id": "no_automatic_assignment",
+            "scope": "workflow",
+            "type": "safety",
+            "description": "This evidence operation is read-only and cannot execute an assignment change."
+          }
+        ],
+        "unknowns": [
+          "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+          "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+          "Patient count and acuity are not available for the selected shift.",
+          "Required staff count is manager-entered and is not derived from a clinical staffing ratio."
+        ],
+        "provenance": {
+          "sources": [
+            {
+              "endpoint": "GET /api/shifts/<shift_id>",
+              "service": "shift_service.get_shift"
+            },
+            {
+              "endpoint": "GET /api/shifts/coverage",
+              "service": "coverage_service.shift_coverage"
+            },
+            {
+              "endpoint": "GET /api/shifts/<shift_id>/assignments",
+              "service": "assignment_service.list_shift_assignments"
+            },
+            {
+              "endpoint": "GET /api/shifts/<shift_id>/candidates",
+              "service": "eligibility_service.candidates_for_shift"
+            }
+          ],
+          "mutation_allowed": false
+        },
+        "evidence_separation": {
+          "operational_fact_fields": [
+            "current_state",
+            "objective",
+            "options",
+            "constraints",
+            "unknowns",
+            "provenance"
+          ],
+          "policy_context_field": "policy_context",
+          "policy_is_advisory": true,
+          "operational_rules_remain_authoritative": true,
+          "mcp_context_field": "mcp_context",
+          "mcp_is_controlled_operational_access": true,
+          "mcp_cannot_override_operational_rules": true
+        },
+        "policy_context": {
+          "context_type": "rag_policy_guidance",
+          "retrieval_status": "unavailable",
+          "query": "What documented Student 5 rules govern an understaffed shift: per-shift coverage, deterministic eligibility blockers, availability and approved unavailability, assignment authority, and the Staff Manager human-approval decision boundary?",
+          "answer": null,
+          "confidence": "none",
+          "citations": [],
+          "reason": "rag_disabled",
+          "limitations": [
+            "Retrieved policy text is advisory guidance, not live operational state.",
+            "Student 5 backend eligibility, coverage, assignment, and availability rules remain authoritative.",
+            "Missing fatigue, overtime, rest-period, consecutive-shift, staffing-ratio, patient-load, and acuity rules must remain unknown unless documented.",
+            "Policy retrieval cannot create, change, or approve a staff assignment."
+          ]
+        },
+        "mcp_context": {
+          "context_type": "mcp_operational_access",
+          "retrieval_status": "unavailable",
+          "tool_name": "homs_staffing_recovery_context",
+          "tool_input": {
+            "shift_id": 30
+          },
+          "tool_result": null,
+          "source": null,
+          "error_code": null,
+          "reason": "mcp_disabled",
+          "consistency_status": "not_checked",
+          "limitations": [
+            "MCP provides controlled read access to Student 5 operational evidence; it is not policy guidance.",
+            "The original backend evidence remains authoritative if MCP data differs or is unavailable.",
+            "The registered tool cannot create, update, delete, approve, or execute a roster change.",
+            "Human Review remains mandatory before any later assignment action."
+          ]
+        }
+      }
+    },
+    "output": {
+      "status": "proposal_ready",
+      "plan_steps_followed": [
+        "Measure the gap between the current and target state.",
+        "Evaluate each supplied option against every hard constraint.",
+        "Compare eligible options using supplied risks and policy context.",
+        "Propose a reversible recommendation without executing a mutation.",
+        "Send the proposal and evidence to an independent reviewer."
+      ],
+      "missing_planner_evidence": [],
+      "gap": {
+        "metric": "assigned_staff",
+        "current": 0,
+        "target": 2,
+        "deficit": 2
+      },
+      "evaluated_options": [
+        {
+          "option_id": "staff-12",
+          "label": "staff-12",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "backend_eligibility",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": [
+            "Outside recorded recurring weekly availability."
+          ]
+        },
+        {
+          "option_id": "staff-3",
+          "label": "staff-3",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "backend_eligibility",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": [
+            "Outside recorded recurring weekly availability."
+          ]
+        },
+        {
+          "option_id": "staff-1",
+          "label": "staff-1",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "backend_eligibility",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": [
+            "Outside recorded recurring weekly availability.",
+            "Candidate's home department differs from the shift department."
+          ]
+        },
+        {
+          "option_id": "staff-7",
+          "label": "staff-7",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "backend_eligibility",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": [
+            "Outside recorded recurring weekly availability.",
+            "Candidate's home department differs from the shift department."
+          ]
+        }
+      ],
+      "proposed_solution": {
+        "selected_option_id": "staff-12",
+        "selected_option": "staff-12",
+        "metric_delta": 1,
+        "projected_value": 1,
+        "reasoning": [
+          "Passed hard constraint: backend_eligibility"
+        ]
+      },
+      "limitations": [
+        "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+        "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+        "Patient count and acuity are not available for the selected shift.",
+        "Required staff count is manager-entered and is not derived from a clinical staffing ratio."
+      ],
+      "mutation_executed": false
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": true,
+      "fallback_reason": "worker output remained invalid after 1 attempts: worker semantic validation failed: worker_risk_indicators_mismatch: Worker risks for 'staff-12' do not match supplied advisory risks; worker_risk_indicators_mismatch: Worker risks for 'staff-3' do not match supplied advisory risks; worker_risk_indicators_mismatch: Worker risks for 'staff-1' do not match supplied advisory risks; worker_unknown_hard_constraint: Worker reported an unknown hard constraint for 'staff-1'; worker_missing_hard_constraint: Worker hard-constraint checks are incomplete for 'staff-1'; worker_hard_constraint_mismatch: Worker result for constraint 'backend_eligibility' on option 'staff-1' contradicts supplied evidence; worker_eligibility_mismatch: Worker eligibility for 'staff-1' contradicts hard constraints; worker_risk_indicators_mismatch: Worker risks for 'staff-7' do not match supplied advisory risks",
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "llama3.2:3b",
+          "raw_response": "{\n  \"status\": \"proposal_ready\",\n  \"plan_steps_followed\": [\n    \"Measure the gap between the current and target state.\",\n    \"Evaluate each supplied option against every hard constraint.\",\n    \"Compare eligible options using supplied risks and policy context.\",\n    \"Propose a reversible recommendation without executing a mutation.\",\n    \"Send the proposal and evidence to an independent reviewer.\"\n  ],\n  \"missing_planner_evidence\": [],\n  \"gap\": {\n    \"metric\": \"assigned_staff\",\n    \"current\": 0,\n    \"target\": 2,\n    \"deficit\": 2\n  },\n  \"evaluated_options\": [\n    {\n      \"option_id\": \"staff-12\",\n      \"label\": \"staff-12\",\n      \"hard_constraint_checks\": [\n        {\n          \"constraint_id\": \"backend_eligibility\",\n          \"passed\": true\n        }\n      ],\n      \"eligible\": true,\n      \"risk_indicators\": []\n    },\n    {\n      \"option_id\": \"staff-3\",\n      \"label\": \"staff-3\",\n      \"hard_constraint_checks\": [\n        {\n          \"constraint_id\": \"backend_eligibility\",\n          \"passed\": true\n        }\n      ],\n      \"eligible\": true,\n      \"risk_indicators\": []\n    },\n    {\n      \"option_id\": \"staff-1\",\n      \"label\": \"staff-1\",\n      \"hard_constraint_checks\": [\n        {\n          \"constraint_id\": \"backend_eligibility\",\n          \"passed\": false\n        },\n        {\n          \"constraint_id\": \"weekly_availability_review\",\n          \"passed\": true\n        }\n      ],\n      \"eligible\": false,\n      \"risk_indicators\": [\n        \"Outside recorded recurring weekly availability.\"\n      ]\n    },\n    {\n      \"option_id\": \"staff-7\",\n      \"label\": \"staff-7\",\n      \"hard_constraint_checks\": [\n        {\n          \"constraint_id\": \"backend_eligibility\",\n          \"passed\": true\n        }\n      ],\n      \"eligible\": true,\n      \"risk_indicators\": []\n    }\n  ],\n  \"proposed_solution\": {\n    \"selected_option_id\": \"staff-12\",\n    \"selected_option\": \"staff-12\",\n    \"metric_delta\": 1,\n    \"projected_value\": 1,\n    \"reasoning\": [\n      \"The existing Student 5 deterministic eligibility service marks the candidate eligible.\",\n      \"The selected option has a lower staffing gap than the other options.\"\n    ]\n  },\n  \"limitations\": [\n    \"The selected option does not meet the weekly availability requirement.\",\n    \"The selected option does not meet the human approval requirement.\"\n  ],\n  \"mutation_executed\": false\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": "worker semantic validation failed: worker_risk_indicators_mismatch: Worker risks for 'staff-12' do not match supplied advisory risks; worker_risk_indicators_mismatch: Worker risks for 'staff-3' do not match supplied advisory risks; worker_risk_indicators_mismatch: Worker risks for 'staff-1' do not match supplied advisory risks; worker_unknown_hard_constraint: Worker reported an unknown hard constraint for 'staff-1'; worker_missing_hard_constraint: Worker hard-constraint checks are incomplete for 'staff-1'; worker_hard_constraint_mismatch: Worker result for constraint 'backend_eligibility' on option 'staff-1' contradicts supplied evidence; worker_eligibility_mismatch: Worker eligibility for 'staff-1' contradicts hard constraints; worker_risk_indicators_mismatch: Worker risks for 'staff-7' do not match supplied advisory risks",
+          "validation_type": "semantic_invalid",
+          "semantic_validation": {
+            "stage": "worker",
+            "valid": false,
+            "issues": [
+              {
+                "code": "worker_risk_indicators_mismatch",
+                "reason": "Worker risks for 'staff-12' do not match supplied advisory risks"
+              },
+              {
+                "code": "worker_risk_indicators_mismatch",
+                "reason": "Worker risks for 'staff-3' do not match supplied advisory risks"
+              },
+              {
+                "code": "worker_risk_indicators_mismatch",
+                "reason": "Worker risks for 'staff-1' do not match supplied advisory risks"
+              },
+              {
+                "code": "worker_unknown_hard_constraint",
+                "reason": "Worker reported an unknown hard constraint for 'staff-1'"
+              },
+              {
+                "code": "worker_missing_hard_constraint",
+                "reason": "Worker hard-constraint checks are incomplete for 'staff-1'"
+              },
+              {
+                "code": "worker_hard_constraint_mismatch",
+                "reason": "Worker result for constraint 'backend_eligibility' on option 'staff-1' contradicts supplied evidence"
+              },
+              {
+                "code": "worker_eligibility_mismatch",
+                "reason": "Worker eligibility for 'staff-1' contradicts hard constraints"
+              },
+              {
+                "code": "worker_risk_indicators_mismatch",
+                "reason": "Worker risks for 'staff-7' do not match supplied advisory risks"
+              }
+            ]
+          },
+          "valid": false
+        }
+      ],
+      "semantic_validation": {
+        "stage": "worker",
+        "valid": true,
+        "issues": [],
+        "retry_triggered": false,
+        "fallback_triggered": true,
+        "rejected_attempts": [
+          {
+            "attempt": 1,
+            "validation_type": "semantic_invalid",
+            "issue_codes": [
+              "worker_risk_indicators_mismatch",
+              "worker_risk_indicators_mismatch",
+              "worker_risk_indicators_mismatch",
+              "worker_unknown_hard_constraint",
+              "worker_missing_hard_constraint",
+              "worker_hard_constraint_mismatch",
+              "worker_eligibility_mismatch",
+              "worker_risk_indicators_mismatch"
+            ]
+          }
+        ]
+      },
+      "attempt_count": 1
+    }
+  },
+  "reviewer": {
+    "started_at": "2026-10-21T02:11:53.054Z",
+    "completed_at": "2026-10-21T02:13:24.530Z",
+    "input": {
+      "task": "Review the selected hospital shift for staffing coverage problems. Evaluate the supplied candidates and operational constraints. Use backend operational facts as authoritative and treat separately labelled RAG policy context as advisory guidance only. Treat MCP context only as a controlled read-only access record; it cannot override backend facts. Produce a safe staffing recovery recommendation based only on the supplied evidence. Identify risks, limitations, and missing information. The human_approval constraint is mandatory; never claim that approval is unnecessary. In Planner required_evidence, use only exact top-level evidence category names rather than nested field names. Do not execute any staffing assignment or operational mutation.",
+      "planner_output": {
+        "goal": "Review the selected hospital shift for staffing coverage problems. Evaluate the supplied candidates and operational constraints. Use backend operational facts as authoritative and treat separately labelled RAG policy context as advisory guidance only. Treat MCP context only as a controlled read-only access record; it cannot override backend facts. Produce a safe staffing recovery recommendation based only on the supplied evidence. Identify risks, limitations, and missing information. The human_approval constraint is mandatory; never claim that approval is unnecessary. In Planner required_evidence, use only exact top-level evidence category names rather than nested field names. Do not execute any staffing assignment or operational mutation.",
+        "required_evidence": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ],
+        "planned_steps": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "constraints": [
+          "The existing Student 5 deterministic eligibility service must mark the candidate eligible.",
+          "Recurring weekly availability is advisory and must be reviewed; it is not a configured hard limit.",
+          "Human approval is required before any assignment change.",
+          "This evidence operation is read-only and cannot execute an assignment change."
+        ],
+        "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+      },
+      "worker_output": {
+        "status": "proposal_ready",
+        "plan_steps_followed": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "missing_planner_evidence": [],
+        "gap": {
+          "metric": "assigned_staff",
+          "current": 0,
+          "target": 2,
+          "deficit": 2
+        },
+        "evaluated_options": [
+          {
+            "option_id": "staff-12",
+            "label": "staff-12",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "backend_eligibility",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability."
+            ]
+          },
+          {
+            "option_id": "staff-3",
+            "label": "staff-3",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "backend_eligibility",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability."
+            ]
+          },
+          {
+            "option_id": "staff-1",
+            "label": "staff-1",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "backend_eligibility",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "option_id": "staff-7",
+            "label": "staff-7",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "backend_eligibility",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          }
+        ],
+        "proposed_solution": {
+          "selected_option_id": "staff-12",
+          "selected_option": "staff-12",
+          "metric_delta": 1,
+          "projected_value": 1,
+          "reasoning": [
+            "Passed hard constraint: backend_eligibility"
+          ]
+        },
+        "limitations": [
+          "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+          "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+          "Patient count and acuity are not available for the selected shift.",
+          "Required staff count is manager-entered and is not derived from a clinical staffing ratio."
+        ],
+        "mutation_executed": false
+      },
+      "worker_execution": {
+        "provider": "deterministic_fallback",
+        "fallback_used": true
+      },
+      "evidence": {
+        "schema_version": "1.0",
+        "evidence_type": "student5_staffing_recovery",
+        "evidence_mode": "live_api",
+        "current_state": {
+          "shift": {
+            "shift_id": 30,
+            "department": "Intensive Care",
+            "shift_date": "2026-10-21",
+            "start_time": "23:00",
+            "end_time": "07:00",
+            "required_role": "Registered Nurse",
+            "required_staff_count": 2,
+            "shift_status": "Planned"
+          },
+          "coverage": {
+            "required_staff_count": 2,
+            "assigned_staff_count": 0,
+            "filled_staff_count": 0,
+            "shortfall": 2,
+            "surplus": 0,
+            "coverage_status": "Unstaffed"
+          },
+          "current_assignments": []
+        },
+        "objective": {
+          "metric": "assigned_staff",
+          "current": 0,
+          "target": 2,
+          "unit": "staff member",
+          "staffing_gap": 2
+        },
+        "options": [
+          {
+            "id": "staff-12",
+            "label": "staff-12",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Critical Care",
+              "department": "Intensive Care",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": true,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability."
+            ]
+          },
+          {
+            "id": "staff-3",
+            "label": "staff-3",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Critical Care",
+              "department": "Intensive Care",
+              "employment_status": "Part-Time",
+              "availability_status": "Available",
+              "department_match": true,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability."
+            ]
+          },
+          {
+            "id": "staff-1",
+            "label": "staff-1",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Triage",
+              "department": "Emergency",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          },
+          {
+            "id": "staff-7",
+            "label": "staff-7",
+            "attributes": {
+              "backend_eligible": true,
+              "role": "Registered Nurse",
+              "specialisation": "Perioperative",
+              "department": "Surgery",
+              "employment_status": "Full-Time",
+              "availability_status": "Available",
+              "department_match": false,
+              "weekly_availability_matches": false,
+              "weekly_rostered_hours": 0.0,
+              "blocked_reason": null,
+              "approved_unavailability": null,
+              "current_assignments": [],
+              "conflicting_assignment": null
+            },
+            "outcomes": {
+              "metric_delta": 1,
+              "projected_assigned_staff_count": 1,
+              "projected_staffing_gap": 1
+            },
+            "risk_indicators": [
+              "Outside recorded recurring weekly availability.",
+              "Candidate's home department differs from the shift department."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "backend_eligibility",
+            "scope": "option",
+            "type": "hard",
+            "field": "backend_eligible",
+            "operator": "equals",
+            "value": true,
+            "description": "The existing Student 5 deterministic eligibility service must mark the candidate eligible."
+          },
+          {
+            "id": "weekly_availability_review",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Recurring weekly availability is advisory and must be reviewed; it is not a configured hard limit."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "Human approval is required before any assignment change."
+          },
+          {
+            "id": "no_automatic_assignment",
+            "scope": "workflow",
+            "type": "safety",
+            "description": "This evidence operation is read-only and cannot execute an assignment change."
+          }
+        ],
+        "unknowns": [
+          "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+          "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+          "Patient count and acuity are not available for the selected shift.",
+          "Required staff count is manager-entered and is not derived from a clinical staffing ratio."
+        ],
+        "provenance": {
+          "sources": [
+            {
+              "endpoint": "GET /api/shifts/<shift_id>",
+              "service": "shift_service.get_shift"
+            },
+            {
+              "endpoint": "GET /api/shifts/coverage",
+              "service": "coverage_service.shift_coverage"
+            },
+            {
+              "endpoint": "GET /api/shifts/<shift_id>/assignments",
+              "service": "assignment_service.list_shift_assignments"
+            },
+            {
+              "endpoint": "GET /api/shifts/<shift_id>/candidates",
+              "service": "eligibility_service.candidates_for_shift"
+            }
+          ],
+          "mutation_allowed": false
+        },
+        "evidence_separation": {
+          "operational_fact_fields": [
+            "current_state",
+            "objective",
+            "options",
+            "constraints",
+            "unknowns",
+            "provenance"
+          ],
+          "policy_context_field": "policy_context",
+          "policy_is_advisory": true,
+          "operational_rules_remain_authoritative": true,
+          "mcp_context_field": "mcp_context",
+          "mcp_is_controlled_operational_access": true,
+          "mcp_cannot_override_operational_rules": true
+        },
+        "policy_context": {
+          "context_type": "rag_policy_guidance",
+          "retrieval_status": "unavailable",
+          "query": "What documented Student 5 rules govern an understaffed shift: per-shift coverage, deterministic eligibility blockers, availability and approved unavailability, assignment authority, and the Staff Manager human-approval decision boundary?",
+          "answer": null,
+          "confidence": "none",
+          "citations": [],
+          "reason": "rag_disabled",
+          "limitations": [
+            "Retrieved policy text is advisory guidance, not live operational state.",
+            "Student 5 backend eligibility, coverage, assignment, and availability rules remain authoritative.",
+            "Missing fatigue, overtime, rest-period, consecutive-shift, staffing-ratio, patient-load, and acuity rules must remain unknown unless documented.",
+            "Policy retrieval cannot create, change, or approve a staff assignment."
+          ]
+        },
+        "mcp_context": {
+          "context_type": "mcp_operational_access",
+          "retrieval_status": "unavailable",
+          "tool_name": "homs_staffing_recovery_context",
+          "tool_input": {
+            "shift_id": 30
+          },
+          "tool_result": null,
+          "source": null,
+          "error_code": null,
+          "reason": "mcp_disabled",
+          "consistency_status": "not_checked",
+          "limitations": [
+            "MCP provides controlled read access to Student 5 operational evidence; it is not policy guidance.",
+            "The original backend evidence remains authoritative if MCP data differs or is unavailable.",
+            "The registered tool cannot create, update, delete, approve, or execute a roster change.",
+            "Human Review remains mandatory before any later assignment action."
+          ]
+        }
+      }
+    },
+    "output": {
+      "review_status": "changes_required",
+      "validated_findings": [],
+      "validated_evidence_refs": [
+        {
+          "source": "worker_output",
+          "path": "proposed_solution.projected_value",
+          "value": 1
+        }
+      ],
+      "risks": [
+        "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+        "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+        "Patient count and acuity are not available for the selected shift.",
+        "Required staff count is manager-entered and is not derived from a clinical staffing ratio.",
+        "The proposal does not fully reach the target state.",
+        "Outside recorded recurring weekly availability."
+      ],
+      "unsupported_claims": [],
+      "recommended_option_id": "staff-12",
+      "recommendation": "Review the validated Worker proposal and authoritative evidence before action.",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": true,
+      "fallback_reason": "reviewer output remained invalid after 1 attempts: model response was empty",
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "deepseek-r1:8b",
+          "raw_response": "",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": "model response was empty",
+          "validation_type": "malformed_json",
+          "semantic_validation": null,
+          "valid": false
+        }
+      ],
+      "semantic_validation": {
+        "stage": "reviewer",
+        "valid": true,
+        "issues": [],
+        "retry_triggered": false,
+        "fallback_triggered": true,
+        "rejected_attempts": [
+          {
+            "attempt": 1,
+            "validation_type": "malformed_json",
+            "issue_codes": []
+          }
+        ]
+      },
+      "attempt_count": 1
+    }
+  },
+  "human_review": {
+    "decision": "approve",
+    "comments": "",
+    "timestamp": "2026-10-21T02:13:38.383Z"
+  },
+  "final_status": "approved",
+  "final_result": {
+    "status": "approved",
+    "proposal": {
+      "selected_option_id": "staff-12",
+      "selected_option": "staff-12",
+      "metric_delta": 1,
+      "projected_value": 1,
+      "reasoning": [
+        "Passed hard constraint: backend_eligibility"
+      ]
+    },
+    "review": {
+      "review_status": "changes_required",
+      "validated_findings": [],
+      "validated_evidence_refs": [
+        {
+          "source": "worker_output",
+          "path": "proposed_solution.projected_value",
+          "value": 1
+        }
+      ],
+      "risks": [
+        "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+        "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+        "Patient count and acuity are not available for the selected shift.",
+        "Required staff count is manager-entered and is not derived from a clinical staffing ratio.",
+        "The proposal does not fully reach the target state.",
+        "Outside recorded recurring weekly availability."
+      ],
+      "unsupported_claims": [],
+      "recommended_option_id": "staff-12",
+      "recommendation": "Review the validated Worker proposal and authoritative evidence before action.",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "human_decision": "approve",
+    "human_comments_or_correction": "",
+    "mutation_executed": false
+  },
+  "completed_at": "2026-10-21T02:13:38.385Z"
+}

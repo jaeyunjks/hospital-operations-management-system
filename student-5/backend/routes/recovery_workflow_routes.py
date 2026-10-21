@@ -35,6 +35,8 @@ recovery_workflow_blueprint = Blueprint(
     "recovery_workflow", __name__, url_prefix="/api/recovery-workflows"
 )
 REVIEW_FIELDS = {"decision", "comment"}
+RECOVERY_EVIDENCE_TYPE = "student5_staffing_recovery"
+HISTORY_DISPLAY_LIMIT = 10
 
 
 def _client() -> MultiAgentClient:
@@ -102,6 +104,63 @@ def _review_request() -> tuple[str, str]:
             {"field": "comment"},
         )
     return decision, comment
+
+
+def _history_shift_id() -> int:
+    unexpected = sorted(set(request.args) - {"shift_id"})
+    if unexpected:
+        raise ValidationError(
+            "Unexpected query field(s): " + ", ".join(unexpected),
+            {"unexpected_fields": unexpected},
+        )
+    raw_shift_id = request.args.get("shift_id")
+    try:
+        shift_id = int(raw_shift_id)
+    except (TypeError, ValueError) as error:
+        raise ValidationError(
+            "'shift_id' must be a positive integer.", {"field": "shift_id"}
+        ) from error
+    if shift_id <= 0:
+        raise ValidationError(
+            "'shift_id' must be a positive integer.", {"field": "shift_id"}
+        )
+    return shift_id
+
+
+@recovery_workflow_blueprint.get("")
+@recovery_workflow_blueprint.get("/")
+def list_recovery_workflows():
+    """List recent persisted recovery runs for one shift, without audit copying."""
+
+    require_manager()
+    shift_id = _history_shift_id()
+    client = _client()
+    history = _shared_call(
+        lambda: client.list_workflows(
+            RECOVERY_EVIDENCE_TYPE,
+            evidence_path="current_state.shift.shift_id",
+            evidence_value=str(shift_id),
+            limit=HISTORY_DISPLAY_LIMIT,
+        )
+    )
+    matches = []
+    for item in history["workflows"]:
+        human_review = item.get("human_review")
+        matches.append(
+            {
+                "workflow_id": item["workflow_id"],
+                "shift_id": shift_id,
+                "started_at": item["started_at"],
+                "status": item["status"],
+                "human_decision": (
+                    human_review.get("decision")
+                    if isinstance(human_review, dict) else None
+                ),
+            }
+        )
+        if len(matches) == HISTORY_DISPLAY_LIMIT:
+            break
+    return jsonify({"count": len(matches), "workflows": matches})
 
 
 @recovery_workflow_blueprint.get("/<workflow_id>")

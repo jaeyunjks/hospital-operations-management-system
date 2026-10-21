@@ -61,6 +61,7 @@ secrets.*
 # Local Docker development artefacts / overrides
 docker-compose.override.yml
 *.pid
+/.local-r2/
 
 # --------------------------- Ollama / model files -------------------------
 # Never commit downloaded model weights.

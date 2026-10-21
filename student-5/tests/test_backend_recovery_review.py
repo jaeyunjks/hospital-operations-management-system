@@ -45,7 +45,8 @@ def shared_result(status="awaiting_human_review", decision=None, comment=""):
 
 
 def install_adapter(monkeypatch, *, get_result=None, review_result=None,
-                    get_error=None, review_error=None, calls=None):
+                    list_result=None, get_error=None, review_error=None,
+                    list_error=None, calls=None):
     calls = calls if calls is not None else []
 
     class FakeClient:
@@ -57,6 +58,16 @@ def install_adapter(monkeypatch, *, get_result=None, review_result=None,
             if get_error:
                 raise get_error
             return get_result or shared_result()
+
+        def list_workflows(self, evidence_type, *, evidence_path,
+                           evidence_value, limit):
+            calls.append((
+                "list", evidence_type, evidence_path, evidence_value, limit))
+            if list_error:
+                raise list_error
+            return list_result or {
+                "schema_version": "1.0", "count": 0, "workflows": [],
+            }
 
         def submit_review(self, workflow_id, decision, comment):
             calls.append(("review", workflow_id, decision, comment))
@@ -92,6 +103,12 @@ def review(client, payload, workflow_id=WORKFLOW_ID, headers=MANAGER):
     )
 
 
+def history(client, shift_id=11, headers=MANAGER):
+    return client.get(
+        f"/api/recovery-workflows?shift_id={shift_id}", headers=headers
+    )
+
+
 def test_manager_gets_pending_workflow_with_all_agent_state(client, monkeypatch):
     calls = install_adapter(monkeypatch)
 
@@ -114,6 +131,45 @@ def test_manager_gets_pending_workflow_with_all_agent_state(client, monkeypatch)
         }),
         ("get", WORKFLOW_ID),
     ]
+
+
+def test_manager_history_filters_persisted_audits_to_selected_shift(
+        client, monkeypatch):
+    calls = install_adapter(monkeypatch, list_result={
+        "schema_version": "1.0", "count": 1, "workflows": [
+            {
+                "workflow_id": WORKFLOW_ID,
+                "status": "awaiting_human_review",
+                "started_at": "2026-10-20T01:00:00Z",
+                "human_review": None,
+            },
+        ],
+    })
+
+    response = history(client)
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "count": 1,
+        "workflows": [{
+            "workflow_id": WORKFLOW_ID,
+            "shift_id": 11,
+            "started_at": "2026-10-20T01:00:00Z",
+            "status": "awaiting_human_review",
+            "human_decision": None,
+        }],
+    }
+    assert calls[-1] == (
+        "list", "student5_staffing_recovery",
+        "current_state.shift.shift_id", "11", 10,
+    )
+
+
+def test_employee_history_is_forbidden_before_network(client, monkeypatch):
+    calls = install_adapter(monkeypatch)
+    response = history(client, headers=EMPLOYEE)
+    assert response.status_code == 403
+    assert calls == []
 
 
 @pytest.mark.parametrize("method", ["get", "review"])
@@ -299,9 +355,10 @@ def test_status_and_review_routes_cannot_mutate_student5_state(
     assert after == before
 
 
-def test_api_index_lists_both_phase_3c_routes(client):
+def test_api_index_lists_recovery_lifecycle_and_history_routes(client):
     routes = client.get("/api").get_json()["endpoints"]["recovery_workflows"]
     assert routes == [
+        "GET    /api/recovery-workflows?shift_id=<shift_id>",
         "GET    /api/recovery-workflows/<workflow_id>",
         "POST   /api/recovery-workflows/<workflow_id>/review",
     ]

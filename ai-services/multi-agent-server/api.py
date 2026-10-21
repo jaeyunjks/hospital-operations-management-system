@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,9 @@ DEFAULT_PORT = 8200
 MAX_BODY_BYTES = 256 * 1024
 MAX_TASK_CHARS = 2_000
 MAX_COMMENT_CHARS = 10_000
+MAX_EVIDENCE_TYPE_CHARS = 120
+MAX_HISTORY_RESULTS = 100
+MAX_EVIDENCE_PATH_CHARS = 160
 WILDCARD_HOSTS = {"0.0.0.0", "::", "[::]", "*"}
 WORKFLOW_FIELDS = {"task", "evidence"}
 REVIEW_FIELDS = {"decision", "comment"}
@@ -144,10 +148,12 @@ def _stage_view(stage: Any) -> Optional[Dict[str, Any]]:
     }
 
 
-def workflow_view(record: Dict[str, Any]) -> Dict[str, Any]:
+def workflow_view(
+    record: Dict[str, Any], *, include_evidence: bool = False
+) -> Dict[str, Any]:
     """Return the stable public view while the audit retains complete internals."""
 
-    return {
+    view = {
         "schema_version": record.get("schema_version", SCHEMA_VERSION),
         "workflow_id": record["workflow_id"],
         "status": record["final_status"],
@@ -157,6 +163,87 @@ def workflow_view(record: Dict[str, Any]) -> Dict[str, Any]:
         "reviewer": _stage_view(record.get("reviewer")),
         "human_review": record.get("human_review"),
         "final_result": record.get("final_result"),
+    }
+    if include_evidence:
+        view["submitted_evidence"] = record.get("input_evidence")
+    return view
+
+
+def _include_evidence_requested() -> bool:
+    unexpected = sorted(set(request.args) - {"include_evidence"})
+    if unexpected:
+        raise ApiError(
+            "validation_error",
+            f"Unexpected query field(s): {', '.join(unexpected)}",
+            400,
+        )
+    value = request.args.get("include_evidence", "false").strip().lower()
+    if value not in {"true", "false"}:
+        raise ApiError(
+            "validation_error", "include_evidence must be 'true' or 'false'", 400
+        )
+    return value == "true"
+
+
+def _history_query() -> tuple[str, int, Optional[str], Optional[str]]:
+    unexpected = sorted(
+        set(request.args)
+        - {"evidence_type", "limit", "evidence_path", "evidence_value"}
+    )
+    if unexpected:
+        raise ApiError(
+            "validation_error",
+            f"Unexpected query field(s): {', '.join(unexpected)}",
+            400,
+        )
+    evidence_type = request.args.get("evidence_type", "").strip()
+    if not evidence_type or len(evidence_type) > MAX_EVIDENCE_TYPE_CHARS:
+        raise ApiError(
+            "validation_error",
+            f"evidence_type must be 1-{MAX_EVIDENCE_TYPE_CHARS} characters",
+            400,
+        )
+    try:
+        limit = int(request.args.get("limit", "10"))
+    except ValueError as error:
+        raise ApiError("validation_error", "limit must be an integer", 400) from error
+    if not 1 <= limit <= MAX_HISTORY_RESULTS:
+        raise ApiError(
+            "validation_error",
+            f"limit must be between 1 and {MAX_HISTORY_RESULTS}",
+            400,
+        )
+    evidence_path = request.args.get("evidence_path")
+    evidence_value = request.args.get("evidence_value")
+    if (evidence_path is None) != (evidence_value is None):
+        raise ApiError(
+            "validation_error",
+            "evidence_path and evidence_value must be supplied together",
+            400,
+        )
+    if evidence_path is not None:
+        evidence_path = evidence_path.strip()
+        if (
+            not evidence_path
+            or len(evidence_path) > MAX_EVIDENCE_PATH_CHARS
+            or re.fullmatch(r"[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*", evidence_path)
+            is None
+            or len(evidence_value) > MAX_EVIDENCE_TYPE_CHARS
+        ):
+            raise ApiError(
+                "validation_error", "evidence filter is invalid", 400
+            )
+    return evidence_type, limit, evidence_path, evidence_value
+
+
+def workflow_summary(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Return only fields needed to discover and reopen persisted workflows."""
+
+    return {
+        "workflow_id": record["workflow_id"],
+        "status": record["final_status"],
+        "started_at": record.get("timestamp"),
+        "human_review": record.get("human_review"),
     }
 
 
@@ -320,14 +407,32 @@ def create_app(
             {"Location": location, "Retry-After": "1"},
         )
 
+    @app.get("/workflows")
+    def list_workflows():
+        evidence_type, limit, evidence_path, evidence_value = _history_query()
+        records = orchestrator.audit_store.list_by_evidence_type(
+            evidence_type,
+            limit=limit,
+            evidence_path=evidence_path,
+            evidence_value=evidence_value,
+        )
+        return jsonify(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "count": len(records),
+                "workflows": [workflow_summary(record) for record in records],
+            }
+        )
+
     @app.get("/workflows/<workflow_id>")
     def get_workflow(workflow_id: str):
         workflow_id = _validated_workflow_id(workflow_id)
+        include_evidence = _include_evidence_requested()
         try:
             record = orchestrator.audit_store.read(workflow_id)
         except AuditNotFoundError as error:
             raise ApiError("not_found", "Workflow not found", 404) from error
-        return jsonify(workflow_view(record))
+        return jsonify(workflow_view(record, include_evidence=include_evidence))
 
     @app.post("/workflows/<workflow_id>/review")
     def submit_review(workflow_id: str):

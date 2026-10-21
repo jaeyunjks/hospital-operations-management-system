@@ -105,6 +105,7 @@ def create_app(config_object: type = Config) -> Flask:
                     "DELETE /api/shifts/<shift_id>",
                 ],
                 "recovery_workflows": [
+                    "GET    /api/recovery-workflows?shift_id=<shift_id>",
                     "GET    /api/recovery-workflows/<workflow_id>",
                     "POST   /api/recovery-workflows/<workflow_id>/review",
                 ],

@@ -528,7 +528,7 @@ _RECOVERY_FINAL_STATUSES = {
 }
 
 
-def _valid_recovery_workflow(value, *, started=False):
+def _valid_recovery_workflow(value, *, started=False, require_evidence=False):
     """Check the stable Student 5 workflow envelope before rendering it.
 
     The backend's MultiAgentClient performs the authoritative shared-contract
@@ -537,10 +537,12 @@ def _valid_recovery_workflow(value, *, started=False):
     """
     if not isinstance(value, dict):
         return False
-    expected = set(_RECOVERY_WORKFLOW_FIELDS)
-    if started:
-        expected.add("submitted_evidence")
-    if set(value) != expected:
+    require_evidence = require_evidence or started
+    fields = set(value)
+    if fields not in (
+        set(_RECOVERY_WORKFLOW_FIELDS),
+        set(_RECOVERY_WORKFLOW_FIELDS) | {"submitted_evidence"},
+    ):
         return False
     if (value.get("schema_version") != "1.0"
             or not isinstance(value.get("workflow_id"), str)
@@ -555,7 +557,9 @@ def _valid_recovery_workflow(value, *, started=False):
                 not isinstance(stage, dict)
                 or not isinstance(stage.get("output"), dict)):
             return False
-    if started:
+    if require_evidence and "submitted_evidence" not in value:
+        return False
+    if "submitted_evidence" in value:
         evidence = value.get("submitted_evidence")
         if (not isinstance(evidence, dict)
                 or evidence.get("evidence_type") != "student5_staffing_recovery"
@@ -564,6 +568,60 @@ def _valid_recovery_workflow(value, *, started=False):
                 or not isinstance(evidence.get("mcp_context"), dict)):
             return False
     return True
+
+
+def _valid_recovery_history(value, shift_id):
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"count", "workflows"}
+        or isinstance(value.get("count"), bool)
+        or not isinstance(value.get("count"), int)
+        or not isinstance(value.get("workflows"), list)
+        or value["count"] != len(value["workflows"])
+    ):
+        return False
+    expected = {
+        "workflow_id", "shift_id", "started_at", "status", "human_decision",
+    }
+    return all(
+        isinstance(item, dict)
+        and set(item) == expected
+        and item.get("shift_id") == shift_id
+        and isinstance(item.get("workflow_id"), str)
+        and bool(item["workflow_id"].strip())
+        and isinstance(item.get("started_at"), str)
+        and bool(item["started_at"].strip())
+        and item.get("status") in _RECOVERY_STATUSES
+        and (
+            item.get("human_decision") is None
+            or item.get("human_decision") in api_client.RECOVERY_REVIEW_DECISIONS
+        )
+        for item in value["workflows"]
+    )
+
+
+def _recovery_staff_display_names():
+    """Resolve privacy-safe staff refs for presentation only.
+
+    The returned mapping is never inserted into workflow evidence. If the
+    authorised directory read is unavailable, templates safely keep showing
+    the existing ``staff-N`` reference.
+    """
+
+    try:
+        payload = api_client.list_staff()
+    except (ForbiddenError, BackendTimeoutError, BackendUnavailableError, BackendError):
+        return {}
+    if not isinstance(payload, dict) or not isinstance(payload.get("staff"), list):
+        return {}
+    names = {}
+    for staff in payload["staff"]:
+        if not isinstance(staff, dict):
+            continue
+        staff_id, name = staff.get("staff_id"), staff.get("name")
+        if isinstance(staff_id, int) and isinstance(name, str) and name.strip():
+            names[f"staff-{staff_id}"] = name.strip()
+    return names
 
 
 def _recovery_stage_states(workflow):
@@ -1463,6 +1521,9 @@ def create_app() -> Flask:
         """Manager page anchored in Shift Planner and authoritative evidence."""
         evidence, error = None, None
         initial_workflow = None
+        workflow_evidence = None
+        history, history_error = [], None
+        staff_display_names = {}
         try:
             evidence = api_client.get_recovery_evidence(shift_id)
             if (not isinstance(evidence, dict)
@@ -1479,12 +1540,32 @@ def create_app() -> Flask:
         except (BackendUnavailableError, BackendError):
             error = "Recovery evidence is temporarily unavailable. Return to Shift Planner and try again."
 
+        if error is None:
+            staff_display_names = _recovery_staff_display_names()
+            try:
+                candidate_history = api_client.list_recovery_workflows(shift_id)
+                if _valid_recovery_history(candidate_history, shift_id):
+                    history = candidate_history["workflows"]
+                else:
+                    history_error = "Previous recovery runs could not be loaded safely."
+            except (ForbiddenError, BackendTimeoutError, BackendUnavailableError, BackendError):
+                history_error = "Previous recovery runs are temporarily unavailable."
+
         workflow_id = (request.args.get("workflow_id") or "").strip()
         if error is None and workflow_id:
             try:
                 candidate = api_client.get_recovery_workflow(workflow_id)
-                if _valid_recovery_workflow(candidate):
-                    initial_workflow = candidate
+                if _valid_recovery_workflow(candidate, require_evidence=True):
+                    candidate_evidence = candidate["submitted_evidence"]
+                    candidate_shift_id = (
+                        ((candidate_evidence.get("current_state") or {}).get("shift") or {})
+                        .get("shift_id")
+                    )
+                    if candidate_shift_id != shift_id:
+                        error = "The saved workflow does not belong to this shift."
+                    else:
+                        initial_workflow = candidate
+                        workflow_evidence = candidate_evidence
                 else:
                     error = "The saved workflow state could not be used safely."
             except ValidationFailed:
@@ -1501,6 +1582,8 @@ def create_app() -> Flask:
             "recovery_workflow.html", today=_today(), active="shifts",
             service_available=error is None, evidence=evidence, shift=shift,
             error=error, shift_id=shift_id, initial_workflow=initial_workflow,
+            workflow_evidence=workflow_evidence, recovery_history=history,
+            history_error=history_error, staff_display_names=staff_display_names,
             stage_states=(
                 _recovery_stage_states(initial_workflow)
                 if initial_workflow else None
@@ -1557,6 +1640,7 @@ def create_app() -> Flask:
                 retry_url=retry_url, retry_method="post")
 
         evidence = result["submitted_evidence"]
+        staff_display_names = _recovery_staff_display_names()
         workflow = {
             key: value for key, value in result.items()
             if key != "submitted_evidence"
@@ -1564,6 +1648,7 @@ def create_app() -> Flask:
         response = make_response(render_template(
             "partials/recovery_workspace.html", workflow=workflow,
             evidence=evidence, shift=evidence["current_state"].get("shift", {}),
+            staff_display_names=staff_display_names,
             stage_states=_recovery_stage_states(workflow), poll=True,
             max_comment_length=api_client.RECOVERY_REVIEW_COMMENT_MAX_LENGTH,
         ))

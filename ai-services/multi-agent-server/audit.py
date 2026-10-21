@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 from threading import RLock
-from typing import Any, Callable, Dict
+from typing import Any, Callable, Dict, List
 
 
 class AuditNotFoundError(FileNotFoundError):
@@ -67,6 +67,53 @@ class AuditStore:
                 ):
                     workflow_ids.append(workflow_id)
             return workflow_ids
+
+    def list_by_evidence_type(
+        self,
+        evidence_type: str,
+        *,
+        limit: int,
+        evidence_path: str | None = None,
+        evidence_value: str | None = None,
+    ) -> List[Dict[str, Any]]:
+        """Return recent valid audits for one explicitly requested integration.
+
+        Listing is deliberately scoped by ``evidence_type`` so the HTTP layer
+        never exposes an unrestricted audit directory. Invalid or unrelated
+        files are ignored rather than making history retrieval unavailable.
+        """
+
+        with self._lock:
+            if not self.reports_dir.is_dir():
+                return []
+            records = []
+            for path in self.reports_dir.glob("workflow-*.json"):
+                try:
+                    record = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, json.JSONDecodeError):
+                    continue
+                workflow_id = record.get("workflow_id") if isinstance(record, dict) else None
+                evidence = record.get("input_evidence") if isinstance(record, dict) else None
+                if (
+                    isinstance(workflow_id, str)
+                    and isinstance(evidence, dict)
+                    and evidence.get("evidence_type") == evidence_type
+                    and path == self.path_for(workflow_id)
+                ):
+                    if evidence_path is not None:
+                        current: Any = evidence
+                        for key in evidence_path.split("."):
+                            if not isinstance(current, dict) or key not in current:
+                                current = None
+                                break
+                            current = current[key]
+                        if isinstance(current, (dict, list)) or str(current) != evidence_value:
+                            continue
+                    records.append(record)
+            records.sort(
+                key=lambda record: record.get("timestamp", ""), reverse=True
+            )
+            return records[:limit]
 
     @staticmethod
     def _write(path: Path, record: Dict[str, Any]) -> None:
