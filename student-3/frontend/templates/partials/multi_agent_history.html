@@ -1,0 +1,18 @@
+{% set labels = {'in_progress': 'Agents working', 'awaiting_human_review': 'Awaiting human review', 'approved': 'Approved',
+                 'corrected': 'Corrected', 'partially_accepted': 'Partially accepted', 'rejected': 'Rejected', 'failed': 'Failed'} %}
+{% if error %}<p class="table__muted">Recent reviews could not be loaded: {{ error }}</p>
+{% elif not reviews %}<p class="table__muted">No reorder reviews yet.</p>
+{% else %}
+<div class="table-wrap"><table class="table table--zebra">
+  <thead><tr><th>Medicine</th><th>Started (UTC)</th><th>Status</th><th>Manager's comment</th><th></th></tr></thead>
+  <tbody>
+    {% for item in reviews %}<tr>
+      <td class="table__name">{{ item.medicine }}</td>
+      <td>{{ (item.started_at or '')[:16]|replace('T', ' ') }}</td>
+      <td><span class="badge {{ 'badge-warning' if item.status in ('awaiting_human_review', 'in_progress') else ('badge-danger' if item.status in ('rejected', 'failed') else 'badge-success') }}">{{ labels.get(item.status, item.status|replace('_', ' ')|capitalize) }}</span></td>
+      <td>{{ item.comment or '—' }}</td>
+      <td><button class="btn btn-ghost btn-compact" type="button" hx-get="/multi-agent/workflows/{{ item.workflow_id }}" hx-target="#multi-agent-result" hx-swap="innerHTML">Open</button></td>
+    </tr>{% endfor %}
+  </tbody>
+</table></div>
+{% endif %}

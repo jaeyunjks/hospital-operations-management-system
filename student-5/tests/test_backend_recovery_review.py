@@ -133,6 +133,23 @@ def test_manager_gets_pending_workflow_with_all_agent_state(client, monkeypatch)
     ]
 
 
+def test_cloud_multi_agent_switch_blocks_poll_and_review_before_network(
+        client, monkeypatch):
+    calls = install_adapter(monkeypatch)
+    client.application.config["MULTI_AGENT_ENABLED"] = False
+
+    poll = get(client)
+    submit = review(client, {"decision": "approve", "comment": "Reviewed."})
+
+    assert poll.status_code == 503
+    assert submit.status_code == 503
+    assert poll.get_json()["message"] == (
+        "The shared Multi-Agent workflow service is disabled."
+    )
+    assert submit.get_json()["message"] == poll.get_json()["message"]
+    assert calls == []
+
+
 def test_manager_history_filters_persisted_audits_to_selected_shift(
         client, monkeypatch):
     calls = install_adapter(monkeypatch, list_result={

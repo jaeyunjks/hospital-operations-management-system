@@ -240,6 +240,23 @@ def test_both_off_contacts_neither_fake(client, fake_mcp_server, fake_rag_server
     assert fake_rag_server.request_count == 0
 
 
+def test_ai_off_returns_fallback_without_network(monkeypatch):
+    from services import ollama_client
+
+    monkeypatch.setattr(ollama_client, "AI_ENABLED", False)
+    monkeypatch.setattr(
+        ollama_client.requests,
+        "post",
+        lambda *args, **kwargs: pytest.fail("disabled AI contacted Ollama"),
+    )
+
+    result = ollama_client.summarise_clinical_history(
+        "Documented clinical facts", "clinical"
+    )
+
+    assert result == ollama_client.FALLBACK_SUMMARY
+
+
 def test_switch_settings_read_separate_variables(monkeypatch):
     """At settings level: each function follows only its own variable."""
     monkeypatch.setenv("MCP_ENABLED", "true")

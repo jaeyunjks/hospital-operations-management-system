@@ -60,6 +60,22 @@ def test_falls_back_to_rules_when_the_model_is_unavailable(api, ai):
     assert result["suggestions"], "the coordinator must still see options"
 
 
+def test_ai_disabled_falls_back_without_network(api, monkeypatch):
+    import config
+    from services import ollama_client
+
+    monkeypatch.setattr(config, "AI_ENABLED", False)
+    monkeypatch.setattr(
+        ollama_client.requests,
+        "post",
+        lambda *args, **kwargs: pytest.fail("disabled AI contacted Ollama"),
+    )
+
+    result = suggest(api)
+
+    assert result["source"] == "fallback"
+
+
 def test_hallucinated_beds_are_discarded(api, ai):
     """A bed the model invented must never reach the coordinator."""
     ai.returns_json([{"bed_id": 999, "reason": "Invented bed"}])

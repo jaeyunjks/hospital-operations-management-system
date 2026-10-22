@@ -52,6 +52,10 @@ def recovery_evidence(shift_id: int):
 def start_recovery_workflow(shift_id: int):
     """Start the shared workflow using freshly assembled Student 5 evidence."""
     require_manager()
+    if not current_app.config["MULTI_AGENT_ENABLED"]:
+        raise MultiAgentUnavailableError(
+            "The shared Multi-Agent workflow service is disabled."
+        )
     operational_evidence = recovery_service.build_recovery_evidence(shift_id)
     rag_client = StaffShiftRAGClient(
         enabled=current_app.config["RAG_ENABLED"],

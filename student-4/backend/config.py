@@ -24,6 +24,7 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5:3b")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "30"))
 OLLAMA_RETRIES = int(os.getenv("OLLAMA_RETRIES", "2"))
+AI_ENABLED = os.getenv("AI_ENABLED", "true").strip().lower() == "true"
 
 # Domain vocabulary
 CARE_CATEGORIES = ("Surgical", "Short-term", "Long-term")

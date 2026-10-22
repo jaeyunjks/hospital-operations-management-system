@@ -49,8 +49,10 @@ Feature-to-student assignment is tracked in
 > frameworks or technologies should only be introduced if permitted by the
 > subject requirements and/or tutor.
 
-Cloud deployment will eventually target **Microsoft Azure** (preferred service:
-**Azure Container Apps**). Cloud implementation is out of scope for this setup.
+The Release 2 cloud foundation targets **Microsoft Azure Container Apps**. It
+uses one shared environment with uniquely named per-student services and a
+manual, scoped deployment workflow. See
+[`docs/release-2/azure-deployment.md`](docs/release-2/azure-deployment.md).
 
 ## Progressive releases
 

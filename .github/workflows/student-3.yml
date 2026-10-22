@@ -77,7 +77,14 @@ jobs:
           python -m pytest -q student-3/frontend/tests
 
       - name: Run all three suites in one command
-        run: python -m pytest -q student-3
+        run: python -m pytest -q student-3 --junitxml=test-results/student-3-unit.xml
+
+      - name: Upload the unit-test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-3-unit-junit
+          path: test-results/student-3-unit.xml
 
       - name: Run the shared MCP, RAG and loop tests this feature relies on
         # In-memory MCP sessions and a fake Ollama: no server is started.
@@ -170,21 +177,36 @@ jobs:
           print(f'Backend returned {len(medicines)} enriched medicines')
           PY
 
+      - name: Set up Python for the endpoint tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Post-commit endpoint tests (stock issue and purchase-order approval)
         # Two backend/API endpoint functions tested against the running container and a
         # freshly seeded database: POST /api/stock/issue (FEFO) and
-        # POST /api/purchase-orders/{id}/approve (manager approval). Standard library only.
+        # POST /api/purchase-orders/{id}/approve (manager approval). The JUnit report is
+        # the evidence read by the agentic loop's Testing Review mode.
         env:
           STUDENT3_BACKEND_URL: http://localhost:5300
         run: |
-          python3 -m unittest discover -v -s student-3/tests -p 'test_endpoints_ci.py' 2>&1 | tee /tmp/s3-endpoint-tests.txt
-          grep -q '^OK' /tmp/s3-endpoint-tests.txt
+          python -m pip install --quiet pytest
+          python -m pytest -v student-3/tests/test_endpoints_ci.py \
+            --junitxml=test-results/student-3-endpoints.xml 2>&1 | tee /tmp/s3-endpoint-tests.txt
+          test "${PIPESTATUS[0]}" -eq 0
           {
             echo '### Student 3 post-commit endpoint tests'
             echo '```'
             cat /tmp/s3-endpoint-tests.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the endpoint-test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-3-junit
+          path: test-results/student-3-endpoints.xml
 
       - name: Verify Multi-Agent is retained but disabled in the backend
         run: |

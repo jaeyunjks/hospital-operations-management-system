@@ -40,6 +40,10 @@ HISTORY_DISPLAY_LIMIT = 10
 
 
 def _client() -> MultiAgentClient:
+    if not current_app.config["MULTI_AGENT_ENABLED"]:
+        raise MultiAgentUnavailableError(
+            "The shared Multi-Agent workflow service is disabled."
+        )
     return MultiAgentClient(
         base_url=current_app.config["MULTI_AGENT_BASE_URL"],
         timeout=current_app.config["MULTI_AGENT_TIMEOUT"],

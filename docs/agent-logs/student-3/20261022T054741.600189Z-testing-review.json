@@ -1,0 +1,227 @@
+{
+  "schema_version": 1,
+  "release": "R2",
+  "mode": "testing",
+  "run_id": "20261022T054741.600189Z",
+  "model": "llama3.1:8b",
+  "ollama_url": "http://127.0.0.1:11434",
+  "plan": {
+    "students": [
+      "student-3"
+    ],
+    "evidence": {
+      "pre_commit": "docs/test-evidence/student-3/pre-commit-all-files.txt",
+      "junit": [
+        "student-3=docs/test-evidence/student-3/student-3-endpoints.xml"
+      ],
+      "workflow_runs": [
+        "student-3=docs/test-evidence/student-3/student-3-run.json"
+      ]
+    },
+    "checks": [
+      "T1 pre-commit report exists",
+      "T2 each required scan ran (Ruff security, detect-secrets, pip-audit or equivalents)",
+      "T3 every required scan passed",
+      "T4 every expected student has a CI/CD test report",
+      "T5 each student has at least 2 passing endpoint tests and no failures",
+      "T6 each student's student-x.yml run concluded successfully (when run evidence is given)"
+    ]
+  },
+  "pre_commit": {
+    "file": "docs/test-evidence/student-3/pre-commit-all-files.txt",
+    "hooks": [
+      {
+        "name": "Ruff security rules (S)",
+        "status": "passed",
+        "note": null,
+        "details": [],
+        "hook_id": null
+      },
+      {
+        "name": "detect-secrets (committed secrets)",
+        "status": "passed",
+        "note": null,
+        "details": [],
+        "hook_id": null
+      },
+      {
+        "name": "pip-audit (all service requirements)",
+        "status": "passed",
+        "note": null,
+        "details": [],
+        "hook_id": null
+      }
+    ]
+  },
+  "ci": {
+    "junit": {
+      "student-3": [
+        {
+          "file": "docs/test-evidence/student-3/student-3-endpoints.xml",
+          "tests": 6,
+          "passed": 6,
+          "failed": 0,
+          "error": 0,
+          "skipped": 0,
+          "cases": [
+            {
+              "name": "test_invalid_requests_are_rejected",
+              "classname": "student-3.tests.test_endpoints_ci.IssueStockEndpointTests",
+              "time": "0.046",
+              "outcome": "passed",
+              "message": null
+            },
+            {
+              "name": "test_issue_larger_than_stock_is_refused_and_changes_nothing",
+              "classname": "student-3.tests.test_endpoints_ci.IssueStockEndpointTests",
+              "time": "0.048",
+              "outcome": "passed",
+              "message": null
+            },
+            {
+              "name": "test_issue_takes_stock_from_the_earliest_expiring_batch",
+              "classname": "student-3.tests.test_endpoints_ci.IssueStockEndpointTests",
+              "time": "0.058",
+              "outcome": "passed",
+              "message": null
+            },
+            {
+              "name": "test_manager_approves_once_and_a_second_approval_is_refused",
+              "classname": "student-3.tests.test_endpoints_ci.ApprovePurchaseOrderEndpointTests",
+              "time": "0.025",
+              "outcome": "passed",
+              "message": null
+            },
+            {
+              "name": "test_only_a_pharmacy_manager_can_approve",
+              "classname": "student-3.tests.test_endpoints_ci.ApprovePurchaseOrderEndpointTests",
+              "time": "0.019",
+              "outcome": "passed",
+              "message": null
+            },
+            {
+              "name": "test_unknown_order_is_not_found",
+              "classname": "student-3.tests.test_endpoints_ci.ApprovePurchaseOrderEndpointTests",
+              "time": "0.004",
+              "outcome": "passed",
+              "message": null
+            }
+          ]
+        }
+      ]
+    },
+    "runs": {
+      "student-3": [
+        {
+          "file": "docs/test-evidence/student-3/student-3-run.json",
+          "workflowName": "student-3",
+          "conclusion": "success",
+          "status": "completed",
+          "headSha": "eabfd54",
+          "headBranch": "pharmacy-inventory-management",
+          "event": "push",
+          "url": "https://github.com/jaeyunjks/hospital-operations-management-system/actions/runs/39607118081",
+          "createdAt": "2026-10-21T13:20:20Z"
+        }
+      ]
+    }
+  },
+  "checks": [
+    {
+      "id": "T1",
+      "title": "Pre-commit report",
+      "severity": "required",
+      "passed": true,
+      "detail": "3 hook result(s) parsed"
+    },
+    {
+      "id": "T2",
+      "title": "Scan executed",
+      "severity": "required",
+      "passed": true,
+      "detail": "Ruff security rules (S) (passed)",
+      "subject": "ruff-security"
+    },
+    {
+      "id": "T3",
+      "title": "Scan passed",
+      "severity": "required",
+      "passed": true,
+      "detail": "passed",
+      "subject": "ruff-security"
+    },
+    {
+      "id": "T2",
+      "title": "Scan executed",
+      "severity": "required",
+      "passed": true,
+      "detail": "detect-secrets (committed secrets) (passed)",
+      "subject": "detect-secrets"
+    },
+    {
+      "id": "T3",
+      "title": "Scan passed",
+      "severity": "required",
+      "passed": true,
+      "detail": "passed",
+      "subject": "detect-secrets"
+    },
+    {
+      "id": "T2",
+      "title": "Scan executed",
+      "severity": "required",
+      "passed": true,
+      "detail": "pip-audit (all service requirements) (passed)",
+      "subject": "pip-audit"
+    },
+    {
+      "id": "T3",
+      "title": "Scan passed",
+      "severity": "required",
+      "passed": true,
+      "detail": "passed",
+      "subject": "pip-audit"
+    },
+    {
+      "id": "T4",
+      "title": "CI/CD test report",
+      "severity": "required",
+      "passed": true,
+      "detail": "docs/test-evidence/student-3/student-3-endpoints.xml",
+      "subject": "student-3"
+    },
+    {
+      "id": "T5",
+      "title": "Endpoint tests",
+      "severity": "required",
+      "passed": true,
+      "detail": "6 passed, 0 failed/error, 0 skipped",
+      "subject": "student-3"
+    },
+    {
+      "id": "T6",
+      "title": "student-x.yml run",
+      "severity": "required",
+      "passed": true,
+      "detail": "https://github.com/jaeyunjks/hospital-operations-management-system/actions/runs/39607118081",
+      "subject": "student-3"
+    }
+  ],
+  "adapt": {
+    "result": {
+      "assessment": "Based on the provided evidence, all required checks passed for student-3.",
+      "recommendations": [],
+      "next_action": "No further action is required.",
+      "outcome": "pass"
+    },
+    "error": null
+  },
+  "summary": {
+    "verdict": "pass",
+    "checks": 10,
+    "passed": 10,
+    "failed": [],
+    "warnings": [],
+    "notes": []
+  }
+}

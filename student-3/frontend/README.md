@@ -191,7 +191,8 @@ The dashboard's **Reorder decision review** panel lists the medicines that
 currently qualify for a reorder and runs a review through the backend
 (`/api/multi-agent/*`); the frontend never contacts the Multi-Agent Server.
 
-- **Run multi-agent review** shows the backend's evidence summary and one card
+- **Run multi-agent review** starts the review and the panel re-reads it every 3
+  seconds until the agents finish. It shows the backend's evidence summary and one card
   each for the Planner (goal and steps), Worker (options, eligibility, risks and
   proposal) and Reviewer (verdict, recommendation and risks), with the model
   used and whether it was live or a fallback.
@@ -199,6 +200,13 @@ currently qualify for a reorder and runs a review through the backend
   accept or Reject (a comment is required unless approving) and the recorded
   decision replaces the form. A Pharmacist sees "Waiting for a Pharmacy
   Manager's decision" and the review route returns 403.
+- A "Context given to the agents" box shows the MCP purchase-order alerts and
+  the RAG reorder rules (with sources) that were added to the evidence.
+- **Recent reviews** (`/multi-agent/history`) lists the latest reviews with their
+  status and the manager's comment; **Open** reloads one into the panel. The table
+  refreshes when a review finishes or a decision is recorded.
+- A missing comment for Correct, Partially accept or Reject keeps the results and
+  the form on screen with the reason.
 - The panel states that no purchase order is created or changed; disabled or
   unreachable Multi-Agent shows the backend's error.
 

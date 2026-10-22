@@ -17,6 +17,7 @@ import time
 from typing import Any
 import urllib.error
 import urllib.request
+import urllib.parse
 import uuid
 
 from services.http_url import http_url
@@ -102,6 +103,27 @@ def _stage(stage: Any) -> dict[str, Any] | None:
     }
 
 
+def _evidence_summary(evidence: Any) -> dict[str, Any] | None:
+    """Rebuild the backend's evidence summary from the evidence stored with the workflow."""
+    if not isinstance(evidence, dict):
+        return None
+    # Facts are top-level keys (earlier records nested them under "current_state").
+    state = evidence["current_state"] if isinstance(evidence.get("current_state"), dict) else evidence
+    if "medicine" not in state:
+        return None
+    options = evidence.get("options") if isinstance(evidence.get("options"), list) else []
+    suggested = next((option.get("outcomes", {}).get("metric_delta") for option in options
+                      if isinstance(option, dict) and option.get("id") == "order_suggested"), None)
+    return {"medicine_name": state.get("medicine"), "supplier_name": state.get("supplier"),
+            "available_quantity": state.get("available_units"),
+            "near_expiry_quantity": state.get("near_expiry_units"),
+            "open_order_quantity": state.get("open_order_units"),
+            "daily_usage_rate": state.get("daily_usage_rate"), "lead_time_days": state.get("lead_time_days"),
+            "suggested_quantity": suggested, "unit_price": state.get("unit_price"),
+            "mcp_order_alerts": evidence.get("mcp_order_alerts") if isinstance(evidence.get("mcp_order_alerts"), dict) else None,
+            "rag_reorder_policy": evidence.get("rag_reorder_policy") if isinstance(evidence.get("rag_reorder_policy"), dict) else None}
+
+
 def _project(body: Any) -> dict[str, Any]:
     """Validate the documented workflow view and keep only display fields."""
     if not isinstance(body, dict) or not valid_workflow_id(body.get("workflow_id")):
@@ -120,6 +142,7 @@ def _project(body: Any) -> dict[str, Any]:
         **{name: _stage(body.get(name)) for name in STAGES},
         "human_review": review,
         "final_result": body.get("final_result") if isinstance(body.get("final_result"), dict) else None,
+        "evidence_summary": _evidence_summary(body.get("submitted_evidence")),
     }
 
 
@@ -130,7 +153,7 @@ def _call(action: str, method: str, path: str, payload: dict[str, Any] | None = 
     started = time.perf_counter()
     try:
         status, body = _request(method, path, payload, timeout)
-        if status in (200, 201):
+        if status in (200, 201, 202):  # 202: accepted; the agents run in the background
             result = WorkflowResult(True, "ok", workflow=_project(body))
         else:
             detail = body.get("error", {}) if isinstance(body, dict) else {}
@@ -164,13 +187,47 @@ def _call(action: str, method: str, path: str, payload: dict[str, Any] | None = 
 
 
 def start(medicine_name: str, evidence: dict[str, Any]) -> WorkflowResult:
-    """Run Planner, Worker and Reviewer; the workflow then waits for human review."""
-    return _call("start", "POST", "/workflows", {"task": TASK_PREFIX + medicine_name, "evidence": evidence})
+    """Start a workflow. The server accepts it at once (``in_progress``) and runs Planner,
+    Worker and Reviewer in the background; poll :func:`get` until ``awaiting_human_review``."""
+    return _call("start", "POST", "/workflows", {"task": TASK_PREFIX + medicine_name, "evidence": evidence},
+                 timeout=30)
 
 
 def get(workflow_id: str) -> WorkflowResult:
-    """Read one pharmacy workflow; callers validate the id first."""
-    return _call("get", "GET", f"/workflows/{workflow_id}", timeout=10)
+    """Read one pharmacy workflow, including the evidence it was started with."""
+    return _call("get", "GET", f"/workflows/{workflow_id}?include_evidence=true", timeout=10)
+
+
+HISTORY_EVIDENCE_TYPE = "student3_reorder_decision"
+MAX_HISTORY = 20
+
+
+def history(limit: int = 10) -> dict[str, Any]:
+    """Recent pharmacy reorder reviews, newest first, with their medicine and human decision."""
+    if not MULTI_AGENT_ENABLED:
+        return {"ok": False, "outcome": "disabled", "error": "Multi-Agent mode is disabled", "reviews": []}
+    query = urllib.parse.urlencode({"evidence_type": HISTORY_EVIDENCE_TYPE, "limit": max(1, min(limit, MAX_HISTORY))})
+    try:
+        status, body = _request("GET", f"/workflows?{query}", timeout=10)
+    except (urllib.error.URLError, OSError, json.JSONDecodeError):
+        return {"ok": False, "outcome": "unavailable", "error": "Multi-Agent Server is unavailable", "reviews": []}
+    listed = body.get("workflows") if status == 200 and isinstance(body, dict) else None
+    if not isinstance(listed, list):
+        return {"ok": False, "outcome": "unavailable", "error": "Multi-Agent Server returned an invalid response",
+                "reviews": []}
+    reviews = []
+    for item in listed:
+        workflow_id = item.get("workflow_id") if isinstance(item, dict) else None
+        if not valid_workflow_id(workflow_id):
+            continue
+        detail = get(workflow_id)  # also confirms the workflow is a pharmacy one
+        if not detail.ok:
+            continue
+        review = detail.workflow["human_review"] or {}
+        reviews.append({"workflow_id": workflow_id, "medicine": detail.workflow["medicine"],
+                        "status": detail.workflow["status"], "started_at": item.get("started_at"),
+                        "decision": review.get("decision"), "comment": review.get("comments")})
+    return {"ok": True, "outcome": "ok", "reviews": reviews}
 
 
 def review(workflow_id: str, decision: str, comment: str) -> WorkflowResult:

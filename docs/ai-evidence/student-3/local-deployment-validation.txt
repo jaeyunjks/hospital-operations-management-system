@@ -1,0 +1,111 @@
+# Student 3 - local deployment validation (Release 2)
+# 2026-10-22T05:53:29Z
+# Integrated application in Docker Compose (16 containers); AI-Mode (Ollama), MCP, RAG and the
+# Multi-Agent Server run on the host, each in its own terminal, never as Compose services.
+# Started with: STUDENT3_MCP_ENABLED=true STUDENT3_RAG_ENABLED=true STUDENT3_MULTI_AGENT_ENABLED=true docker compose up -d
+
+## Terminals: host-local AI services
+Terminal 1  Ollama (AI-Mode runtime)        port 11434  models: nomic-embed-text:latest, llama3.2:3b, deepseek-r1:8b, llama3.1:8b, qwen2.5:0.5b
+Terminal 2  HOMS_MCP_HOST=0.0.0.0 HOMS_MCP_ALLOW_DOCKER_HOST=true python3 ai-services/mcp-server/server.py            port 8000
+Terminal 3  HOMS_RAG_HOST=0.0.0.0 HOMS_RAG_ALLOW_DOCKER_HOST=true python3 ai-services/rag-server/server.py            port 8100
+Terminal 4  HOMS_MULTI_AGENT_HOST=0.0.0.0 HOMS_MULTI_AGENT_ALLOW_DOCKER_HOST=true python3 ai-services/multi-agent-server/api.py \
+              --model-mode auto --max-model-attempts 1 --planner-model llama3.1:8b --worker-model llama3.2:3b --reviewer-model llama3.1:8b   port 8200
+Terminal 5  docker compose (below)
+
+$ lsof -iTCP -sTCP:LISTEN (host services)
+  port 11434 ollama pid 1573
+  port 8000  Python pid 20393
+  port 8100  Python pid 20395
+  port 8200  Python pid 20397
+
+## Terminal 5: docker compose ps
+SERVICE              STATUS                   PORTS
+homs-homepage        Up 4 minutes (healthy)   3000->80/tcp
+student-2-backend    Up 4 minutes (healthy)   5200->5200/tcp
+student-2-database   Up 4 minutes (healthy)   6200->6200/tcp
+student-2-frontend   Up 4 minutes (healthy)   3200->3200/tcp
+student5-backend     Up 4 minutes (healthy)   5500->5500/tcp
+student5-database    Up 4 minutes (healthy)   6500->6500/tcp
+student5-frontend    Up 4 minutes (healthy)   3500->3500/tcp
+student-3-backend    Up 4 minutes (healthy)   5300->5300/tcp
+student-3-database   Up 4 minutes (healthy)   6300->6300/tcp
+student-3-frontend   Up 4 minutes (healthy)   3300->3300/tcp
+student-4-backend    Up 4 minutes (healthy)   5400->5400/tcp
+student-4-database   Up 4 minutes (healthy)   6400->6400/tcp
+student-4-frontend   Up 4 minutes (healthy)   3400->3400/tcp
+student-1-backend    Up 4 minutes (healthy)   5100->5100/tcp
+student-1-database   Up 4 minutes (healthy)   6100->6100/tcp
+student-1-frontend   Up 4 minutes (healthy)   3100->3100/tcp
+AI services defined in Compose: 0 (must be 0)
+
+## Host service health
+MCP tools:
+  - homs_echo: HOMS Echo  (arguments: message)
+  - homs_ward_occupancy_status: HOMS Ward Occupancy Status  (arguments: ward)
+  - homs_pharmacy_stock_alerts: HOMS Pharmacy Stock Alerts  (arguments: alert_type)
+  - homs_pharmacy_order_alerts: HOMS Pharmacy Order Alerts  (arguments: alert_type)
+  - homs_open_care_tasks: HOMS Open Care Tasks  (arguments: admission_id)
+  - homs_staffing_recovery_context: HOMS Staffing Recovery Context  (arguments: shift_id)
+RAG /health: ok | 27 documents, 121 chunks
+Multi-Agent /health: {"status":"ok","service":"multi-agent-server"}
+
+## Student 3 backend container: connections to the host services
+  AI_ENABLED=true
+  MCP_ENABLED=true
+  MCP_SERVER_URL=http://host.docker.internal:8000/mcp
+  MULTI_AGENT_ENABLED=true
+  MULTI_AGENT_SERVER_URL=http://host.docker.internal:8200
+  OLLAMA_URL=http://host.docker.internal:11434
+  RAG_ENABLED=true
+  RAG_SERVER_URL=http://host.docker.internal:8100
+
+## Release 0 retained: database, backend and AI-Mode
+database /health: {"status":"healthy"}
+GET /api/medicines (first record): {'name': 'Paracetamol 500mg', 'available_quantity': 20, 'is_low_stock': True, 'supplier_name': 'MedSupply Australia'} | total 132
+AI-Mode /api/ai/health: enabled True | reachable True | model llama3.2:3b available True
+
+## Release 1 retained: MCP and RAG through the pharmacy backend
+POST /api/mcp/call homs_pharmacy_order_alerts: ok | counts {'ai_suggested_pending': 9, 'approved': 20, 'ordered': 12, 'overdue': 22, 'pending_approval': 16}
+POST /api/rag/ask 'Who can write off an expired batch?': answered high | ['Batch Expiry and Write-Off > Writing off a batch']
+
+## Release 2: one multi-agent reorder review through the frontend (port 3300)
+Medicine picker (first options): Morphine 10mg/mL (034) — 0 in stock, suggested order 60;Ciprofloxacin 500mg (019) — 10 in stock, suggested order 10;Insulin Regular 100 IU/mL (020) — 10 in stock, suggested order 10
+POST /multi-agent/start (medicine_id=34) -> workflow 897b2780-5a15-4148-bf91-cc7bfd6ff704 after 6s
+Context given to the agents: Context given to the agents MCP purchase-order alerts: 22 overdue deliveries and 16 orders awaiting approval across the pharmacy. No listed open orders for this medicine. RAG: How is the suggested reorder quantity calculated? High confidence The suggested reorder quantity is calculated by subtracting the following from the coverage target: 1. Usable stock (stock expiring within the supplier's lead time is treated as unusable) 2. Any quantity already on open orders The coverage target is the larger of the reorder level and the daily usage rate multiplied by (lead time + 7 days). [S1] Source: Reordering and Purchase Orders › Suggested reorder quantity RAG: Who must approve a purchase order? High confidence According to [S1], every purchase order, including AI-suggested and agent-proposed orders, needs a Pharmacy Manager's approval before it can be ordered. Source: Reordering and Purchase O
+Polling GET /multi-agent/workflows/897b2780-5a15-4148-bf91-cc7bfd6ff704 every 3 s:
+  +6s  Agents working…, stages finished: 0
+  +49s  Agents working…, stages finished: 1
+  +101s  Agents working…, stages finished: 2
+  +212s  Awaiting human review, stages finished: 3
+Stage sources: Rule-based fallback;Rule-based fallback;Rule-based fallback
+Planner/Worker/Reviewer (rendered): 1. Planner Rule-based fallback Pharmacy reorder decision: Morphine 10mg/mL (034) Measure the gap between the current and target state. Evaluate each supplied option against every hard constraint. Compare eligible options using supplied risks and policy context. Propose a reversible recommendation without executing a mutation. Send the proposal and evidence to an independent reviewer. 2. Worker Rule-based fallback Proposal: Order half, 30 units ($442.50) Option Eligible Risks Order the suggested 60 units ($885.00) Yes Order value $885.00 is above the $500.00 per-cycle cap used by the scheduled agent. Order half, 30 units ($442.50) Yes Projected stock of 30 units stays below the coverage target of 60. Do not order now No Stock stays at 0 units, below the coverage target of 60. Passed hard constraint: supplier_active Passed hard constraint: orders_stock 3. Reviewer Rule-based fallback Verdict: Changes required Recommendation: Review the validated Worker proposal and authoritative evidence before action. Risks Demand beyond the last 30 days of issues is not known. No stock was issued in the last 30 days, so the usage rate may underestimate demand. The proposal does not fully reach the 
+Pharmacist view of the same workflow: Waiting for a Pharmacy Manager's decision
+Pharmacist tries to decide -> HTTP 403
+Pharmacy Manager records Correct without a comment: Add a comment explaining your decision; it is required for Correct, Partially accept and Reject (form and results stay on screen)
+Pharmacy Manager records the decision: 4. Human review Corrected by the Pharmacy Manager: “Order a smaller quantity and chase the overdue delivery first.” Recorded 2026-10-22 05:57 UTC. No purchase order was created or changed; place approved orders from the Purchase Orders page.
+Recent reviews table:  | Medicine | Started (UTC) | Status | Manager's comment | Morphine 10mg/mL (034) | 2026-10-22 05:53 | Corrected | Order a smaller quantity and chase the overdue delivery first. | Open | Morphine 10mg/mL (034) | 2026-10-22 05:50 | Corrected | Order a smaller quantity and chase the overdue delivery first. | Open | 
+
+## Log lines from each terminal for this run
+Terminal 5 (s3-backend container):
+  [MULTI-AGENT] get outcome=ok status=in_progress duration_ms=5 server=http://host.docker.internal:8200
+  [MULTI-AGENT] get outcome=ok status=awaiting_human_review duration_ms=7 server=http://host.docker.internal:8200
+  [MULTI-AGENT] get outcome=ok status=awaiting_human_review duration_ms=4 server=http://host.docker.internal:8200
+  [MULTI-AGENT] get outcome=ok status=awaiting_human_review duration_ms=3 server=http://host.docker.internal:8200
+  [MULTI-AGENT] get outcome=ok status=awaiting_human_review duration_ms=2 server=http://host.docker.internal:8200
+  [MULTI-AGENT] review outcome=ok status=corrected duration_ms=2 server=http://host.docker.internal:8200
+  [MULTI-AGENT] get outcome=ok status=corrected duration_ms=2 server=http://host.docker.internal:8200
+  [MULTI-AGENT] get outcome=ok status=corrected duration_ms=1 server=http://host.docker.internal:8200
+Terminal 2 (MCP server):
+  INFO:     127.0.0.1:58732 - "POST /mcp HTTP/1.1" 200 OK
+  INFO:     127.0.0.1:58754 - "POST /mcp HTTP/1.1" 200 OK
+  INFO:     127.0.0.1:58754 - "POST /mcp HTTP/1.1" 200 OK
+  INFO:     127.0.0.1:58754 - "POST /mcp HTTP/1.1" 200 OK
+Terminal 3 (RAG server):
+  [RAG] query feature=student-3 status=answered confidence=high top_score=0.8194 cited=1 reason=None duration_ms=2067
+  [RAG] query feature=student-3 status=answered confidence=high top_score=0.842 cited=1 reason=None duration_ms=3423
+  [RAG] query feature=student-3 status=answered confidence=high top_score=0.8429 cited=1 reason=None duration_ms=3793
+  [RAG] query feature=student-3 status=answered confidence=high top_score=0.8194 cited=1 reason=None duration_ms=2824
+Terminal 4 (Multi-Agent server):
+  127.0.0.1 - - [22/Oct/2026 16:53:42] "POST /workflows HTTP/1.1" 202 -
+  127.0.0.1 - - [22/Oct/2026 16:57:08] "POST /workflows/897b2780-5a15-4148-bf91-cc7bfd6ff704/review HTTP/1.1" 200 -
+  ...and 72 polling requests for this workflow

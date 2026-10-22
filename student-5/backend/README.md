@@ -294,6 +294,7 @@ Frontend-specific timeout overrides are optional:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
+| `MULTI_AGENT_ENABLED` | `true` | Enables the established local Staffing Recovery workflow; the cloud/CI baseline sets it false |
 | `MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8200` | Local shared Multi-Agent API base URL |
 | `MULTI_AGENT_TIMEOUT` | `600` | Deadline for each short shared API request; model stages run asynchronously |
 | `RAG_ENABLED` | `false` | Enables shared policy enrichment; failure degrades explicitly |
@@ -503,6 +504,7 @@ curl -s http://127.0.0.1:5500/health
 | `RAG_ENABLED` | `false` | Enables shared policy enrichment and `/api/rag/ask` |
 | `RAG_SERVER_URL` | `http://127.0.0.1:8100` | Shared local RAG API |
 | `RAG_TIMEOUT` | `100` | RAG request deadline in seconds |
+| `MULTI_AGENT_ENABLED` | `true` | Enables the shared workflow client; explicitly false in the cloud baseline |
 | `MULTI_AGENT_BASE_URL` | `http://127.0.0.1:8200` | Shared local Multi-Agent API |
 | `MULTI_AGENT_TIMEOUT` | `600` | Bounded end-to-end workflow deadline in seconds |
 

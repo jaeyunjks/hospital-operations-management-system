@@ -96,7 +96,7 @@ SERVICES: List[Dict[str, Any]] = [
              "MULTI_AGENT_ENABLED": "false", "FLASK_DEBUG": "0"}},
     {"app": "s3-web", "student": "student-3", "role": "frontend", "port": 3300, "ingress": "external",
      "context": ".", "dockerfile": "student-3/frontend/Dockerfile", "health": "/",
-     "secrets": {"flask-secret": "FLASK_SECRET_KEY"},  # pragma: allowlist secret (names only)
+     "secrets": {"flask-secret": "FLASK_SECRET_KEY"},  # pragma: allowlist secret
      "env": {"PORT": "3300", "BACKEND_API_URL": "{s3-api}", "BACKEND_API_TIMEOUT": "60", "FLASK_DEBUG": "0"}},
 
     # --- student-4: Room & Bed ---------------------------------------------
@@ -123,7 +123,7 @@ SERVICES: List[Dict[str, Any]] = [
              "MULTI_AGENT_BASE_URL": AI_OFF}},
     {"app": "s5-web", "student": "student-5", "role": "frontend", "port": 3500, "ingress": "external",
      "context": ".", "dockerfile": "student-5/frontend/Dockerfile", "health": "/",
-     "secrets": {"homs-secret": "HOMS_SECRET_KEY"},  # pragma: allowlist secret (names only)
+     "secrets": {"homs-secret": "HOMS_SECRET_KEY"},  # pragma: allowlist secret
      "env": {"FRONTEND_PORT": "3500", "STAFF_SHIFT_API_URL": "{s5-api}", "STAFF_SHIFT_API_TIMEOUT": "15"}},
 
     # --- shared homepage ----------------------------------------------------

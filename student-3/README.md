@@ -58,13 +58,19 @@ agentic loop's RAG validation mode (`ai-services/agentic-loop/rag_loop.py`).
 
 | Feature | Frontend | Backend | Shared server |
 |---|---|---|---|
-| **Reorder decision review** — Planner → Worker → Reviewer → human review for one low-stock medicine | "Reorder decision review" panel on the dashboard | `GET /api/multi-agent/status`, `GET /api/multi-agent/candidates`, `POST /api/multi-agent/reorder-workflows`, `GET /api/multi-agent/workflows/{id}`, `POST /api/multi-agent/workflows/{id}/review` | Multi-Agent Server (8200) |
+| **Reorder decision review** — Planner → Worker → Reviewer → human review for one low-stock medicine, with live MCP order alerts and RAG reorder rules as context, and a list of recent reviews | "Reorder decision review" panel and "Recent reviews" table on the dashboard | `GET /api/multi-agent/status`, `GET /api/multi-agent/candidates`, `POST /api/multi-agent/reorder-workflows`, `GET /api/multi-agent/workflows`, `GET /api/multi-agent/workflows/{id}`, `POST /api/multi-agent/workflows/{id}/review` | Multi-Agent Server (8200), plus MCP (8000) and RAG (8100) for context |
 
 - The backend calculates every figure (stock, expiring units, open orders, usage, suggested
   quantity) and sends them to the Multi-Agent Server as evidence with three options:
-  order the suggested quantity, order half, or do not order. The Planner plans the check, the
+  order the suggested quantity, order half, or do not order. It also adds Release 1 context: the
+  pharmacy's live purchase-order alerts from the shared MCP server (`homs_pharmacy_order_alerts`;
+  an overdue order for the same medicine becomes a risk) and the reorder and approval rules from
+  the shared RAG server, with their sources. If MCP or RAG is off, the evidence says so and the
+  review still runs. The Planner plans the check, the
   Worker evaluates the options, the Reviewer checks the proposal for risks, and the workflow
   then waits for a human decision.
+- "Recent reviews" lists the latest pharmacy reviews with their status and the manager's comment;
+  each can be reopened. It refreshes when a review finishes or a decision is recorded.
 - Only a Pharmacy Manager can record the decision (approve, correct, partially accept or
   reject; a comment is required unless approving). Pharmacists can start a review and read it.
 - Boundaries: the backend only reads or reviews workflows it started (task prefix
@@ -78,9 +84,11 @@ agentic loop's RAG validation mode (`ai-services/agentic-loop/rag_loop.py`).
 - Post-commit endpoint tests: `student-3/tests/test_endpoints_ci.py` tests
   `POST /api/stock/issue` and `POST /api/purchase-orders/{id}/approve` against the running
   backend container in `student-3.yml`.
-- Pre-commit security scans (Ruff security rules, detect-secrets, pip-audit): Flask upgraded to
-  3.1.3 for a known vulnerability; see
-  [`docs/ai-evidence/student-3/pre-commit-security-scan.txt`](../docs/ai-evidence/student-3/pre-commit-security-scan.txt).
+- Pre-commit security scans (Ruff security rules, detect-secrets, pip-audit) run on every commit
+  through the team configuration (root `.pre-commit-config.yaml`, `ruff.toml`; see `SECURITY.md`).
+  Flask was upgraded to 3.1.3 for a known vulnerability; see
+  [`docs/ai-evidence/student-3/pre-commit-security-scan.txt`](../docs/ai-evidence/student-3/pre-commit-security-scan.txt)
+  and [`docs/ai-evidence/student-3/pre-commit-group-hooks.txt`](../docs/ai-evidence/student-3/pre-commit-group-hooks.txt).
 
 ## Run
 
@@ -100,7 +108,7 @@ HOMS_MCP_HOST=0.0.0.0 HOMS_MCP_ALLOW_DOCKER_HOST=true python3 ai-services/mcp-se
 ```
 
 ```bash
-HOMS_MULTI_AGENT_HOST=0.0.0.0 HOMS_MULTI_AGENT_ALLOW_DOCKER_HOST=true python3 ai-services/multi-agent-server/api.py --model-mode ollama --planner-model llama3.1:8b --worker-model llama3.2:3b --reviewer-model llama3.1:8b
+HOMS_MULTI_AGENT_HOST=0.0.0.0 HOMS_MULTI_AGENT_ALLOW_DOCKER_HOST=true python3 ai-services/multi-agent-server/api.py --model-mode auto --max-model-attempts 1 --planner-model llama3.1:8b --worker-model llama3.2:3b --reviewer-model llama3.1:8b
 ```
 
 ```bash
@@ -144,11 +152,20 @@ Multi-Agent are present but disabled in both the backend and the dashboard.
 - MCP server terminal validation: [`docs/ai-evidence/mcp-server/terminal-validation.txt`](../docs/ai-evidence/mcp-server/terminal-validation.txt)
 - RAG server terminal validation: [`docs/ai-evidence/rag-server/terminal-validation.txt`](../docs/ai-evidence/rag-server/terminal-validation.txt)
 - Pre-commit security scans: [`docs/ai-evidence/student-3/pre-commit-security-scan.txt`](../docs/ai-evidence/student-3/pre-commit-security-scan.txt)
+  and the team hooks on Student 3 files: [`docs/ai-evidence/student-3/pre-commit-group-hooks.txt`](../docs/ai-evidence/student-3/pre-commit-group-hooks.txt)
+- Post-commit endpoint tests: [`docs/ai-evidence/student-3/post-commit-endpoint-tests.txt`](../docs/ai-evidence/student-3/post-commit-endpoint-tests.txt);
+  CI uploads the JUnit report as the `student-3-junit` artefact for the Testing Review mode
 - Multi-Agent workflow audit (Planner → Worker → Reviewer → human review): [`reports/multi-agent/`](../reports/multi-agent/) (task `Pharmacy reorder decision: …`)
+- Multi-Agent Workflow Review of that workflow (9/9 checks): [`docs/agent-logs/student-3/`](../docs/agent-logs/student-3/) (`*-multi-agent-review.*`)
+- Testing Review (10/10): [`docs/agent-logs/student-3/`](../docs/agent-logs/student-3/) (`*-testing-review.*`), inputs in [`docs/test-evidence/student-3/`](../docs/test-evidence/student-3/)
+- Local deployment with every server in its own terminal and one full review: [`docs/ai-evidence/student-3/local-deployment-validation.txt`](../docs/ai-evidence/student-3/local-deployment-validation.txt)
 
 ## Known limitations
 
-- A multi-agent review takes about 1–2 minutes because three local models run in turn;
+- The Multi-Agent Server accepts a review at once and runs the agents in the background; the
+  dashboard re-reads the workflow every 3 seconds and shows each agent as it finishes (a few
+  minutes on a laptop). In `auto` mode an agent whose live answer fails the server's checks is
+  replaced by a rule-based fallback, labelled "Rule-based fallback" on the card.
   `deepseek-r1:8b` as Reviewer was too slow and returned invalid JSON on a laptop, so the
   demo uses `llama3.1:8b`.
 - Approving a multi-agent review records the decision only; the order is placed from the

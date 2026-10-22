@@ -1,0 +1,22 @@
+# Student 3 - group pre-commit hooks on Student 3 files (Release 2)
+# 2026-10-21T12:53:38Z
+# Configuration: root .pre-commit-config.yaml and ruff.toml (team-wide, added by Student 5).
+# Scope: 173 tracked files (47 Python) - student-3/, ai-services/rag-server/, the pharmacy MCP
+# tools, ai-services/agentic-loop/rag_loop.py, docker-compose.yml and .github/workflows/student-3.yml.
+
+$ pre-commit run ruff-security --files <Student 3 files>
+Ruff security rules (S)..................................................Passed
+(exit 0)
+
+$ pre-commit run detect-secrets --files <Student 3 files>
+Detect committed secrets.................................................Passed
+(exit 0)
+
+$ pip-audit --strict --requirement student-3/backend/requirements.txt
+No known vulnerabilities found
+$ pip-audit --strict --requirement student-3/database/requirements.txt
+No known vulnerabilities found
+$ pip-audit --strict --requirement student-3/frontend/requirements.txt
+No known vulnerabilities found
+$ pip-audit --strict --requirement ai-services/rag-server/requirements.txt
+No known vulnerabilities found

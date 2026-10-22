@@ -1,0 +1,1054 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "897b2780-5a15-4148-bf91-cc7bfd6ff704",
+  "timestamp": "2026-10-22T05:53:42.914Z",
+  "task": "Pharmacy reorder decision: Morphine 10mg/mL (034)",
+  "input_evidence": {
+    "evidence_type": "student3_reorder_decision",
+    "scenario": "Pharmacy reorder decision",
+    "medicine": "Morphine 10mg/mL (034)",
+    "supplier": "Central Hospital Supply",
+    "available_units": 0,
+    "near_expiry_units": 0,
+    "open_order_units": 0,
+    "daily_usage_rate": 0.0,
+    "lead_time_days": 9,
+    "unit_price": 14.75,
+    "objective": {
+      "metric": "usable_stock_units",
+      "current": 0,
+      "target": 60,
+      "unit": "units"
+    },
+    "options": [
+      {
+        "id": "order_suggested",
+        "label": "Order the suggested 60 units ($885.00)",
+        "attributes": {
+          "supplier_active": true,
+          "quantity_positive": true
+        },
+        "outcomes": {
+          "metric_delta": 60
+        },
+        "risk_indicators": [
+          "Order value $885.00 is above the $500.00 per-cycle cap used by the scheduled agent."
+        ]
+      },
+      {
+        "id": "order_half",
+        "label": "Order half, 30 units ($442.50)",
+        "attributes": {
+          "supplier_active": true,
+          "quantity_positive": true
+        },
+        "outcomes": {
+          "metric_delta": 30
+        },
+        "risk_indicators": [
+          "Projected stock of 30 units stays below the coverage target of 60."
+        ]
+      },
+      {
+        "id": "defer",
+        "label": "Do not order now",
+        "attributes": {
+          "supplier_active": true,
+          "quantity_positive": false
+        },
+        "outcomes": {
+          "metric_delta": 0
+        },
+        "risk_indicators": [
+          "Stock stays at 0 units, below the coverage target of 60."
+        ]
+      }
+    ],
+    "constraints": [
+      {
+        "id": "supplier_active",
+        "scope": "option",
+        "type": "hard",
+        "field": "supplier_active",
+        "operator": "equals",
+        "value": true,
+        "description": "The supplier must be active."
+      },
+      {
+        "id": "orders_stock",
+        "scope": "option",
+        "type": "hard",
+        "field": "quantity_positive",
+        "operator": "equals",
+        "value": true,
+        "description": "The option must order a positive quantity."
+      },
+      {
+        "id": "value_review",
+        "scope": "workflow",
+        "type": "policy",
+        "description": "Large order values need the Pharmacy Manager's attention."
+      },
+      {
+        "id": "manager_approval",
+        "scope": "workflow",
+        "type": "approval",
+        "description": "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+      }
+    ],
+    "unknowns": [
+      "Demand beyond the last 30 days of issues is not known.",
+      "No stock was issued in the last 30 days, so the usage rate may underestimate demand."
+    ],
+    "evidence_mode": "live_pharmacy_data",
+    "mcp_order_alerts": {
+      "source": "MCP tool homs_pharmacy_order_alerts",
+      "pharmacy_overdue_deliveries": 22,
+      "pharmacy_pending_approval": 16,
+      "listed_orders_for_this_medicine": [],
+      "note": "MCP lists up to 10 orders per category; counts cover all orders."
+    },
+    "rag_reorder_policy": {
+      "source": "RAG knowledge base (student-3)",
+      "answers": [
+        {
+          "question": "How is the suggested reorder quantity calculated?",
+          "answer": "The suggested reorder quantity is calculated by subtracting the following from the coverage target: \n\n1. Usable stock (stock expiring within the supplier's lead time is treated as unusable)\n2. Any quantity already on open orders\n\nThe coverage target is the larger of the reorder level and the daily usage rate multiplied by (lead time + 7 days). [S1]",
+          "confidence": "high",
+          "citations": [
+            "Reordering and Purchase Orders > Suggested reorder quantity"
+          ]
+        },
+        {
+          "question": "Who must approve a purchase order?",
+          "answer": "According to [S1], every purchase order, including AI-suggested and agent-proposed orders, needs a Pharmacy Manager's approval before it can be ordered.",
+          "confidence": "high",
+          "citations": [
+            "Reordering and Purchase Orders > Human approval"
+          ]
+        }
+      ]
+    }
+  },
+  "planner": {
+    "started_at": "2026-10-22T05:53:42.917Z",
+    "completed_at": "2026-10-22T05:54:23.016Z",
+    "input": {
+      "task": "Pharmacy reorder decision: Morphine 10mg/mL (034)",
+      "evidence": {
+        "evidence_type": "student3_reorder_decision",
+        "scenario": "Pharmacy reorder decision",
+        "medicine": "Morphine 10mg/mL (034)",
+        "supplier": "Central Hospital Supply",
+        "available_units": 0,
+        "near_expiry_units": 0,
+        "open_order_units": 0,
+        "daily_usage_rate": 0.0,
+        "lead_time_days": 9,
+        "unit_price": 14.75,
+        "objective": {
+          "metric": "usable_stock_units",
+          "current": 0,
+          "target": 60,
+          "unit": "units"
+        },
+        "options": [
+          {
+            "id": "order_suggested",
+            "label": "Order the suggested 60 units ($885.00)",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": true
+            },
+            "outcomes": {
+              "metric_delta": 60
+            },
+            "risk_indicators": [
+              "Order value $885.00 is above the $500.00 per-cycle cap used by the scheduled agent."
+            ]
+          },
+          {
+            "id": "order_half",
+            "label": "Order half, 30 units ($442.50)",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": true
+            },
+            "outcomes": {
+              "metric_delta": 30
+            },
+            "risk_indicators": [
+              "Projected stock of 30 units stays below the coverage target of 60."
+            ]
+          },
+          {
+            "id": "defer",
+            "label": "Do not order now",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": false
+            },
+            "outcomes": {
+              "metric_delta": 0
+            },
+            "risk_indicators": [
+              "Stock stays at 0 units, below the coverage target of 60."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "supplier_active",
+            "scope": "option",
+            "type": "hard",
+            "field": "supplier_active",
+            "operator": "equals",
+            "value": true,
+            "description": "The supplier must be active."
+          },
+          {
+            "id": "orders_stock",
+            "scope": "option",
+            "type": "hard",
+            "field": "quantity_positive",
+            "operator": "equals",
+            "value": true,
+            "description": "The option must order a positive quantity."
+          },
+          {
+            "id": "value_review",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Large order values need the Pharmacy Manager's attention."
+          },
+          {
+            "id": "manager_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+          }
+        ],
+        "unknowns": [
+          "Demand beyond the last 30 days of issues is not known.",
+          "No stock was issued in the last 30 days, so the usage rate may underestimate demand."
+        ],
+        "evidence_mode": "live_pharmacy_data",
+        "mcp_order_alerts": {
+          "source": "MCP tool homs_pharmacy_order_alerts",
+          "pharmacy_overdue_deliveries": 22,
+          "pharmacy_pending_approval": 16,
+          "listed_orders_for_this_medicine": [],
+          "note": "MCP lists up to 10 orders per category; counts cover all orders."
+        },
+        "rag_reorder_policy": {
+          "source": "RAG knowledge base (student-3)",
+          "answers": [
+            {
+              "question": "How is the suggested reorder quantity calculated?",
+              "answer": "The suggested reorder quantity is calculated by subtracting the following from the coverage target: \n\n1. Usable stock (stock expiring within the supplier's lead time is treated as unusable)\n2. Any quantity already on open orders\n\nThe coverage target is the larger of the reorder level and the daily usage rate multiplied by (lead time + 7 days). [S1]",
+              "confidence": "high",
+              "citations": [
+                "Reordering and Purchase Orders > Suggested reorder quantity"
+              ]
+            },
+            {
+              "question": "Who must approve a purchase order?",
+              "answer": "According to [S1], every purchase order, including AI-suggested and agent-proposed orders, needs a Pharmacy Manager's approval before it can be ordered.",
+              "confidence": "high",
+              "citations": [
+                "Reordering and Purchase Orders > Human approval"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "output": {
+      "goal": "Pharmacy reorder decision: Morphine 10mg/mL (034)",
+      "required_evidence": [
+        "objective",
+        "options",
+        "constraints",
+        "unknowns"
+      ],
+      "planned_steps": [
+        "Measure the gap between the current and target state.",
+        "Evaluate each supplied option against every hard constraint.",
+        "Compare eligible options using supplied risks and policy context.",
+        "Propose a reversible recommendation without executing a mutation.",
+        "Send the proposal and evidence to an independent reviewer."
+      ],
+      "constraints": [
+        "The supplier must be active.",
+        "The option must order a positive quantity.",
+        "Large order values need the Pharmacy Manager's attention.",
+        "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+      ],
+      "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": true,
+      "fallback_reason": "planner output remained invalid after 1 attempts: planner semantic validation failed: human_approval_requirement_missing: Planner did not preserve supplied approval constraint 'manager_approval'",
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "llama3.1:8b",
+          "raw_response": "{\n  \"goal\": \"Evaluate the reorder decision for Morphine 10mg/mL (034) based on the available evidence.\",\n  \"required_evidence\": [\n    \"available_units\",\n    \"near_expiry_units\",\n    \"open_order_units\",\n    \"daily_usage_rate\",\n    \"lead_time_days\",\n    \"unit_price\",\n    \"objective\",\n    \"options\",\n    \"constraints\"\n  ],\n  \"constraints\": [\n    \"The supplier must be active.\",\n    \"The option must order a positive quantity.\",\n    \"Large order values need the Pharmacy Manager's attention.\",\n    \"A Pharmacy Manager must approve before any purchase order is created.\"\n  ],\n  \"planned_steps\": [\n    \"Review the available units, near expiry units, open order units, daily usage rate, lead time days, and unit price for Morphine 10mg/mL (034).\",\n    \"Evaluate the objective metric for usable stock units and compare it to the target.\",\n    \"Assess the options for ordering the suggested 60 units, ordering half, or deferring the order.\",\n    \"Check if the supplier is active and if the option orders a positive quantity.\",\n    \"Determine if the order value exceeds the $500.00 per-cycle cap used by the scheduled agent.\",\n    \"Consider the risk indicators for each option, including the projected stock and coverage target.\",\n    \"Evaluate the constraints, including the need for a Pharmacy Manager's approval and attention to large order values.\"\n  ],\n  \"expected_result\": \"A decision on whether to order the suggested 60 units, order half, or defer the order for Morphine 10mg/mL (034), taking into account the available evidence and constraints.\"\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": "planner semantic validation failed: human_approval_requirement_missing: Planner did not preserve supplied approval constraint 'manager_approval'",
+          "validation_type": "semantic_invalid",
+          "semantic_validation": {
+            "stage": "planner",
+            "valid": false,
+            "issues": [
+              {
+                "code": "human_approval_requirement_missing",
+                "reason": "Planner did not preserve supplied approval constraint 'manager_approval'"
+              }
+            ]
+          },
+          "valid": false
+        }
+      ],
+      "semantic_validation": {
+        "stage": "planner",
+        "valid": true,
+        "issues": [],
+        "retry_triggered": false,
+        "fallback_triggered": true,
+        "rejected_attempts": [
+          {
+            "attempt": 1,
+            "validation_type": "semantic_invalid",
+            "issue_codes": [
+              "human_approval_requirement_missing"
+            ]
+          }
+        ]
+      },
+      "attempt_count": 1
+    }
+  },
+  "worker": {
+    "started_at": "2026-10-22T05:54:23.018Z",
+    "completed_at": "2026-10-22T05:55:16.946Z",
+    "input": {
+      "task": "Pharmacy reorder decision: Morphine 10mg/mL (034)",
+      "planner_output": {
+        "goal": "Pharmacy reorder decision: Morphine 10mg/mL (034)",
+        "required_evidence": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ],
+        "planned_steps": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "constraints": [
+          "The supplier must be active.",
+          "The option must order a positive quantity.",
+          "Large order values need the Pharmacy Manager's attention.",
+          "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+        ],
+        "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+      },
+      "evidence": {
+        "evidence_type": "student3_reorder_decision",
+        "scenario": "Pharmacy reorder decision",
+        "medicine": "Morphine 10mg/mL (034)",
+        "supplier": "Central Hospital Supply",
+        "available_units": 0,
+        "near_expiry_units": 0,
+        "open_order_units": 0,
+        "daily_usage_rate": 0.0,
+        "lead_time_days": 9,
+        "unit_price": 14.75,
+        "objective": {
+          "metric": "usable_stock_units",
+          "current": 0,
+          "target": 60,
+          "unit": "units"
+        },
+        "options": [
+          {
+            "id": "order_suggested",
+            "label": "Order the suggested 60 units ($885.00)",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": true
+            },
+            "outcomes": {
+              "metric_delta": 60
+            },
+            "risk_indicators": [
+              "Order value $885.00 is above the $500.00 per-cycle cap used by the scheduled agent."
+            ]
+          },
+          {
+            "id": "order_half",
+            "label": "Order half, 30 units ($442.50)",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": true
+            },
+            "outcomes": {
+              "metric_delta": 30
+            },
+            "risk_indicators": [
+              "Projected stock of 30 units stays below the coverage target of 60."
+            ]
+          },
+          {
+            "id": "defer",
+            "label": "Do not order now",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": false
+            },
+            "outcomes": {
+              "metric_delta": 0
+            },
+            "risk_indicators": [
+              "Stock stays at 0 units, below the coverage target of 60."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "supplier_active",
+            "scope": "option",
+            "type": "hard",
+            "field": "supplier_active",
+            "operator": "equals",
+            "value": true,
+            "description": "The supplier must be active."
+          },
+          {
+            "id": "orders_stock",
+            "scope": "option",
+            "type": "hard",
+            "field": "quantity_positive",
+            "operator": "equals",
+            "value": true,
+            "description": "The option must order a positive quantity."
+          },
+          {
+            "id": "value_review",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Large order values need the Pharmacy Manager's attention."
+          },
+          {
+            "id": "manager_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+          }
+        ],
+        "unknowns": [
+          "Demand beyond the last 30 days of issues is not known.",
+          "No stock was issued in the last 30 days, so the usage rate may underestimate demand."
+        ],
+        "evidence_mode": "live_pharmacy_data",
+        "mcp_order_alerts": {
+          "source": "MCP tool homs_pharmacy_order_alerts",
+          "pharmacy_overdue_deliveries": 22,
+          "pharmacy_pending_approval": 16,
+          "listed_orders_for_this_medicine": [],
+          "note": "MCP lists up to 10 orders per category; counts cover all orders."
+        },
+        "rag_reorder_policy": {
+          "source": "RAG knowledge base (student-3)",
+          "answers": [
+            {
+              "question": "How is the suggested reorder quantity calculated?",
+              "answer": "The suggested reorder quantity is calculated by subtracting the following from the coverage target: \n\n1. Usable stock (stock expiring within the supplier's lead time is treated as unusable)\n2. Any quantity already on open orders\n\nThe coverage target is the larger of the reorder level and the daily usage rate multiplied by (lead time + 7 days). [S1]",
+              "confidence": "high",
+              "citations": [
+                "Reordering and Purchase Orders > Suggested reorder quantity"
+              ]
+            },
+            {
+              "question": "Who must approve a purchase order?",
+              "answer": "According to [S1], every purchase order, including AI-suggested and agent-proposed orders, needs a Pharmacy Manager's approval before it can be ordered.",
+              "confidence": "high",
+              "citations": [
+                "Reordering and Purchase Orders > Human approval"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "output": {
+      "status": "proposal_ready",
+      "plan_steps_followed": [
+        "Measure the gap between the current and target state.",
+        "Evaluate each supplied option against every hard constraint.",
+        "Compare eligible options using supplied risks and policy context.",
+        "Propose a reversible recommendation without executing a mutation.",
+        "Send the proposal and evidence to an independent reviewer."
+      ],
+      "missing_planner_evidence": [],
+      "gap": {
+        "metric": "usable_stock_units",
+        "current": 0,
+        "target": 60,
+        "deficit": 60
+      },
+      "evaluated_options": [
+        {
+          "option_id": "order_suggested",
+          "label": "Order the suggested 60 units ($885.00)",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "supplier_active",
+              "passed": true
+            },
+            {
+              "constraint_id": "orders_stock",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": [
+            "Order value $885.00 is above the $500.00 per-cycle cap used by the scheduled agent."
+          ]
+        },
+        {
+          "option_id": "order_half",
+          "label": "Order half, 30 units ($442.50)",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "supplier_active",
+              "passed": true
+            },
+            {
+              "constraint_id": "orders_stock",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": [
+            "Projected stock of 30 units stays below the coverage target of 60."
+          ]
+        },
+        {
+          "option_id": "defer",
+          "label": "Do not order now",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "supplier_active",
+              "passed": true
+            },
+            {
+              "constraint_id": "orders_stock",
+              "passed": false
+            }
+          ],
+          "eligible": false,
+          "risk_indicators": [
+            "Stock stays at 0 units, below the coverage target of 60."
+          ]
+        }
+      ],
+      "proposed_solution": {
+        "selected_option_id": "order_half",
+        "selected_option": "Order half, 30 units ($442.50)",
+        "metric_delta": 30,
+        "projected_value": 30,
+        "reasoning": [
+          "Passed hard constraint: supplier_active",
+          "Passed hard constraint: orders_stock"
+        ]
+      },
+      "limitations": [
+        "Demand beyond the last 30 days of issues is not known.",
+        "No stock was issued in the last 30 days, so the usage rate may underestimate demand."
+      ],
+      "mutation_executed": false
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": true,
+      "fallback_reason": "worker output remained invalid after 1 attempts: worker semantic validation failed: worker_projection_mismatch: Worker projected_value does not match current plus metric_delta",
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "llama3.2:3b",
+          "raw_response": "{\n  \"status\": \"proposal_ready\",\n  \"plan_steps_followed\": [\n    \"Measure the gap between the current and target state.\",\n    \"Evaluate each supplied option against every hard constraint.\",\n    \"Compare eligible options using supplied risks and policy context.\",\n    \"Propose a reversible recommendation without executing a mutation.\",\n    \"Send the proposal and evidence to an independent reviewer.\"\n  ],\n  \"missing_planner_evidence\": [],\n  \"gap\": {\n    \"metric\": \"usable_stock_units\",\n    \"current\": 0,\n    \"target\": 60,\n    \"deficit\": 60\n  },\n  \"evaluated_options\": [\n    {\n      \"option_id\": \"order_suggested\",\n      \"label\": \"Order the suggested 60 units ($885.00)\",\n      \"hard_constraint_checks\": [\n        {\n          \"constraint_id\": \"supplier_active\",\n          \"passed\": true\n        },\n        {\n          \"constraint_id\": \"orders_stock\",\n          \"passed\": true\n        }\n      ],\n      \"eligible\": true,\n      \"risk_indicators\": [\n        \"Order value $885.00 is above the $500.00 per-cycle cap used by the scheduled agent.\"\n      ]\n    },\n    {\n      \"option_id\": \"order_half\",\n      \"label\": \"Order half, 30 units ($442.50)\",\n      \"hard_constraint_checks\": [\n        {\n          \"constraint_id\": \"supplier_active\",\n          \"passed\": true\n        },\n        {\n          \"constraint_id\": \"orders_stock\",\n          \"passed\": true\n        }\n      ],\n      \"eligible\": true,\n      \"risk_indicators\": [\n        \"Projected stock of 30 units stays below the coverage target of 60.\"\n      ]\n    },\n    {\n      \"option_id\": \"defer\",\n      \"label\": \"Do not order now\",\n      \"hard_constraint_checks\": [\n        {\n          \"constraint_id\": \"supplier_active\",\n          \"passed\": true\n        },\n        {\n          \"constraint_id\": \"orders_stock\",\n          \"passed\": false\n        }\n      ],\n      \"eligible\": false,\n      \"risk_indicators\": [\n        \"Stock stays at 0 units, below the coverage target of 60.\"\n      ]\n    }\n  ],\n  \"proposed_solution\": {\n    \"selected_option_id\": \"order_suggested\",\n    \"selected_option\": \"Order the suggested 60 units ($885.00)\",\n    \"metric_delta\": 60,\n    \"projected_value\": 885.00,\n    \"reasoning\": [\n      \"The suggested reorder quantity is calculated by subtracting the following from the coverage target: \\n\\n1. Usable stock (stock expiring within the supplier's lead time is treated as unusable)\\n2. Any quantity already on open orders\\n\\nThe coverage target is the larger of the reorder level and the daily usage rate multiplied by (lead time + 7 days). [S1]\",\n      \"According to [S1], every purchase order, including AI-suggested and agent-proposed orders, needs a Pharmacy Manager's approval before it can be ordered.\"\n    ]\n  },\n  \"limitations\": [],\n  \"mutation_executed\": false\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": "worker semantic validation failed: worker_projection_mismatch: Worker projected_value does not match current plus metric_delta",
+          "validation_type": "semantic_invalid",
+          "semantic_validation": {
+            "stage": "worker",
+            "valid": false,
+            "issues": [
+              {
+                "code": "worker_projection_mismatch",
+                "reason": "Worker projected_value does not match current plus metric_delta"
+              }
+            ]
+          },
+          "valid": false
+        }
+      ],
+      "semantic_validation": {
+        "stage": "worker",
+        "valid": true,
+        "issues": [],
+        "retry_triggered": false,
+        "fallback_triggered": true,
+        "rejected_attempts": [
+          {
+            "attempt": 1,
+            "validation_type": "semantic_invalid",
+            "issue_codes": [
+              "worker_projection_mismatch"
+            ]
+          }
+        ]
+      },
+      "attempt_count": 1
+    }
+  },
+  "reviewer": {
+    "started_at": "2026-10-22T05:55:16.948Z",
+    "completed_at": "2026-10-22T05:57:07.951Z",
+    "input": {
+      "task": "Pharmacy reorder decision: Morphine 10mg/mL (034)",
+      "planner_output": {
+        "goal": "Pharmacy reorder decision: Morphine 10mg/mL (034)",
+        "required_evidence": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ],
+        "planned_steps": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "constraints": [
+          "The supplier must be active.",
+          "The option must order a positive quantity.",
+          "Large order values need the Pharmacy Manager's attention.",
+          "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+        ],
+        "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+      },
+      "worker_output": {
+        "status": "proposal_ready",
+        "plan_steps_followed": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "missing_planner_evidence": [],
+        "gap": {
+          "metric": "usable_stock_units",
+          "current": 0,
+          "target": 60,
+          "deficit": 60
+        },
+        "evaluated_options": [
+          {
+            "option_id": "order_suggested",
+            "label": "Order the suggested 60 units ($885.00)",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "supplier_active",
+                "passed": true
+              },
+              {
+                "constraint_id": "orders_stock",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": [
+              "Order value $885.00 is above the $500.00 per-cycle cap used by the scheduled agent."
+            ]
+          },
+          {
+            "option_id": "order_half",
+            "label": "Order half, 30 units ($442.50)",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "supplier_active",
+                "passed": true
+              },
+              {
+                "constraint_id": "orders_stock",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": [
+              "Projected stock of 30 units stays below the coverage target of 60."
+            ]
+          },
+          {
+            "option_id": "defer",
+            "label": "Do not order now",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "supplier_active",
+                "passed": true
+              },
+              {
+                "constraint_id": "orders_stock",
+                "passed": false
+              }
+            ],
+            "eligible": false,
+            "risk_indicators": [
+              "Stock stays at 0 units, below the coverage target of 60."
+            ]
+          }
+        ],
+        "proposed_solution": {
+          "selected_option_id": "order_half",
+          "selected_option": "Order half, 30 units ($442.50)",
+          "metric_delta": 30,
+          "projected_value": 30,
+          "reasoning": [
+            "Passed hard constraint: supplier_active",
+            "Passed hard constraint: orders_stock"
+          ]
+        },
+        "limitations": [
+          "Demand beyond the last 30 days of issues is not known.",
+          "No stock was issued in the last 30 days, so the usage rate may underestimate demand."
+        ],
+        "mutation_executed": false
+      },
+      "worker_execution": {
+        "provider": "deterministic_fallback",
+        "fallback_used": true
+      },
+      "evidence": {
+        "evidence_type": "student3_reorder_decision",
+        "scenario": "Pharmacy reorder decision",
+        "medicine": "Morphine 10mg/mL (034)",
+        "supplier": "Central Hospital Supply",
+        "available_units": 0,
+        "near_expiry_units": 0,
+        "open_order_units": 0,
+        "daily_usage_rate": 0.0,
+        "lead_time_days": 9,
+        "unit_price": 14.75,
+        "objective": {
+          "metric": "usable_stock_units",
+          "current": 0,
+          "target": 60,
+          "unit": "units"
+        },
+        "options": [
+          {
+            "id": "order_suggested",
+            "label": "Order the suggested 60 units ($885.00)",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": true
+            },
+            "outcomes": {
+              "metric_delta": 60
+            },
+            "risk_indicators": [
+              "Order value $885.00 is above the $500.00 per-cycle cap used by the scheduled agent."
+            ]
+          },
+          {
+            "id": "order_half",
+            "label": "Order half, 30 units ($442.50)",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": true
+            },
+            "outcomes": {
+              "metric_delta": 30
+            },
+            "risk_indicators": [
+              "Projected stock of 30 units stays below the coverage target of 60."
+            ]
+          },
+          {
+            "id": "defer",
+            "label": "Do not order now",
+            "attributes": {
+              "supplier_active": true,
+              "quantity_positive": false
+            },
+            "outcomes": {
+              "metric_delta": 0
+            },
+            "risk_indicators": [
+              "Stock stays at 0 units, below the coverage target of 60."
+            ]
+          }
+        ],
+        "constraints": [
+          {
+            "id": "supplier_active",
+            "scope": "option",
+            "type": "hard",
+            "field": "supplier_active",
+            "operator": "equals",
+            "value": true,
+            "description": "The supplier must be active."
+          },
+          {
+            "id": "orders_stock",
+            "scope": "option",
+            "type": "hard",
+            "field": "quantity_positive",
+            "operator": "equals",
+            "value": true,
+            "description": "The option must order a positive quantity."
+          },
+          {
+            "id": "value_review",
+            "scope": "workflow",
+            "type": "policy",
+            "description": "Large order values need the Pharmacy Manager's attention."
+          },
+          {
+            "id": "manager_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders."
+          }
+        ],
+        "unknowns": [
+          "Demand beyond the last 30 days of issues is not known.",
+          "No stock was issued in the last 30 days, so the usage rate may underestimate demand."
+        ],
+        "evidence_mode": "live_pharmacy_data",
+        "mcp_order_alerts": {
+          "source": "MCP tool homs_pharmacy_order_alerts",
+          "pharmacy_overdue_deliveries": 22,
+          "pharmacy_pending_approval": 16,
+          "listed_orders_for_this_medicine": [],
+          "note": "MCP lists up to 10 orders per category; counts cover all orders."
+        },
+        "rag_reorder_policy": {
+          "source": "RAG knowledge base (student-3)",
+          "answers": [
+            {
+              "question": "How is the suggested reorder quantity calculated?",
+              "answer": "The suggested reorder quantity is calculated by subtracting the following from the coverage target: \n\n1. Usable stock (stock expiring within the supplier's lead time is treated as unusable)\n2. Any quantity already on open orders\n\nThe coverage target is the larger of the reorder level and the daily usage rate multiplied by (lead time + 7 days). [S1]",
+              "confidence": "high",
+              "citations": [
+                "Reordering and Purchase Orders > Suggested reorder quantity"
+              ]
+            },
+            {
+              "question": "Who must approve a purchase order?",
+              "answer": "According to [S1], every purchase order, including AI-suggested and agent-proposed orders, needs a Pharmacy Manager's approval before it can be ordered.",
+              "confidence": "high",
+              "citations": [
+                "Reordering and Purchase Orders > Human approval"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "output": {
+      "review_status": "changes_required",
+      "validated_findings": [],
+      "validated_evidence_refs": [
+        {
+          "source": "worker_output",
+          "path": "proposed_solution.projected_value",
+          "value": 30
+        }
+      ],
+      "risks": [
+        "Demand beyond the last 30 days of issues is not known.",
+        "No stock was issued in the last 30 days, so the usage rate may underestimate demand.",
+        "The proposal does not fully reach the target state.",
+        "Projected stock of 30 units stays below the coverage target of 60."
+      ],
+      "unsupported_claims": [],
+      "recommended_option_id": "order_half",
+      "recommendation": "Review the validated Worker proposal and authoritative evidence before action.",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": true,
+      "fallback_reason": "reviewer output remained invalid after 1 attempts: reviewer semantic validation failed: reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'objective.metric') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'options[0].attributes.supplier_active') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'options[1].attributes.quantity_positive') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'constraints[0].description') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'constraints[1].description') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'unknowns[0]') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'unknowns[1]') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('planner_output', 'constraints[2].description') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('planner_output', 'constraints[3].description') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('worker_output', 'proposed_solution.reasoning[0]') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('worker_output', 'proposed_solution.reasoning[1]') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('worker_output', 'limitations[0]') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('worker_output', 'limitations[1]') is missing or contradicts source data; reviewer_fallback_not_conservative: Reviewer must request changes when Worker used deterministic fallback",
+      "attempts": [
+        {
+          "attempt": 1,
+          "provider": "live_ollama",
+          "model": "llama3.1:8b",
+          "raw_response": "{\n  \"review_status\": \"validated_with_risks\",\n  \"validated_findings\": [],\n  \"validated_evidence_refs\": [\n    {\n      \"source\": \"evidence\",\n      \"path\": \"objective.metric\",\n      \"value\": {\n        \"metric\": \"usable_stock_units\",\n        \"current\": 0,\n        \"target\": 60,\n        \"unit\": \"units\"\n      }\n    },\n    {\n      \"source\": \"evidence\",\n      \"path\": \"options[0].attributes.supplier_active\",\n      \"value\": true\n    },\n    {\n      \"source\": \"evidence\",\n      \"path\": \"options[1].attributes.quantity_positive\",\n      \"value\": true\n    },\n    {\n      \"source\": \"evidence\",\n      \"path\": \"constraints[0].description\",\n      \"value\": \"The supplier must be active.\"\n    },\n    {\n      \"source\": \"evidence\",\n      \"path\": \"constraints[1].description\",\n      \"value\": \"The option must order a positive quantity.\"\n    },\n    {\n      \"source\": \"evidence\",\n      \"path\": \"unknowns[0]\",\n      \"value\": \"Demand beyond the last 30 days of issues is not known.\"\n    },\n    {\n      \"source\": \"evidence\",\n      \"path\": \"unknowns[1]\",\n      \"value\": \"No stock was issued in the last 30 days, so the usage rate may underestimate demand.\"\n    },\n    {\n      \"source\": \"planner_output\",\n      \"path\": \"goal\",\n      \"value\": \"Pharmacy reorder decision: Morphine 10mg/mL (034)\"\n    },\n    {\n      \"source\": \"planner_output\",\n      \"path\": \"constraints[2].description\",\n      \"value\": \"Large order values need the Pharmacy Manager's attention.\"\n    },\n    {\n      \"source\": \"planner_output\",\n      \"path\": \"constraints[3].description\",\n      \"value\": \"A Pharmacy Manager must approve before any purchase order is created; this workflow never creates or changes orders.\"\n    },\n    {\n      \"source\": \"worker_output\",\n      \"path\": \"proposed_solution.selected_option_id\",\n      \"value\": \"order_half\"\n    },\n    {\n      \"source\": \"worker_output\",\n      \"path\": \"proposed_solution.selected_option\",\n      \"value\": \"Order half, 30 units ($442.50)\"\n    },\n    {\n      \"source\": \"worker_output\",\n      \"path\": \"proposed_solution.metric_delta\",\n      \"value\": 30\n    },\n    {\n      \"source\": \"worker_output\",\n      \"path\": \"proposed_solution.projected_value\",\n      \"value\": 30\n    },\n    {\n      \"source\": \"worker_output\",\n      \"path\": \"proposed_solution.reasoning[0]\",\n      \"value\": \"Passed hard constraint: supplier_active\"\n    },\n    {\n      \"source\": \"worker_output\",\n      \"path\": \"proposed_solution.reasoning[1]\",\n      \"value\": \"Passed hard constraint: orders_stock\"\n    },\n    {\n      \"source\": \"worker_output\",\n      \"path\": \"limitations[0]\",\n      \"value\": \"Demand beyond the last 30 days of issues is not known.\"\n    },\n    {\n      \"source\": \"worker_output\",\n      \"path\": \"limitations[1]\",\n      \"value\": \"No stock was issued in the last 30 days, so the usage rate may underestimate demand.\"\n    }\n  ],\n  \"risks\": [\n    \"Order value $885.00 is above the $500.00 per-cycle cap used by the scheduled agent.\",\n    \"Projected stock of 30 units stays below the coverage target of 60.\",\n    \"Stock stays at 0 units, below the coverage target of 60.\"\n  ],\n  \"unsupported_claims\": [\n    \"The suggested reorder quantity is calculated by subtracting the following from the coverage target: \\n\\n1. Usable stock (stock expiring within the supplier's lead time is treated as unusable)\\n2. Any quantity already on open orders\\n\\nThe coverage target is the larger of the reorder level and the daily usage rate multiplied by (lead time + 7 days). [S1]\"\n  ],\n  \"recommended_option_id\": \"order_half\",\n  \"recommendation\": \"The proposal is evidence-consistent, but identified risks require human review.\",\n  \"human_approval_required\": true,\n  \"mutation_verified_absent\": true\n}",
+          "raw_response_truncated": false,
+          "normalisation": "none",
+          "validation_error": "reviewer semantic validation failed: reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'objective.metric') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'options[0].attributes.supplier_active') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'options[1].attributes.quantity_positive') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'constraints[0].description') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'constraints[1].description') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'unknowns[0]') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('evidence', 'unknowns[1]') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('planner_output', 'constraints[2].description') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('planner_output', 'constraints[3].description') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('worker_output', 'proposed_solution.reasoning[0]') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('worker_output', 'proposed_solution.reasoning[1]') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('worker_output', 'limitations[0]') is missing or contradicts source data; reviewer_unsupported_finding: Reviewer evidence reference ('worker_output', 'limitations[1]') is missing or contradicts source data; reviewer_fallback_not_conservative: Reviewer must request changes when Worker used deterministic fallback",
+          "validation_type": "semantic_invalid",
+          "semantic_validation": {
+            "stage": "reviewer",
+            "valid": false,
+            "issues": [
+              {
+                "code": "reviewer_unsupported_finding",
+                "reason": "Reviewer evidence reference ('evidence', 'objective.metric') is missing or contradicts source data"
+              },
+              {
+                "code": "reviewer_unsupported_finding",
+                "reason": "Reviewer evidence reference ('evidence', 'options[0].attributes.supplier_active') is missing or contradicts source data"
+              },
+              {
+                "code": "reviewer_unsupported_finding",
+                "reason": "Reviewer evidence reference ('evidence', 'options[1].attributes.quantity_positive') is missing or contradicts source data"
+              },
+              {
+                "code": "reviewer_unsupported_finding",
+                "reason": "Reviewer evidence reference ('evidence', 'constraints[0].description') is missing or contradicts source data"
+              },
+              {
+                "code": "reviewer_unsupported_finding",
+                "reason": "Reviewer evidence reference ('evidence', 'constraints[1].description') is missing or contradicts source data"
+              },
+              {
+                "code": "reviewer_unsupported_finding",
+                "reason": "Reviewer evidence reference ('evidence', 'unknowns[0]') is missing or contradicts source data"
+              },
+              {
+                "code": "reviewer_unsupported_finding",
+                "reason": "Reviewer evidence reference ('evidence', 'unknowns[1]') is missing or contradicts source data"
+              },
+              {
+                "code": "reviewer_unsupported_finding",
+                "reason": "Reviewer evidence reference ('planner_output', 'constraints[2].description') is missing or contradicts source data"
+              },
+              {
+                "code": "reviewer_unsupported_finding",
+                "reason": "Reviewer evidence reference ('planner_output', 'constraints[3].description') is missing or contradicts source data"
+              },
+              {
+                "code": "reviewer_unsupported_finding",
+                "reason": "Reviewer evidence reference ('worker_output', 'proposed_solution.reasoning[0]') is missing or contradicts source data"
+              },
+              {
+                "code": "reviewer_unsupported_finding",
+                "reason": "Reviewer evidence reference ('worker_output', 'proposed_solution.reasoning[1]') is missing or contradicts source data"
+              },
+              {
+                "code": "reviewer_unsupported_finding",
+                "reason": "Reviewer evidence reference ('worker_output', 'limitations[0]') is missing or contradicts source data"
+              },
+              {
+                "code": "reviewer_unsupported_finding",
+                "reason": "Reviewer evidence reference ('worker_output', 'limitations[1]') is missing or contradicts source data"
+              },
+              {
+                "code": "reviewer_fallback_not_conservative",
+                "reason": "Reviewer must request changes when Worker used deterministic fallback"
+              }
+            ]
+          },
+          "valid": false
+        }
+      ],
+      "semantic_validation": {
+        "stage": "reviewer",
+        "valid": true,
+        "issues": [],
+        "retry_triggered": false,
+        "fallback_triggered": true,
+        "rejected_attempts": [
+          {
+            "attempt": 1,
+            "validation_type": "semantic_invalid",
+            "issue_codes": [
+              "reviewer_unsupported_finding",
+              "reviewer_unsupported_finding",
+              "reviewer_unsupported_finding",
+              "reviewer_unsupported_finding",
+              "reviewer_unsupported_finding",
+              "reviewer_unsupported_finding",
+              "reviewer_unsupported_finding",
+              "reviewer_unsupported_finding",
+              "reviewer_unsupported_finding",
+              "reviewer_unsupported_finding",
+              "reviewer_unsupported_finding",
+              "reviewer_unsupported_finding",
+              "reviewer_unsupported_finding",
+              "reviewer_fallback_not_conservative"
+            ]
+          }
+        ]
+      },
+      "attempt_count": 1
+    }
+  },
+  "human_review": {
+    "decision": "correct",
+    "comments": "Order a smaller quantity and chase the overdue delivery first.",
+    "timestamp": "2026-10-22T05:57:08.616Z"
+  },
+  "final_status": "corrected",
+  "final_result": {
+    "status": "corrected",
+    "proposal": {
+      "selected_option_id": "order_half",
+      "selected_option": "Order half, 30 units ($442.50)",
+      "metric_delta": 30,
+      "projected_value": 30,
+      "reasoning": [
+        "Passed hard constraint: supplier_active",
+        "Passed hard constraint: orders_stock"
+      ]
+    },
+    "review": {
+      "review_status": "changes_required",
+      "validated_findings": [],
+      "validated_evidence_refs": [
+        {
+          "source": "worker_output",
+          "path": "proposed_solution.projected_value",
+          "value": 30
+        }
+      ],
+      "risks": [
+        "Demand beyond the last 30 days of issues is not known.",
+        "No stock was issued in the last 30 days, so the usage rate may underestimate demand.",
+        "The proposal does not fully reach the target state.",
+        "Projected stock of 30 units stays below the coverage target of 60."
+      ],
+      "unsupported_claims": [],
+      "recommended_option_id": "order_half",
+      "recommendation": "Review the validated Worker proposal and authoritative evidence before action.",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "human_decision": "correct",
+    "human_comments_or_correction": "Order a smaller quantity and chase the overdue delivery first.",
+    "mutation_executed": false
+  },
+  "completed_at": "2026-10-22T05:57:08.616Z"
+}

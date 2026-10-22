@@ -216,3 +216,8 @@ def multi_agent_review(workflow_id, decision, comment, role):
     """Send the Pharmacy Manager's human-review decision through the backend."""
     return _request(f"/api/multi-agent/workflows/{workflow_id}/review", "POST",
                     {"decision": decision, "comment": comment}, role, timeout=45)
+
+
+def multi_agent_history(limit=10):
+    """Recent pharmacy reorder reviews, newest first."""
+    return _request(f"/api/multi-agent/workflows?limit={int(limit)}", timeout=30)["reviews"]

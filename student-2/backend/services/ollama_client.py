@@ -31,6 +31,7 @@ OLLAMA_BASE_URL = os.environ.get(
     "OLLAMA_BASE_URL", "http://localhost:11434"
 ).rstrip("/")
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.1:8b")
+AI_ENABLED = os.environ.get("AI_ENABLED", "true").strip().lower() == "true"
 
 # Explicit per-request timeout (connect + read), in seconds. NOT the requests
 # default of None - the route must not hang forever waiting on the LLM.
@@ -108,6 +109,8 @@ def summarise_clinical_history(records_text, summary_scope):
     """
     # Nothing to summarise - don't bother calling the model.
     if not records_text or not str(records_text).strip():
+        return FALLBACK_SUMMARY
+    if not AI_ENABLED:
         return FALLBACK_SUMMARY
 
     prompt = _build_prompt(str(records_text), summary_scope)
