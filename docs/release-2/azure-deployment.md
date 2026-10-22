@@ -110,8 +110,12 @@ Prerequisites:
 - Azure CLI authenticated with `az login`;
 - permission to create resources and role assignments in the subscription;
 - required Azure resource providers already registered by the subscription owner;
-- permission to create an Entra application and federated credential;
-- GitHub CLI authenticated with repository-administration access;
+- a pre-created `homs-r2-github` user-assigned managed identity;
+- managed-identity federated credentials for the `develop` and `main` branches;
+- `Contributor` for that identity on `homs-r2-rg`;
+- GitHub repository secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and
+  `AZURE_SUBSCRIPTION_ID`;
+- GitHub CLI authenticated with access to inspect repository secret names;
 - two available, globally unique names for ACR and the storage account.
 
 Set the common values in the same terminal for both setup steps:
@@ -130,7 +134,7 @@ Preview without changing Azure:
 ./scripts/deploy/github-oidc-setup.sh --dry-run
 ```
 
-Provision the foundation, then establish OIDC:
+Provision the foundation, then verify the pre-created OIDC configuration:
 
 ```bash
 ./scripts/deploy/azure-foundation.sh --student 5
@@ -151,25 +155,26 @@ admin-account setting. After a managed-identity deployment and image pull have
 been proven, the cloud owner may separately disable an existing ACR admin
 account. That hardening action is intentionally not part of foundation setup.
 
-The OIDC script creates no client password. It creates/reuses the `azure-r2`
-GitHub environment and configures these repository secret names:
+The OIDC helper is strictly read-only. It verifies the existing
+`homs-r2-github` managed identity, Contributor scope, both branch federated
+credentials, and these repository secret names without reading their values:
 
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
 
-It also records the non-secret resource names as repository variables. The
-federated subject is:
+The federated subjects are:
 
 ```text
-repo:<owner>/<repository>:environment:azure-r2
+repo:<owner>/<repository>:ref:refs/heads/develop
+repo:<owner>/<repository>:ref:refs/heads/main
 ```
 
-The deployment identity receives `Contributor` only at the shared resource
-group and `AcrPush` only at the shared registry. Creating role assignments may
-require Owner or User Access Administrator. Creating the Entra application may
-require an Azure tenant administrator, depending on tenant policy. Creating the
-GitHub environment, secrets and variables requires repository administration.
+The workflow therefore does not declare a GitHub Actions environment, which
+would change the OIDC subject and break the existing branch trust. It uses
+`azure/login@v2`, `id-token: write`, and the three repository secrets directly.
+No Entra application, service principal, client secret, `AZURE_CREDENTIALS`
+JSON, or new managed identity is part of the supported deployment path.
 
 ## Per-student deployment
 

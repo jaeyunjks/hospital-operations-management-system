@@ -12,6 +12,9 @@ DEPLOY = (ROOT / "scripts/deploy/deploy-student.sh").read_text(encoding="utf-8")
 FOUNDATION = (ROOT / "scripts/deploy/azure-foundation.sh").read_text(
     encoding="utf-8"
 )
+OIDC_HELPER = (ROOT / "scripts/deploy/github-oidc-setup.sh").read_text(
+    encoding="utf-8"
+)
 LEGACY = (ROOT / "scripts/deploy/azure_deploy.py").read_text(encoding="utf-8")
 
 
@@ -30,6 +33,11 @@ def test_workflow_uses_only_oidc_shell_deployment():
     assert "azure_deploy.py" not in WORKFLOW
     assert "uses: azure/login@v2" in WORKFLOW
     assert "id-token: write" in WORKFLOW
+    assert "client-id: ${{ secrets.AZURE_CLIENT_ID }}" in WORKFLOW
+    assert "tenant-id: ${{ secrets.AZURE_TENANT_ID }}" in WORKFLOW
+    assert "subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}" in WORKFLOW
+    assert "client-secret" not in WORKFLOW
+    assert "environment: azure-r2" not in WORKFLOW
     assert "./scripts/deploy/deploy-student.sh" in WORKFLOW
     assert "./scripts/deploy/deployment-testing.sh" in WORKFLOW
 
@@ -40,6 +48,33 @@ def test_workflow_requires_one_student_and_has_no_deploy_all_default():
     assert 'group: homs-r2-cloud-student-${{ inputs.student }}' in WORKFLOW
     assert "Empty = everything" not in WORKFLOW
     assert "--only" not in WORKFLOW
+
+
+def test_oidc_helper_is_read_only_and_targets_existing_managed_identity():
+    assert "homs-r2-github" in OIDC_HELPER
+    assert "refs/heads/develop" in OIDC_HELPER
+    assert "refs/heads/main" in OIDC_HELPER
+    assert "az identity federated-credential list" in OIDC_HELPER
+    assert "az role assignment list" in OIDC_HELPER
+    for forbidden in (
+        "az ad app",
+        "az ad sp",
+        "az identity create",
+        "federated-credential create",
+        "role assignment create",
+        "gh secret set",
+        "gh variable set",
+        "gh api --method",
+    ):
+        assert forbidden not in OIDC_HELPER
+
+    output = shell_output(
+        "AZURE_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000 "
+        "GITHUB_REPOSITORY=jaeyunjks/hospital-operations-management-system "
+        "./scripts/deploy/github-oidc-setup.sh --dry-run"
+    )
+    assert "read-only OIDC verification contract" in output
+    assert "homs-r2-github" in output
 
 
 def test_student5_cloud_flags_and_persistence_are_explicit():

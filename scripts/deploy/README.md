@@ -5,7 +5,7 @@ The authoritative Release 2 deployment path is the shell/OIDC workflow:
 ```text
 azure-foundation.sh
         ↓
-github-oidc-setup.sh
+github-oidc-setup.sh (read-only verification)
         ↓
 deploy-student.sh <1-5>
         ↓
@@ -55,9 +55,16 @@ The first script creates or reuses the resource group, ACR, Container Apps
 environment, Log Analytics workspace, managed ACR pull identity, storage
 account, and the selected student's isolated database share/storage link. Omit
 `--student` only when the cloud owner intentionally wants all five isolated
-share/storage links. The second creates the GitHub OIDC trust and configures
-the required GitHub environment, secret names, and non-secret variables without
-creating a client password.
+share/storage links. The second command is now read-only: it verifies the
+pre-created `homs-r2-github` user-assigned managed identity, the `develop` and
+`main` branch federated credentials, Contributor access on `homs-r2-rg`, and
+the three repository secret names. It never creates an Entra application,
+service principal, identity, credential, role assignment, or GitHub setting.
+
+The workflow uses repository secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and
+`AZURE_SUBSCRIPTION_ID` with `azure/login@v2`. It deliberately has no GitHub
+environment binding because the existing federated subjects are branch-based.
+No client secret or `AZURE_CREDENTIALS` JSON is used.
 
 ## Deploy one student
 
