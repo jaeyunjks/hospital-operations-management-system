@@ -1,0 +1,24 @@
+# Student 1 - post-commit endpoint tests (Release 2)
+# Workflow: .github/workflows/student-1.yml (job: Build student-1 images, step: Post-commit endpoint tests)
+# Run: https://github.com/jaeyunjks/hospital-operations-management-system/actions/runs/39870379173
+# Commit: 3be3e8036f53f2ae4fe9c3548668737e7d7794ce (branch r2-patient-and-admissions), run #44, conclusion: success
+# Endpoints: POST /api/admissions/emergency and POST /api/patients/merge
+# JUnit report artifact: student-1-junit (student-1-endpoints.xml)
+
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.7.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/runner/work/hospital-operations-management-system/hospital-operations-management-system
+plugins: platformdirs-4.13.0
+collecting ... collected 7 items
+
+student-1/tests/test_endpoints_ci.py::EmergencyAdmissionEndpointTests::test_complete_identity_creates_confirmed_emergency_admission PASSED [ 14%]
+student-1/tests/test_endpoints_ci.py::EmergencyAdmissionEndpointTests::test_missing_identity_is_rejected PASSED [ 28%]
+student-1/tests/test_endpoints_ci.py::EmergencyAdmissionEndpointTests::test_partial_identity_is_provisional_and_needs_review PASSED [ 42%]
+student-1/tests/test_endpoints_ci.py::PatientMergeEndpointTests::test_missing_profile_ids_are_rejected PASSED [ 57%]
+student-1/tests/test_endpoints_ci.py::PatientMergeEndpointTests::test_profile_not_awaiting_identity_review_is_rejected PASSED [ 71%]
+student-1/tests/test_endpoints_ci.py::PatientMergeEndpointTests::test_same_profile_cannot_be_merged_into_itself PASSED [ 85%]
+student-1/tests/test_endpoints_ci.py::PatientMergeEndpointTests::test_unknown_profiles_are_rejected PASSED [100%]
+
+- generated xml file: /home/runner/work/hospital-operations-management-system/hospital-operations-management-system/test-results/student-1-endpoints.xml -
+============================== 7 passed in 0.09s ===============================
