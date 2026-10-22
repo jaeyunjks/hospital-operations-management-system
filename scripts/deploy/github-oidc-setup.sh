@@ -8,26 +8,31 @@ source "$SCRIPT_DIR/azure-common.sh"
 
 DRY_RUN=false
 GITHUB_REPOSITORY_NAME="${GITHUB_REPOSITORY:-}"
-HOMS_OIDC_APP_NAME="${HOMS_OIDC_APP_NAME:-homs-r2-github-deployer}"
-HOMS_OIDC_CREDENTIAL_NAME="${HOMS_OIDC_CREDENTIAL_NAME:-homs-r2-environment}"
+HOMS_OIDC_IDENTITY_NAME="${HOMS_OIDC_IDENTITY_NAME:-homs-r2-github}"
 
 usage() {
   cat <<'EOF'
-Create or reuse the Azure Entra application and GitHub OIDC trust.
+Verify the pre-created managed-identity GitHub OIDC configuration read-only.
 
-Run this after azure-foundation.sh:
+Usage:
   AZURE_SUBSCRIPTION_ID=<id> \
-  HOMS_AZURE_ACR_NAME=<name> \
-  HOMS_AZURE_STORAGE_ACCOUNT=<name> \
   GITHUB_REPOSITORY=owner/repository \
   ./scripts/deploy/github-oidc-setup.sh [--dry-run]
 
-The script creates no client secret. It writes only the three requested IDs to
-GitHub Actions secrets and non-secret resource names to Actions variables.
+Supported Release 2 authentication model:
+  - pre-created user-assigned managed identity (default: homs-r2-github)
+  - GitHub federated credentials for the develop and main branch subjects
+  - Contributor at the homs-r2-rg resource-group scope
+  - repository secrets AZURE_CLIENT_ID, AZURE_TENANT_ID and
+    AZURE_SUBSCRIPTION_ID
+
+This helper is verification-only. It never creates an Entra application,
+service principal, managed identity, federated credential, role assignment,
+GitHub secret, variable or environment.
 
 Options:
   --repository owner/repository
-  --dry-run
+  --dry-run       print the expected contract without querying Azure/GitHub
   --help
 EOF
 }
@@ -47,140 +52,88 @@ while (($#)); do
 done
 
 require_value AZURE_SUBSCRIPTION_ID
-require_value HOMS_AZURE_ACR_NAME
-require_value HOMS_AZURE_STORAGE_ACCOUNT
-validate_acr_name "$HOMS_AZURE_ACR_NAME"
-validate_storage_name "$HOMS_AZURE_STORAGE_ACCOUNT"
 [[ "$GITHUB_REPOSITORY_NAME" =~ ^[^/]+/[^/]+$ ]] || die \
   "GITHUB_REPOSITORY must use owner/repository format."
 
-OIDC_SUBJECT="repo:${GITHUB_REPOSITORY_NAME}:environment:${HOMS_GITHUB_ENVIRONMENT}"
+DEVELOP_SUBJECT="repo:${GITHUB_REPOSITORY_NAME}:ref:refs/heads/develop"
+MAIN_SUBJECT="repo:${GITHUB_REPOSITORY_NAME}:ref:refs/heads/main"
 
 if [[ "$DRY_RUN" == true ]]; then
-  log "Dry run: no Azure or GitHub setting will be changed."
-  log "Entra application: $HOMS_OIDC_APP_NAME"
-  log "Federated credential: $HOMS_OIDC_CREDENTIAL_NAME"
-  log "OIDC subject: $OIDC_SUBJECT"
-  log "GitHub environment: $HOMS_GITHUB_ENVIRONMENT"
-  log "GitHub secret names: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID"
-  log "GitHub variables: AZURE_RESOURCE_GROUP, AZURE_LOCATION, AZURE_CONTAINER_REGISTRY, AZURE_CONTAINERAPPS_ENVIRONMENT, AZURE_STORAGE_ACCOUNT, AZURE_APP_PREFIX, AZURE_ACR_PULL_IDENTITY"
+  log "Dry run: read-only OIDC verification contract; no setting will be changed."
+  log "Managed identity: $HOMS_OIDC_IDENTITY_NAME"
+  log "Required federated subjects: $DEVELOP_SUBJECT, $MAIN_SUBJECT"
+  log "Required role: Contributor on $HOMS_AZURE_RESOURCE_GROUP"
+  log "Required GitHub secret names: AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID"
   exit 0
 fi
 
 azure_account_check
-select_subscription
+SELECTED_SUBSCRIPTION_ID="$(az account show \
+  --query id --output tsv --only-show-errors)"
+[[ "$SELECTED_SUBSCRIPTION_ID" == "$AZURE_SUBSCRIPTION_ID" ]] || die \
+  "Azure CLI is not on AZURE_SUBSCRIPTION_ID; select it before verification."
 require_command gh
-gh auth status >/dev/null 2>&1 || die "GitHub CLI is not authenticated. Run 'gh auth login' first."
+require_command python3
+gh auth status >/dev/null 2>&1 || die \
+  "GitHub CLI is not authenticated. Run 'gh auth login' first."
 
-az group show --name "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors >/dev/null 2>&1 || die \
-  "Shared resource group not found. Run azure-foundation.sh first."
+IDENTITY_JSON="$(az identity show \
+  --name "$HOMS_OIDC_IDENTITY_NAME" \
+  --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+  --query '{clientId:clientId,principalId:principalId}' \
+  --output json --only-show-errors)" || die \
+  "Managed identity '$HOMS_OIDC_IDENTITY_NAME' was not found."
 
-APP_IDS="$(az ad app list --display-name "$HOMS_OIDC_APP_NAME" \
-  --query "[?displayName=='$HOMS_OIDC_APP_NAME'].appId" --output tsv --only-show-errors)"
-APP_COUNT="$(printf '%s\n' "$APP_IDS" | sed '/^$/d' | wc -l | tr -d ' ')"
-if [[ "$APP_COUNT" == "0" ]]; then
-  log "Creating Entra application $HOMS_OIDC_APP_NAME."
-  APP_ID="$(az ad app create --display-name "$HOMS_OIDC_APP_NAME" \
-    --sign-in-audience AzureADMyOrg --query appId --output tsv --only-show-errors)"
-elif [[ "$APP_COUNT" == "1" ]]; then
-  APP_ID="$APP_IDS"
-  log "Reusing Entra application $HOMS_OIDC_APP_NAME."
-else
-  die "Multiple Entra applications use display name '$HOMS_OIDC_APP_NAME'; an Azure admin must resolve the ambiguity."
-fi
+CLIENT_ID="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["clientId"])' "$IDENTITY_JSON")"
+PRINCIPAL_ID="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["principalId"])' "$IDENTITY_JSON")"
+[[ -n "$CLIENT_ID" && -n "$PRINCIPAL_ID" ]] || die \
+  "Managed identity '$HOMS_OIDC_IDENTITY_NAME' has incomplete identifiers."
 
-if ! az ad sp show --id "$APP_ID" --only-show-errors >/dev/null 2>&1; then
-  log "Creating the application service principal."
-  az ad sp create --id "$APP_ID" --only-show-errors --output none
-else
-  log "Reusing the application service principal."
-fi
-
-FEDERATED_SUBJECT="$(az ad app federated-credential list --id "$APP_ID" \
-  --query "[?name=='$HOMS_OIDC_CREDENTIAL_NAME'].subject | [0]" \
-  --output tsv --only-show-errors)"
-if [[ -z "$FEDERATED_SUBJECT" ]]; then
-  FEDERATED_FILE="$(mktemp)"
-  trap 'rm -f "$FEDERATED_FILE"' EXIT
-  python3 - "$FEDERATED_FILE" "$HOMS_OIDC_CREDENTIAL_NAME" "$OIDC_SUBJECT" <<'PY'
+FEDERATED_JSON="$(az identity federated-credential list \
+  --identity-name "$HOMS_OIDC_IDENTITY_NAME" \
+  --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+  --output json --only-show-errors)"
+python3 - "$FEDERATED_JSON" "$DEVELOP_SUBJECT" "$MAIN_SUBJECT" <<'PY'
 import json
 import sys
 
-path, name, subject = sys.argv[1:]
-with open(path, "w", encoding="utf-8") as handle:
-    json.dump({
-        "name": name,
-        "issuer": "https://token.actions.githubusercontent.com/",
-        "subject": subject,
-        "description": "HOMS R2 controlled Azure deployment environment",
-        "audiences": ["api://AzureADTokenExchange"],
-    }, handle)
+credentials = json.loads(sys.argv[1])
+required_subjects = set(sys.argv[2:])
+valid = {
+    item.get("subject")
+    for item in credentials
+    if item.get("issuer", "").rstrip("/")
+    == "https://token.actions.githubusercontent.com"
+    and "api://AzureADTokenExchange" in item.get("audiences", [])
+}
+missing = required_subjects - valid
+if missing:
+    raise SystemExit(
+        "Missing valid managed-identity federated subject(s): "
+        + ", ".join(sorted(missing))
+    )
 PY
-  log "Creating GitHub environment federated credential."
-  az ad app federated-credential create \
-    --id "$APP_ID" \
-    --parameters "$FEDERATED_FILE" \
-    --only-show-errors --output none
-elif [[ "$FEDERATED_SUBJECT" == "$OIDC_SUBJECT" ]]; then
-  log "Reusing matching federated credential $HOMS_OIDC_CREDENTIAL_NAME."
-else
-  die "Federated credential '$HOMS_OIDC_CREDENTIAL_NAME' trusts '$FEDERATED_SUBJECT', not '$OIDC_SUBJECT'. An Azure admin must review it; the script will not overwrite trust configuration."
-fi
 
-SP_OBJECT_ID="$(az ad sp show --id "$APP_ID" --query id --output tsv --only-show-errors)"
-RESOURCE_GROUP_ID="$(az group show --name "$HOMS_AZURE_RESOURCE_GROUP" \
+RESOURCE_GROUP_ID="$(az group show \
+  --name "$HOMS_AZURE_RESOURCE_GROUP" \
   --query id --output tsv --only-show-errors)"
-ACR_ID="$(az acr show --name "$HOMS_AZURE_ACR_NAME" \
-  --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
-  --query id --output tsv --only-show-errors)"
+ROLE_COUNT="$(az role assignment list \
+  --assignee-object-id "$PRINCIPAL_ID" \
+  --scope "$RESOURCE_GROUP_ID" \
+  --role Contributor \
+  --query 'length(@)' --output tsv --only-show-errors)"
+[[ "$ROLE_COUNT" -gt 0 ]] || die \
+  "Managed identity '$HOMS_OIDC_IDENTITY_NAME' lacks Contributor on $HOMS_AZURE_RESOURCE_GROUP."
 
-if [[ "$(az role assignment list --assignee-object-id "$SP_OBJECT_ID" \
-  --scope "$RESOURCE_GROUP_ID" --role Contributor \
-  --query 'length(@)' --output tsv --only-show-errors)" == "0" ]]; then
-  log "Assigning Contributor at the shared HOMS resource-group scope."
-  az role assignment create \
-    --assignee-object-id "$SP_OBJECT_ID" \
-    --assignee-principal-type ServicePrincipal \
-    --role Contributor \
-    --scope "$RESOURCE_GROUP_ID" \
-    --only-show-errors --output none
-else
-  log "Contributor assignment already exists."
-fi
+SECRET_NAMES="$(gh api \
+  "repos/${GITHUB_REPOSITORY_NAME}/actions/secrets" \
+  --jq '.secrets[].name')"
+for secret_name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID; do
+  grep -Fxq "$secret_name" <<<"$SECRET_NAMES" || die \
+    "Required repository secret '$secret_name' is not visible to the current GitHub account."
+done
 
-if [[ "$(az role assignment list --assignee-object-id "$SP_OBJECT_ID" \
-  --scope "$ACR_ID" --role AcrPush \
-  --query 'length(@)' --output tsv --only-show-errors)" == "0" ]]; then
-  log "Assigning AcrPush on the shared registry."
-  az role assignment create \
-    --assignee-object-id "$SP_OBJECT_ID" \
-    --assignee-principal-type ServicePrincipal \
-    --role AcrPush \
-    --scope "$ACR_ID" \
-    --only-show-errors --output none
-else
-  log "AcrPush assignment already exists."
-fi
-
-TENANT_ID="$(az account show --query tenantId --output tsv --only-show-errors)"
-
-log "Creating or reusing GitHub environment $HOMS_GITHUB_ENVIRONMENT."
-gh api --method PUT \
-  "repos/${GITHUB_REPOSITORY_NAME}/environments/${HOMS_GITHUB_ENVIRONMENT}" \
-  --silent
-
-log "Setting GitHub Actions OIDC identifiers without displaying values."
-printf '%s' "$APP_ID" | gh secret set AZURE_CLIENT_ID --repo "$GITHUB_REPOSITORY_NAME"
-printf '%s' "$TENANT_ID" | gh secret set AZURE_TENANT_ID --repo "$GITHUB_REPOSITORY_NAME"
-printf '%s' "$AZURE_SUBSCRIPTION_ID" | gh secret set AZURE_SUBSCRIPTION_ID --repo "$GITHUB_REPOSITORY_NAME"
-
-gh variable set AZURE_RESOURCE_GROUP --body "$HOMS_AZURE_RESOURCE_GROUP" --repo "$GITHUB_REPOSITORY_NAME"
-gh variable set AZURE_LOCATION --body "$HOMS_AZURE_LOCATION" --repo "$GITHUB_REPOSITORY_NAME"
-gh variable set AZURE_CONTAINER_REGISTRY --body "$HOMS_AZURE_ACR_NAME" --repo "$GITHUB_REPOSITORY_NAME"
-gh variable set AZURE_CONTAINERAPPS_ENVIRONMENT --body "$HOMS_CONTAINERAPPS_ENVIRONMENT" --repo "$GITHUB_REPOSITORY_NAME"
-gh variable set AZURE_STORAGE_ACCOUNT --body "$HOMS_AZURE_STORAGE_ACCOUNT" --repo "$GITHUB_REPOSITORY_NAME"
-gh variable set AZURE_APP_PREFIX --body "$HOMS_APP_PREFIX" --repo "$GITHUB_REPOSITORY_NAME"
-gh variable set AZURE_ACR_PULL_IDENTITY --body "$HOMS_ACR_PULL_IDENTITY" --repo "$GITHUB_REPOSITORY_NAME"
-
-log "OIDC setup complete. No client password was created."
-
+log "Verified managed-identity OIDC configuration for develop and main."
+log "Verified Contributor at the shared resource-group scope."
+log "Verified all three GitHub OIDC secret names without reading their values."
+log "No Azure or GitHub setting was changed."

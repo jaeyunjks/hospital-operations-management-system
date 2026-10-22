@@ -83,6 +83,11 @@ def create_app(config_object: type = Config) -> Flask:
             },
         }), status_code
 
+    @app.get("/live")
+    def live():
+        """Process-only Container Apps probe; /health checks dependencies."""
+        return jsonify({"status": "ok", "service": SERVICE_NAME})
+
     @app.get("/api")
     def api_index():
         """Machine-readable index of the endpoints this service exposes."""

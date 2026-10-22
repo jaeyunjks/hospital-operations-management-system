@@ -47,6 +47,15 @@ validate_storage_name() {
 }
 
 container_app_name() {
+  if [[ "$1" == "5" ]]; then
+    case "$2" in
+      database) printf 's5-db' ;;
+      backend) printf 's5-api' ;;
+      frontend) printf 's5-web' ;;
+      *) die "Unknown Student 5 service: $2" ;;
+    esac
+    return
+  fi
   printf '%s-student%s-%s' "$HOMS_APP_PREFIX" "$1" "$2"
 }
 

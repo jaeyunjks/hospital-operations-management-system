@@ -395,6 +395,22 @@ def test_health_reports_ok_when_backend_up(frontend_client, fe_api_client, monke
     assert response.get_json()["status"] == "ok"
 
 
+def test_liveness_does_not_call_backend(frontend_client, fe_api_client, monkeypatch):
+    monkeypatch.setattr(
+        fe_api_client,
+        "get_health",
+        lambda: pytest.fail("process liveness must not call the backend"),
+    )
+
+    response = frontend_client.get("/live")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "status": "ok",
+        "service": "student-5-frontend",
+    }
+
+
 # --------------------------------------------------------- staff directory
 STAFF_FIXTURE = [
     {"staff_id": 1, "name": "Amara Okafor", "role": "Registered Nurse",

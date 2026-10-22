@@ -4,6 +4,11 @@ This is the deployment contract for the group HOMS environment. It is designed
 for controlled, incremental deployment: the team creates the shared foundation
 once, then each student deploys only their own frontend, backend and database.
 
+The shell scripts under `scripts/deploy/` and the OIDC-based
+`cloud-deployment.yml` are the single authoritative implementation. The older
+`azure_deploy.py` prototype is retained only for historical evidence and
+offline regression tests; it must not be used for Release 2 deployment.
+
 ## Architecture
 
 One Azure subscription contains:
@@ -13,7 +18,7 @@ One Azure subscription contains:
 - one Log Analytics workspace;
 - one Azure Container Apps environment;
 - one user-assigned identity with `AcrPull` on the registry;
-- one storage account with five dedicated Azure Files shares;
+- one storage account with up to five dedicated Azure Files shares;
 - three uniquely named Container Apps per student.
 
 Only frontends have external ingress. Backends and databases have internal
@@ -24,9 +29,9 @@ The shared environment is an administrative and network boundary, not a shared
 application resource name. A Student 5 deployment updates only:
 
 ```text
-homs-r2-student5-frontend
-homs-r2-student5-backend
-homs-r2-student5-database
+s5-web
+s5-api
+s5-db
 ```
 
 It does not enumerate, replace or delete another student's apps.
@@ -39,7 +44,8 @@ It does not enumerate, replace or delete another student's apps.
 | Container Apps environment | `homs-r2-env` |
 | Log Analytics workspace | `homs-r2-logs` |
 | ACR pull identity | `homs-r2-acr-pull` |
-| Container App | `homs-r2-student<N>-<frontend|backend|database>` |
+| Container App, Students 1–4 | `homs-r2-student<N>-<frontend|backend|database>` |
+| Container App, Student 5 | `s5-web`, `s5-api`, `s5-db` |
 | ACR repository | `student<N>/<frontend|backend|database>` |
 | Image tag | full Git commit SHA; never `latest` |
 | Azure Files share | `student<N>-db` |
@@ -49,9 +55,11 @@ ACR and storage-account names are globally unique Azure DNS names. They have no
 safe universal default and must be supplied through `HOMS_AZURE_ACR_NAME` and
 `HOMS_AZURE_STORAGE_ACCOUNT`. Both accept only lowercase letters and numbers.
 
-Every name can be configured through the environment variables documented by
-`./scripts/deploy/azure-foundation.sh --help`. All team members must use the
-same values after the foundation is created.
+Shared resource names and the Student 1–4 app prefix can be configured through
+the environment variables documented by
+`./scripts/deploy/azure-foundation.sh --help`. Student 5 app names are fixed to
+the existing `s5-*` convention for shared-tool compatibility. All team members
+must use the same shared values after the foundation is created.
 
 ## Database persistence
 
@@ -101,8 +109,13 @@ Prerequisites:
 
 - Azure CLI authenticated with `az login`;
 - permission to create resources and role assignments in the subscription;
-- permission to create an Entra application and federated credential;
-- GitHub CLI authenticated with repository-administration access;
+- required Azure resource providers already registered by the subscription owner;
+- a pre-created `homs-r2-github` user-assigned managed identity;
+- managed-identity federated credentials for the `develop` and `main` branches;
+- `Contributor` for that identity on `homs-r2-rg`;
+- GitHub repository secrets `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and
+  `AZURE_SUBSCRIPTION_ID`;
+- GitHub CLI authenticated with access to inspect repository secret names;
 - two available, globally unique names for ACR and the storage account.
 
 Set the common values in the same terminal for both setup steps:
@@ -117,36 +130,51 @@ export GITHUB_REPOSITORY='jaeyunjks/hospital-operations-management-system'
 Preview without changing Azure:
 
 ```bash
-./scripts/deploy/azure-foundation.sh --dry-run
+./scripts/deploy/azure-foundation.sh --student 5 --dry-run
 ./scripts/deploy/github-oidc-setup.sh --dry-run
 ```
 
-Provision the foundation, then establish OIDC:
+Provision the foundation, then verify the pre-created OIDC configuration:
 
 ```bash
-./scripts/deploy/azure-foundation.sh
+./scripts/deploy/azure-foundation.sh --student 5
 ./scripts/deploy/github-oidc-setup.sh
 ```
 
-The OIDC script creates no client password. It creates/reuses the `azure-r2`
-GitHub environment and configures these repository secret names:
+The foundation script does not call `az provider register`; subscription-level
+provider registration is outside this deployment path. With `--student 5`, it
+creates or reuses only the `student5-db` Azure Files share and
+`student5-db-storage` Container Apps environment link. Shared resources such as
+the resource group, registry, environment and pull identity remain reusable by
+the group. Omitting `--student` retains the team-wide all-student foundation
+behavior. When `homs-r2-env` already exists, the script reuses it without
+creating an unused Log Analytics workspace or changing its logging setup.
+
+The foundation script reuses an existing ACR without changing its current
+admin-account setting. After a managed-identity deployment and image pull have
+been proven, the cloud owner may separately disable an existing ACR admin
+account. That hardening action is intentionally not part of foundation setup.
+
+The OIDC helper is strictly read-only. It verifies the existing
+`homs-r2-github` managed identity, Contributor scope, both branch federated
+credentials, and these repository secret names without reading their values:
 
 - `AZURE_CLIENT_ID`
 - `AZURE_TENANT_ID`
 - `AZURE_SUBSCRIPTION_ID`
 
-It also records the non-secret resource names as repository variables. The
-federated subject is:
+The federated subjects are:
 
 ```text
-repo:<owner>/<repository>:environment:azure-r2
+repo:<owner>/<repository>:ref:refs/heads/develop
+repo:<owner>/<repository>:ref:refs/heads/main
 ```
 
-The deployment identity receives `Contributor` only at the shared resource
-group and `AcrPush` only at the shared registry. Creating role assignments may
-require Owner or User Access Administrator. Creating the Entra application may
-require an Azure tenant administrator, depending on tenant policy. Creating the
-GitHub environment, secrets and variables requires repository administration.
+The workflow therefore does not declare a GitHub Actions environment, which
+would change the OIDC subject and break the existing branch trust. It uses
+`azure/login@v2`, `id-token: write`, and the three repository secrets directly.
+No Entra application, service principal, client secret, `AZURE_CREDENTIALS`
+JSON, or new managed identity is part of the supported deployment path.
 
 ## Per-student deployment
 
@@ -158,6 +186,12 @@ The controlled path is GitHub Actions:
 4. Review the validation job before the OIDC deployment job runs.
 5. Download the non-secret deployment evidence artifact.
 
+GitHub only exposes a manually dispatched workflow after that workflow exists
+on the repository's default branch. The team must therefore review this change
+on `develop`, then merge it through the normal pull-request process to `main`
+before treating **Run workflow** as operational. Do not change the repository
+default branch merely to bypass that review step.
+
 The equivalent authenticated command for Student 5 is:
 
 ```bash
@@ -165,9 +199,18 @@ The equivalent authenticated command for Student 5 is:
 ./scripts/deploy/deployment-testing.sh 5
 ```
 
-The deployment script builds each image remotely in ACR, tags it with the
-current Git SHA, upserts only the selected student's three apps, and records a
-non-secret receipt under `.local-r2/cloud/`.
+The deployment script authenticates Docker with `az acr login`, builds each
+image on the GitHub Actions runner, pushes its immutable Git SHA tag to ACR,
+upserts only the selected student's three apps, and records a non-secret
+receipt under `.local-r2/cloud/`. It does not use ACR Tasks or `az acr build`.
+
+For Student 5, those apps are `s5-db`, `s5-api`, and `s5-web`. The database and
+backend have internal ingress, while the frontend is external. Runtime wiring
+uses the Azure-assigned internal FQDNs: `s5-api` receives
+`DATABASE_SERVICE_URL=https://<s5-db-fqdn>` and `s5-web` receives
+`STAFF_SHIFT_API_URL=https://<s5-api-fqdn>`. The database receives
+`STUDENT5_DATABASE_PATH=/data/staff_shift.db`, mounts only
+`student5-db-storage` at `/data`, and remains fixed at one replica.
 
 An `all` deployment scope is intentionally not offered until every slice has
 completed an individual cloud validation. This prevents one unvalidated slice
@@ -187,6 +230,14 @@ or broad update from affecting the other students.
   attempting the local Multi-Agent server.
 
 It sends no create, update or delete application request.
+
+## Deprecated prototype
+
+`scripts/deploy/azure_deploy.py` is not called by the active workflow. It uses
+a different resource naming, registry authentication and ephemeral database
+contract and remains only to preserve historical cloud evidence and its
+offline tests. `AZURE_CREDENTIALS`, ACR admin credentials, `/tmp` SQLite paths,
+and its deploy-all behavior are not part of the supported deployment path.
 
 ## Cleanup warning
 

@@ -1,5 +1,20 @@
 #!/usr/bin/env python3
-"""Reusable Azure deployment for the integrated HOMS application (Release 2).
+"""DEPRECATED legacy Azure deployment prototype.
+
+This module is retained only so historical deployment evidence and its offline
+tests remain reproducible. It is not used by the active GitHub workflow and is
+not an approved Release 2 deployment entrypoint: it uses the ACR admin account,
+does not mount Azure Files for every SQLite service, and implements a different
+resource-naming contract.
+
+Use the authoritative scripts instead:
+
+    ./scripts/deploy/azure-foundation.sh
+    ./scripts/deploy/github-oidc-setup.sh
+    ./scripts/deploy/deploy-student.sh STUDENT
+    ./scripts/deploy/deployment-testing.sh STUDENT
+
+Historical prototype usage follows for reference only.
 
 One shared Azure environment, and each student can deploy their own slice:
 
@@ -17,7 +32,8 @@ public over HTTPS. AI-Mode, MCP, RAG and the Multi-Agent Server are disabled
 by default in every service, which is the required Release 2 cloud baseline.
 
 The script only needs Python 3 and the Azure CLI (``az``), so it runs the
-same on Windows, macOS, Linux and in GitHub Actions (cloud-deployment.yml).
+same on Windows, macOS and Linux. It is no longer called by
+``cloud-deployment.yml``.
 Images are built with local Docker and pushed by default; ``--build acr``
 builds in Azure instead, and ``--build skip`` reuses images already pushed.
 """
@@ -237,7 +253,7 @@ def cmd_setup(args: argparse.Namespace) -> None:
     if run([_tool("az"), "containerapp", "env", "show", "-n", ENVIRONMENT, "-g", RESOURCE_GROUP,
             "--query", "name", "--output", "tsv", "--only-show-errors"], check=False) != ENVIRONMENT:
         az("containerapp", "env", "create", "-n", ENVIRONMENT, "-g", RESOURCE_GROUP, "-l", LOCATION)
-    log("Setup complete. Next: python scripts/deploy/azure_deploy.py deploy")
+    log("Legacy setup complete. Do not use this prototype for Release 2 deployment; use the shell/OIDC path.")
 
 
 def build_image(service: Dict[str, Any], server: str, registry: str, tag: str, mode: str) -> str:
@@ -445,6 +461,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 
 def main(argv: Optional[List[str]] = None) -> int:
+    print(
+        "WARNING: azure_deploy.py is deprecated and is not the supported R2 "
+        "deployment path. Use scripts/deploy/deploy-student.sh.",
+        file=sys.stderr,
+    )
     args = parse_args(argv)
     handler = {"setup": cmd_setup, "deploy": cmd_deploy, "status": cmd_status, "smoke": cmd_smoke,
                "probes": cmd_probes, "teardown": cmd_teardown}[args.command]

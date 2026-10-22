@@ -16,6 +16,21 @@ class TestServiceEndpoints:
         assert response.status_code == 200
         assert response.get_json()["service"] == "student-5-backend"
 
+    def test_liveness_is_process_only(self, client, stub_database, monkeypatch):
+        monkeypatch.setattr(
+            stub_database,
+            "health",
+            lambda: pytest.fail("process liveness must not call the database"),
+        )
+
+        response = client.get("/live")
+
+        assert response.status_code == 200
+        assert response.get_json() == {
+            "status": "ok",
+            "service": "student-5-backend",
+        }
+
     def test_api_index_lists_endpoints(self, client):
         response = client.get("/api")
         assert response.status_code == 200

@@ -1124,7 +1124,7 @@ def create_app() -> Flask:
     # static assets, and health. Everything else redirects to the entry
     # screen — the application has no anonymous mode.
     _OPEN_ENDPOINTS = {"demo_entry", "demo_enter", "demo_exit",
-                       "static", "shared_assets", "health"}
+                       "static", "shared_assets", "health", "live"}
 
     @app.before_request
     def require_demo_identity():
@@ -1211,6 +1211,11 @@ def create_app() -> Flask:
             "backend_service": {"url": api_client.API_BASE_URL, "status": status,
                                 "detail": backend},
         }, (200 if status == "ok" else 503)
+
+    @app.get("/live")
+    def live():
+        """Process-only Container Apps probe; /health checks dependencies."""
+        return {"status": "ok", "service": "student-5-frontend"}
 
     # ------------------------------------------------------ R0 demo identity
     # DEMONSTRATION ONLY. This is a role SELECTOR, not a sign-in. It is kept
