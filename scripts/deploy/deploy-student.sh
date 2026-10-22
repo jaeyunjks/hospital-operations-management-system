@@ -123,7 +123,7 @@ if [[ "$DRY_RUN" == true ]]; then
   log "Ingress: frontend=external, backend=internal, database=internal."
   log "Cloud baseline: AI_ENABLED=false, MCP_ENABLED=false, RAG_ENABLED=false, MULTI_AGENT_ENABLED=false."
   if [[ "$STUDENT" == "5" ]]; then
-    log "Lifecycle: quiesce s5-db before update, then require database and API health before continuing."
+    log "Lifecycle: scale s5-db to zero before update, then require database and API health before continuing."
   fi
   exit 0
 fi
@@ -283,24 +283,45 @@ quiesce_student5_database() {
     return
   fi
 
-  local revisions
-  revisions="$(az containerapp revision list \
+  log "Scaling $DATABASE_APP to zero before replacing its SQLite revision."
+  az containerapp update \
+    --name "$DATABASE_APP" \
+    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+    --min-replicas 0 --max-replicas 1 \
+    --only-show-errors --output none
+
+  # Keep the newest zero-scale revision active. Azure's YAML updater needs an
+  # active revision to retain the app's managed-identity association, but a
+  # failed deployment can leave older revisions active as well. Stop only
+  # those stale revisions so no process can retain the SQLite file lock.
+  local retained_revision active_revisions revision
+  retained_revision="$(az containerapp show \
+    --name "$DATABASE_APP" \
+    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+    --query properties.latestRevisionName --output tsv --only-show-errors)"
+  [[ -n "$retained_revision" ]] || die \
+    "Azure did not return the retained zero-scale revision for $DATABASE_APP."
+
+  active_revisions="$(az containerapp revision list --all \
     --name "$DATABASE_APP" \
     --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
     --query "[?properties.active].name" --output tsv --only-show-errors)"
-  if [[ -z "$revisions" ]]; then
-    log "$DATABASE_APP already has no active revision."
-    return
-  fi
-
-  log "Quiescing $DATABASE_APP before replacing its SQLite revision."
-  local revision
   while IFS= read -r revision; do
-    [[ -n "$revision" ]] || continue
+    [[ -n "$revision" && "$revision" != "$retained_revision" ]] || continue
+    log "Deactivating stale $DATABASE_APP revision $revision."
     az containerapp revision deactivate \
       --name "$DATABASE_APP" \
       --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
       --revision "$revision" --only-show-errors >/dev/null
+  done <<<"$active_revisions"
+
+  local revisions
+  revisions="$(az containerapp revision list --all \
+    --name "$DATABASE_APP" \
+    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+    --query "[].name" --output tsv --only-show-errors)"
+  while IFS= read -r revision; do
+    [[ -n "$revision" ]] || continue
     wait_for_revision_replicas_to_stop "$DATABASE_APP" "$revision"
   done <<<"$revisions"
 
