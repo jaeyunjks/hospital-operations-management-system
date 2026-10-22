@@ -211,6 +211,18 @@ def test_student5_existing_apps_use_narrow_updates_that_preserve_identity():
     assert "preserve identity, storage, ingress and probes" in DEPLOY
 
 
+def test_student5_cloud_validation_uses_public_dependency_chain_without_exec_tty():
+    validation = (ROOT / "scripts/deploy/deployment-testing.sh").read_text(
+        encoding="utf-8"
+    )
+    assert '"$FRONTEND_URL/health"' in validation
+    assert 'health.get("status") == "ok"' in validation
+    assert 'database_detail.get("status") == "ok"' in validation
+    assert '"$FRONTEND_URL/shifts"' in validation
+    assert "Multi-Agent service unavailable" in validation
+    assert "No roster changes have been made" in validation
+
+
 def test_retained_status_smoke_and_cloud_review_catalogue_uses_student5_names():
     for name in ("s5-db", "s5-api", "s5-web"):
         assert f'"app": "{name}"' in LEGACY

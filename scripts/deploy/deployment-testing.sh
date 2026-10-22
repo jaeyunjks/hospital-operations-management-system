@@ -145,14 +145,54 @@ PY
   }
 }
 
-log "Checking internal backend health from the frontend container."
-remote_http_probe "$FRONTEND_APP" "$BACKEND_URL/health" 200 GET '{}'
+if [[ "$STUDENT" == "5" ]]; then
+  # `az containerapp exec` requires an interactive TTY and is unreliable on a
+  # GitHub-hosted runner. Student 5's public /health deliberately traverses
+  # frontend -> backend -> database, so validate that real dependency chain.
+  log "Checking Student 5 frontend, backend and database through public health."
+  HEALTH_JSON="$(curl --fail --silent --show-error \
+    --retry 12 --retry-all-errors --retry-delay 5 \
+    --max-time 20 "$FRONTEND_URL/health")"
+  python3 - "$HEALTH_JSON" <<'PY'
+import json
+import sys
 
-log "Checking internal database health from the backend container."
-remote_http_probe "$BACKEND_APP" "$DATABASE_URL/health" 200 GET '{}'
+health = json.loads(sys.argv[1])
+assert health.get("status") == "ok"
+backend = health.get("backend_service") or {}
+assert backend.get("status") == "ok"
+backend_detail = backend.get("detail") or {}
+assert backend_detail.get("status") == "ok"
+database = backend_detail.get("database_service") or {}
+assert database.get("status") == "ok"
+database_detail = database.get("detail") or {}
+assert database_detail.get("status") == "ok"
+PY
 
-log "Checking a representative read-only backend operation ($READ_PATH)."
-remote_http_probe "$FRONTEND_APP" "$BACKEND_URL$READ_PATH" 200 GET "$READ_HEADERS"
+  COOKIE_FILE="$(mktemp)"
+  trap 'rm -f "$COOKIE_FILE"' EXIT
+  log "Checking the manager Shift Planner read journey through the public frontend."
+  ENTER_STATUS="$(curl --silent --show-error \
+    --cookie "$COOKIE_FILE" --cookie-jar "$COOKIE_FILE" \
+    --data 'role=Staff Manager' --request POST \
+    --output /dev/null --write-out '%{http_code}' \
+    "$FRONTEND_URL/demo/enter")"
+  [[ "$ENTER_STATUS" == "302" ]] || die \
+    "Student 5 manager demo entry returned HTTP $ENTER_STATUS."
+  SHIFT_PAGE="$(curl --fail --silent --show-error \
+    --cookie "$COOKIE_FILE" --max-time 20 "$FRONTEND_URL/shifts")"
+  grep -q 'Shift planner' <<<"$SHIFT_PAGE" || die \
+    "Student 5 Shift Planner did not render through the deployed stack."
+else
+  log "Checking internal backend health from the frontend container."
+  remote_http_probe "$FRONTEND_APP" "$BACKEND_URL/health" 200 GET '{}'
+
+  log "Checking internal database health from the backend container."
+  remote_http_probe "$BACKEND_APP" "$DATABASE_URL/health" 200 GET '{}'
+
+  log "Checking a representative read-only backend operation ($READ_PATH)."
+  remote_http_probe "$FRONTEND_APP" "$BACKEND_URL$READ_PATH" 200 GET "$READ_HEADERS"
+fi
 
 BACKEND_ENV_JSON="$(az containerapp show --name "$BACKEND_APP" \
   --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
@@ -183,11 +223,13 @@ PY
 
 if [[ "$STUDENT" == "5" ]]; then
   log "Proving the Student 5 Multi-Agent workflow is blocked in the cloud baseline."
-  remote_http_probe \
-    "$FRONTEND_APP" \
-    "$BACKEND_URL/api/shifts/11/recovery-workflow" \
-    503 POST '{"X-HOMS-Role":"Staff Manager","Content-Type":"application/json"}' \
-    'multi_agent_unavailable'
+  RECOVERY_RESPONSE="$(curl --fail --silent --show-error \
+    --cookie "$COOKIE_FILE" --request POST --max-time 20 \
+    "$FRONTEND_URL/partials/shifts/11/recovery-workflow")"
+  grep -q 'Multi-Agent service unavailable' <<<"$RECOVERY_RESPONSE" || die \
+    "Student 5 cloud baseline did not visibly block Multi-Agent recovery."
+  grep -q 'No roster changes have been made' <<<"$RECOVERY_RESPONSE" || die \
+    "Student 5 cloud baseline did not confirm mutation safety."
 fi
 
 log "Student $STUDENT cloud validation passed; no mutating endpoint was called."
