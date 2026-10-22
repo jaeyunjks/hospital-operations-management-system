@@ -1,0 +1,762 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "ab2e8833-f02a-4b64-8678-726fb44e0df2",
+  "timestamp": "2026-10-22T23:40:03.790Z",
+  "task": "Review the listed admission time options against the hard constraints. Conflict-free means no overlap with recorded admissions, not confirmed capacity. Do not make any record changes.",
+  "input_evidence": {
+    "evidence_type": "student1_admission_scheduling",
+    "date": "2026-11-03",
+    "clinic_hours": "08:00-18:00",
+    "duration_minutes": 60,
+    "candidate_times_found": 10,
+    "candidate_times_included": 3,
+    "previously_reviewed_times": [],
+    "objective": {
+      "metric": "admission_time_proposed",
+      "current": 0,
+      "target": 1,
+      "unit": "time"
+    },
+    "pending_or_active_admission_count": 0,
+    "schedule_evidence_complete": true,
+    "options": [
+      {
+        "id": "slot-1",
+        "label": "08:00-09:00",
+        "attributes": {
+          "has_recorded_admission_overlap": false,
+          "schedule_evidence_complete": true
+        },
+        "outcomes": {
+          "metric_delta": 1
+        },
+        "risk_indicators": []
+      },
+      {
+        "id": "slot-2",
+        "label": "09:00-10:00",
+        "attributes": {
+          "has_recorded_admission_overlap": false,
+          "schedule_evidence_complete": true
+        },
+        "outcomes": {
+          "metric_delta": 1
+        },
+        "risk_indicators": []
+      },
+      {
+        "id": "slot-3",
+        "label": "10:00-11:00",
+        "attributes": {
+          "has_recorded_admission_overlap": false,
+          "schedule_evidence_complete": true
+        },
+        "outcomes": {
+          "metric_delta": 1
+        },
+        "risk_indicators": []
+      }
+    ],
+    "constraints": [
+      {
+        "id": "no_recorded_admission_overlap",
+        "scope": "option",
+        "type": "hard",
+        "field": "has_recorded_admission_overlap",
+        "operator": "equals",
+        "value": false,
+        "description": "Do not recommend a time overlapping a recorded Pending or Active admission."
+      },
+      {
+        "id": "complete_schedule_evidence",
+        "scope": "option",
+        "type": "hard",
+        "field": "schedule_evidence_complete",
+        "operator": "equals",
+        "value": true,
+        "description": "Only recommend an option when relevant admission times can be checked."
+      },
+      {
+        "id": "human_approval",
+        "scope": "workflow",
+        "type": "approval",
+        "description": "A receptionist or system administrator must review the proposal; no admission is created or changed by this workflow."
+      },
+      {
+        "id": "no_mutation",
+        "scope": "workflow",
+        "type": "safety",
+        "description": "This workflow must not create, update, or delete any patient or admission record."
+      }
+    ],
+    "scheduling_rules": [
+      "Candidate starts are hourly within clinic hours (assumed 08:00-18:00).",
+      "Durations use 15-minute increments."
+    ],
+    "unknowns": [
+      "Student-1 has no authoritative future slot-capacity source. A conflict-free option is not a confirmed booking or capacity guarantee.",
+      "5 recorded admission(s) have no end time and start on another date; they were not compared."
+    ],
+    "evidence_mode": "student1_admission_records"
+  },
+  "planner": {
+    "started_at": "2026-10-22T23:40:03.791Z",
+    "completed_at": "2026-10-22T23:40:03.791Z",
+    "input": {
+      "task": "Review the listed admission time options against the hard constraints. Conflict-free means no overlap with recorded admissions, not confirmed capacity. Do not make any record changes.",
+      "evidence": {
+        "evidence_type": "student1_admission_scheduling",
+        "date": "2026-11-03",
+        "clinic_hours": "08:00-18:00",
+        "duration_minutes": 60,
+        "candidate_times_found": 10,
+        "candidate_times_included": 3,
+        "previously_reviewed_times": [],
+        "objective": {
+          "metric": "admission_time_proposed",
+          "current": 0,
+          "target": 1,
+          "unit": "time"
+        },
+        "pending_or_active_admission_count": 0,
+        "schedule_evidence_complete": true,
+        "options": [
+          {
+            "id": "slot-1",
+            "label": "08:00-09:00",
+            "attributes": {
+              "has_recorded_admission_overlap": false,
+              "schedule_evidence_complete": true
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          },
+          {
+            "id": "slot-2",
+            "label": "09:00-10:00",
+            "attributes": {
+              "has_recorded_admission_overlap": false,
+              "schedule_evidence_complete": true
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          },
+          {
+            "id": "slot-3",
+            "label": "10:00-11:00",
+            "attributes": {
+              "has_recorded_admission_overlap": false,
+              "schedule_evidence_complete": true
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          }
+        ],
+        "constraints": [
+          {
+            "id": "no_recorded_admission_overlap",
+            "scope": "option",
+            "type": "hard",
+            "field": "has_recorded_admission_overlap",
+            "operator": "equals",
+            "value": false,
+            "description": "Do not recommend a time overlapping a recorded Pending or Active admission."
+          },
+          {
+            "id": "complete_schedule_evidence",
+            "scope": "option",
+            "type": "hard",
+            "field": "schedule_evidence_complete",
+            "operator": "equals",
+            "value": true,
+            "description": "Only recommend an option when relevant admission times can be checked."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "A receptionist or system administrator must review the proposal; no admission is created or changed by this workflow."
+          },
+          {
+            "id": "no_mutation",
+            "scope": "workflow",
+            "type": "safety",
+            "description": "This workflow must not create, update, or delete any patient or admission record."
+          }
+        ],
+        "scheduling_rules": [
+          "Candidate starts are hourly within clinic hours (assumed 08:00-18:00).",
+          "Durations use 15-minute increments."
+        ],
+        "unknowns": [
+          "Student-1 has no authoritative future slot-capacity source. A conflict-free option is not a confirmed booking or capacity guarantee.",
+          "5 recorded admission(s) have no end time and start on another date; they were not compared."
+        ],
+        "evidence_mode": "student1_admission_records"
+      }
+    },
+    "output": {
+      "goal": "Review the listed admission time options against the hard constraints. Conflict-free means no overlap with recorded admissions, not confirmed capacity. Do not make any record changes.",
+      "required_evidence": [
+        "objective",
+        "options",
+        "constraints",
+        "unknowns"
+      ],
+      "planned_steps": [
+        "Measure the gap between the current and target state.",
+        "Evaluate each supplied option against every hard constraint.",
+        "Compare eligible options using supplied risks and policy context.",
+        "Propose a reversible recommendation without executing a mutation.",
+        "Send the proposal and evidence to an independent reviewer."
+      ],
+      "constraints": [
+        "Do not recommend a time overlapping a recorded Pending or Active admission.",
+        "Only recommend an option when relevant admission times can be checked.",
+        "A receptionist or system administrator must review the proposal; no admission is created or changed by this workflow.",
+        "This workflow must not create, update, or delete any patient or admission record."
+      ],
+      "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": false,
+      "fallback_reason": null,
+      "attempts": [],
+      "semantic_validation": {
+        "stage": "planner",
+        "valid": true,
+        "issues": [],
+        "retry_triggered": false,
+        "fallback_triggered": false,
+        "rejected_attempts": []
+      },
+      "attempt_count": 0
+    }
+  },
+  "worker": {
+    "started_at": "2026-10-22T23:40:03.792Z",
+    "completed_at": "2026-10-22T23:40:03.792Z",
+    "input": {
+      "task": "Review the listed admission time options against the hard constraints. Conflict-free means no overlap with recorded admissions, not confirmed capacity. Do not make any record changes.",
+      "planner_output": {
+        "goal": "Review the listed admission time options against the hard constraints. Conflict-free means no overlap with recorded admissions, not confirmed capacity. Do not make any record changes.",
+        "required_evidence": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ],
+        "planned_steps": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "constraints": [
+          "Do not recommend a time overlapping a recorded Pending or Active admission.",
+          "Only recommend an option when relevant admission times can be checked.",
+          "A receptionist or system administrator must review the proposal; no admission is created or changed by this workflow.",
+          "This workflow must not create, update, or delete any patient or admission record."
+        ],
+        "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+      },
+      "evidence": {
+        "evidence_type": "student1_admission_scheduling",
+        "date": "2026-11-03",
+        "clinic_hours": "08:00-18:00",
+        "duration_minutes": 60,
+        "candidate_times_found": 10,
+        "candidate_times_included": 3,
+        "previously_reviewed_times": [],
+        "objective": {
+          "metric": "admission_time_proposed",
+          "current": 0,
+          "target": 1,
+          "unit": "time"
+        },
+        "pending_or_active_admission_count": 0,
+        "schedule_evidence_complete": true,
+        "options": [
+          {
+            "id": "slot-1",
+            "label": "08:00-09:00",
+            "attributes": {
+              "has_recorded_admission_overlap": false,
+              "schedule_evidence_complete": true
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          },
+          {
+            "id": "slot-2",
+            "label": "09:00-10:00",
+            "attributes": {
+              "has_recorded_admission_overlap": false,
+              "schedule_evidence_complete": true
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          },
+          {
+            "id": "slot-3",
+            "label": "10:00-11:00",
+            "attributes": {
+              "has_recorded_admission_overlap": false,
+              "schedule_evidence_complete": true
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          }
+        ],
+        "constraints": [
+          {
+            "id": "no_recorded_admission_overlap",
+            "scope": "option",
+            "type": "hard",
+            "field": "has_recorded_admission_overlap",
+            "operator": "equals",
+            "value": false,
+            "description": "Do not recommend a time overlapping a recorded Pending or Active admission."
+          },
+          {
+            "id": "complete_schedule_evidence",
+            "scope": "option",
+            "type": "hard",
+            "field": "schedule_evidence_complete",
+            "operator": "equals",
+            "value": true,
+            "description": "Only recommend an option when relevant admission times can be checked."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "A receptionist or system administrator must review the proposal; no admission is created or changed by this workflow."
+          },
+          {
+            "id": "no_mutation",
+            "scope": "workflow",
+            "type": "safety",
+            "description": "This workflow must not create, update, or delete any patient or admission record."
+          }
+        ],
+        "scheduling_rules": [
+          "Candidate starts are hourly within clinic hours (assumed 08:00-18:00).",
+          "Durations use 15-minute increments."
+        ],
+        "unknowns": [
+          "Student-1 has no authoritative future slot-capacity source. A conflict-free option is not a confirmed booking or capacity guarantee.",
+          "5 recorded admission(s) have no end time and start on another date; they were not compared."
+        ],
+        "evidence_mode": "student1_admission_records"
+      }
+    },
+    "output": {
+      "status": "proposal_ready",
+      "plan_steps_followed": [
+        "Measure the gap between the current and target state.",
+        "Evaluate each supplied option against every hard constraint.",
+        "Compare eligible options using supplied risks and policy context.",
+        "Propose a reversible recommendation without executing a mutation.",
+        "Send the proposal and evidence to an independent reviewer."
+      ],
+      "missing_planner_evidence": [],
+      "gap": {
+        "metric": "admission_time_proposed",
+        "current": 0,
+        "target": 1,
+        "deficit": 1
+      },
+      "evaluated_options": [
+        {
+          "option_id": "slot-1",
+          "label": "08:00-09:00",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "no_recorded_admission_overlap",
+              "passed": true
+            },
+            {
+              "constraint_id": "complete_schedule_evidence",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": []
+        },
+        {
+          "option_id": "slot-2",
+          "label": "09:00-10:00",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "no_recorded_admission_overlap",
+              "passed": true
+            },
+            {
+              "constraint_id": "complete_schedule_evidence",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": []
+        },
+        {
+          "option_id": "slot-3",
+          "label": "10:00-11:00",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "no_recorded_admission_overlap",
+              "passed": true
+            },
+            {
+              "constraint_id": "complete_schedule_evidence",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": []
+        }
+      ],
+      "proposed_solution": {
+        "selected_option_id": "slot-1",
+        "selected_option": "08:00-09:00",
+        "metric_delta": 1,
+        "projected_value": 1,
+        "reasoning": [
+          "Passed hard constraint: no_recorded_admission_overlap",
+          "Passed hard constraint: complete_schedule_evidence",
+          "No supplied option-specific risk indicator was identified."
+        ]
+      },
+      "limitations": [
+        "Student-1 has no authoritative future slot-capacity source. A conflict-free option is not a confirmed booking or capacity guarantee.",
+        "5 recorded admission(s) have no end time and start on another date; they were not compared."
+      ],
+      "mutation_executed": false
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": false,
+      "fallback_reason": null,
+      "attempts": [],
+      "semantic_validation": {
+        "stage": "worker",
+        "valid": true,
+        "issues": [],
+        "retry_triggered": false,
+        "fallback_triggered": false,
+        "rejected_attempts": []
+      },
+      "attempt_count": 0
+    }
+  },
+  "reviewer": {
+    "started_at": "2026-10-22T23:40:03.792Z",
+    "completed_at": "2026-10-22T23:40:03.792Z",
+    "input": {
+      "task": "Review the listed admission time options against the hard constraints. Conflict-free means no overlap with recorded admissions, not confirmed capacity. Do not make any record changes.",
+      "planner_output": {
+        "goal": "Review the listed admission time options against the hard constraints. Conflict-free means no overlap with recorded admissions, not confirmed capacity. Do not make any record changes.",
+        "required_evidence": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ],
+        "planned_steps": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "constraints": [
+          "Do not recommend a time overlapping a recorded Pending or Active admission.",
+          "Only recommend an option when relevant admission times can be checked.",
+          "A receptionist or system administrator must review the proposal; no admission is created or changed by this workflow.",
+          "This workflow must not create, update, or delete any patient or admission record."
+        ],
+        "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+      },
+      "worker_output": {
+        "status": "proposal_ready",
+        "plan_steps_followed": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "missing_planner_evidence": [],
+        "gap": {
+          "metric": "admission_time_proposed",
+          "current": 0,
+          "target": 1,
+          "deficit": 1
+        },
+        "evaluated_options": [
+          {
+            "option_id": "slot-1",
+            "label": "08:00-09:00",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "no_recorded_admission_overlap",
+                "passed": true
+              },
+              {
+                "constraint_id": "complete_schedule_evidence",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": []
+          },
+          {
+            "option_id": "slot-2",
+            "label": "09:00-10:00",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "no_recorded_admission_overlap",
+                "passed": true
+              },
+              {
+                "constraint_id": "complete_schedule_evidence",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": []
+          },
+          {
+            "option_id": "slot-3",
+            "label": "10:00-11:00",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "no_recorded_admission_overlap",
+                "passed": true
+              },
+              {
+                "constraint_id": "complete_schedule_evidence",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": []
+          }
+        ],
+        "proposed_solution": {
+          "selected_option_id": "slot-1",
+          "selected_option": "08:00-09:00",
+          "metric_delta": 1,
+          "projected_value": 1,
+          "reasoning": [
+            "Passed hard constraint: no_recorded_admission_overlap",
+            "Passed hard constraint: complete_schedule_evidence",
+            "No supplied option-specific risk indicator was identified."
+          ]
+        },
+        "limitations": [
+          "Student-1 has no authoritative future slot-capacity source. A conflict-free option is not a confirmed booking or capacity guarantee.",
+          "5 recorded admission(s) have no end time and start on another date; they were not compared."
+        ],
+        "mutation_executed": false
+      },
+      "worker_execution": {
+        "provider": "deterministic_fallback",
+        "fallback_used": false
+      },
+      "evidence": {
+        "evidence_type": "student1_admission_scheduling",
+        "date": "2026-11-03",
+        "clinic_hours": "08:00-18:00",
+        "duration_minutes": 60,
+        "candidate_times_found": 10,
+        "candidate_times_included": 3,
+        "previously_reviewed_times": [],
+        "objective": {
+          "metric": "admission_time_proposed",
+          "current": 0,
+          "target": 1,
+          "unit": "time"
+        },
+        "pending_or_active_admission_count": 0,
+        "schedule_evidence_complete": true,
+        "options": [
+          {
+            "id": "slot-1",
+            "label": "08:00-09:00",
+            "attributes": {
+              "has_recorded_admission_overlap": false,
+              "schedule_evidence_complete": true
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          },
+          {
+            "id": "slot-2",
+            "label": "09:00-10:00",
+            "attributes": {
+              "has_recorded_admission_overlap": false,
+              "schedule_evidence_complete": true
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          },
+          {
+            "id": "slot-3",
+            "label": "10:00-11:00",
+            "attributes": {
+              "has_recorded_admission_overlap": false,
+              "schedule_evidence_complete": true
+            },
+            "outcomes": {
+              "metric_delta": 1
+            },
+            "risk_indicators": []
+          }
+        ],
+        "constraints": [
+          {
+            "id": "no_recorded_admission_overlap",
+            "scope": "option",
+            "type": "hard",
+            "field": "has_recorded_admission_overlap",
+            "operator": "equals",
+            "value": false,
+            "description": "Do not recommend a time overlapping a recorded Pending or Active admission."
+          },
+          {
+            "id": "complete_schedule_evidence",
+            "scope": "option",
+            "type": "hard",
+            "field": "schedule_evidence_complete",
+            "operator": "equals",
+            "value": true,
+            "description": "Only recommend an option when relevant admission times can be checked."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "A receptionist or system administrator must review the proposal; no admission is created or changed by this workflow."
+          },
+          {
+            "id": "no_mutation",
+            "scope": "workflow",
+            "type": "safety",
+            "description": "This workflow must not create, update, or delete any patient or admission record."
+          }
+        ],
+        "scheduling_rules": [
+          "Candidate starts are hourly within clinic hours (assumed 08:00-18:00).",
+          "Durations use 15-minute increments."
+        ],
+        "unknowns": [
+          "Student-1 has no authoritative future slot-capacity source. A conflict-free option is not a confirmed booking or capacity guarantee.",
+          "5 recorded admission(s) have no end time and start on another date; they were not compared."
+        ],
+        "evidence_mode": "student1_admission_records"
+      }
+    },
+    "output": {
+      "review_status": "validated_with_risks",
+      "validated_findings": [],
+      "validated_evidence_refs": [
+        {
+          "source": "worker_output",
+          "path": "proposed_solution.projected_value",
+          "value": 1
+        }
+      ],
+      "risks": [
+        "Student-1 has no authoritative future slot-capacity source. A conflict-free option is not a confirmed booking or capacity guarantee.",
+        "5 recorded admission(s) have no end time and start on another date; they were not compared."
+      ],
+      "unsupported_claims": [],
+      "recommended_option_id": "slot-1",
+      "recommendation": "The proposal is evidence-consistent, but identified risks require human review.",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": false,
+      "fallback_reason": null,
+      "attempts": [],
+      "semantic_validation": {
+        "stage": "reviewer",
+        "valid": true,
+        "issues": [],
+        "retry_triggered": false,
+        "fallback_triggered": false,
+        "rejected_attempts": []
+      },
+      "attempt_count": 0
+    }
+  },
+  "human_review": {
+    "decision": "partially_accept",
+    "comments": "Options acceptable but request three other times.",
+    "timestamp": "2026-10-22T23:40:03.812Z"
+  },
+  "final_status": "partially_accepted",
+  "final_result": {
+    "status": "partially_accepted",
+    "proposal": {
+      "selected_option_id": "slot-1",
+      "selected_option": "08:00-09:00",
+      "metric_delta": 1,
+      "projected_value": 1,
+      "reasoning": [
+        "Passed hard constraint: no_recorded_admission_overlap",
+        "Passed hard constraint: complete_schedule_evidence",
+        "No supplied option-specific risk indicator was identified."
+      ]
+    },
+    "review": {
+      "review_status": "validated_with_risks",
+      "validated_findings": [],
+      "validated_evidence_refs": [
+        {
+          "source": "worker_output",
+          "path": "proposed_solution.projected_value",
+          "value": 1
+        }
+      ],
+      "risks": [
+        "Student-1 has no authoritative future slot-capacity source. A conflict-free option is not a confirmed booking or capacity guarantee.",
+        "5 recorded admission(s) have no end time and start on another date; they were not compared."
+      ],
+      "unsupported_claims": [],
+      "recommended_option_id": "slot-1",
+      "recommendation": "The proposal is evidence-consistent, but identified risks require human review.",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "human_decision": "partially_accept",
+    "human_comments_or_correction": "Options acceptable but request three other times.",
+    "mutation_executed": false
+  },
+  "completed_at": "2026-10-22T23:40:03.812Z"
+}
