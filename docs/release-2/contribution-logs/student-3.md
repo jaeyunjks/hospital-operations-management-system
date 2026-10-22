@@ -20,8 +20,8 @@ Commit links: `https://github.com/jaeyunjks/hospital-operations-management-syste
 | Post-commit CI/CD endpoint tests | `student-3/tests/test_endpoints_ci.py`: `POST /api/stock/issue` (FEFO) and `POST /api/purchase-orders/{id}/approve` (manager approval), 6 tests run against the backend container in `student-3.yml` |
 | GitHub Actions workflow | `student-3.yml` also runs the endpoint tests and checks that Multi-Agent is retained but disabled (backend 503, dashboard "Multi-Agent disabled") |
 | Pre-commit security testing | Ruff security rules, detect-secrets and pip-audit on the pharmacy services and the shared components Student 3 owns. Flask upgraded from 3.0.3 to 3.1.3 for a known vulnerability; configured service URLs restricted to http(s); SQL and bind findings reviewed and documented. With the team pre-commit configuration (root `.pre-commit-config.yaml`, `ruff.toml`) all three hooks pass on the 173 Student 3 files. |
-| Agentic-loop review evidence | Multi-Agent Workflow Review of the pharmacy workflow: 9/9 checks passed. Testing Review on the `student-3-junit` report and run summary from GitHub: every Student 3 check passes (report present, 6/6 endpoint tests passed, own `student-3.yml` run succeeded); the overall result is FAIL only because of the team-wide pre-commit findings outside Student 3. |
-| Local deployment | Pharmacy containers reach the host-local Multi-Agent Server (8200), MCP (8000), RAG (8100) and Ollama through `host.docker.internal` |
+| Agentic-loop review evidence | Multi-Agent Workflow Review of the pharmacy workflow: 9/9 checks passed; of the 22 October review with MCP and RAG context: PASS, 12/13 (the advisory MA9 records that all three stages used the rule-based fallback). Testing Review on the `student-3-junit` report and run summary from GitHub: 10/10 checks passed (team pre-commit scans ran and passed, report present, 6/6 endpoint tests passed, own `student-3.yml` run succeeded). The team hook titles were renamed to include `detect-secrets` and `pip-audit` so the review recognises them. |
+| Local deployment | All 16 Compose containers healthy with Ollama, MCP (8000), RAG (8100) and the Multi-Agent Server (8200) in separate host terminals; one full review recorded through the frontend with the log lines from each terminal (`docs/ai-evidence/student-3/local-deployment-validation.txt`) |
 | Cloud readiness | New `AI_ENABLED` switch; with AI-Mode, MCP, RAG and Multi-Agent all off (the cloud baseline) every pharmacy page and create/read/update/delete action works |
 
 ## Commits
@@ -53,7 +53,9 @@ Commit links: `https://github.com/jaeyunjks/hospital-operations-management-syste
 | Pre-commit security scan report | `docs/ai-evidence/student-3/pre-commit-security-scan.txt` |
 | Team pre-commit hooks on Student 3 files | `docs/ai-evidence/student-3/pre-commit-group-hooks.txt` |
 | Multi-Agent Workflow Review (agentic loop) | `docs/agent-logs/student-3/*-multi-agent-review.md` / `.json` |
-| Testing Review (agentic loop) | `docs/agent-logs/student-3/20261022T050726.115548Z-testing-review.md` / `.json` |
+| Multi-Agent workflow audit with MCP and RAG context | `reports/multi-agent/workflow-897b2780-5a15-4148-bf91-cc7bfd6ff704.json` |
+| Testing Review (agentic loop), 10/10 | `docs/agent-logs/student-3/20261022T054741.600189Z-testing-review.md` / `.json` |
+| Local deployment with multiple terminals | `docs/ai-evidence/student-3/local-deployment-validation.txt` |
 | Testing Review inputs (CI JUnit report, run summary, pre-commit run) | `docs/test-evidence/student-3/` |
 | Post-commit endpoint test run | `docs/ai-evidence/student-3/post-commit-endpoint-tests.txt` |
 | Multi-Agent workflow audit (Planner, Worker, Reviewer, human review) | `reports/multi-agent/workflow-bfe70705-87c4-49c2-b372-50e7031594bb.json` |
@@ -63,6 +65,5 @@ Commit links: `https://github.com/jaeyunjks/hospital-operations-management-syste
 
 - Cloud deployment of the pharmacy services once the group selects Azure or AWS and
   `cloud-deployment.yml` is implemented; then the Cloud Deployment Review evidence.
-- Team-wide pre-commit findings outside Student 3 (Ruff in Students 4 and 5, the Multi-Agent
-  Server and the agentic loop; dependency vulnerabilities in Students 1, 2 and 4 and the
-  Multi-Agent Server) keep the Testing Review's overall result at FAIL until fixed by their owners.
+- With the shared server's stricter semantic checks, the small local models' answers often fail
+  them, so in `auto` mode some or all stages use the labelled rule-based fallback.

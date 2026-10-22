@@ -9,7 +9,7 @@ repos:
         require_serial: true
 
       - id: detect-secrets
-        name: Detect committed secrets
+        name: detect-secrets (committed secrets)
         entry: detect-secrets-hook --baseline .secrets.baseline
         language: system
         types: [text]
@@ -17,7 +17,7 @@ repos:
           ^(.secrets.baseline|reports/multi-agent/|docs/agent-logs/|.local-r2/|student-5/(playwright-cli|.playwright-cli|output/playwright)/)
 
       - id: pip-audit-requirements
-        name: Audit all service requirements
+        name: pip-audit (all service requirements)
         entry: scripts/security/audit-requirements.sh
         language: system
         pass_filenames: false

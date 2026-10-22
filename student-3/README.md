@@ -157,6 +157,8 @@ Multi-Agent are present but disabled in both the backend and the dashboard.
   CI uploads the JUnit report as the `student-3-junit` artefact for the Testing Review mode
 - Multi-Agent workflow audit (Planner → Worker → Reviewer → human review): [`reports/multi-agent/`](../reports/multi-agent/) (task `Pharmacy reorder decision: …`)
 - Multi-Agent Workflow Review of that workflow (9/9 checks): [`docs/agent-logs/student-3/`](../docs/agent-logs/student-3/) (`*-multi-agent-review.*`)
+- Testing Review (10/10): [`docs/agent-logs/student-3/`](../docs/agent-logs/student-3/) (`*-testing-review.*`), inputs in [`docs/test-evidence/student-3/`](../docs/test-evidence/student-3/)
+- Local deployment with every server in its own terminal and one full review: [`docs/ai-evidence/student-3/local-deployment-validation.txt`](../docs/ai-evidence/student-3/local-deployment-validation.txt)
 
 ## Known limitations
 
