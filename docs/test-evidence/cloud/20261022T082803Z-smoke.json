@@ -1,0 +1,27 @@
+{
+  "resource_group": "homs-r2-rg",
+  "location": "australiaeast",
+  "checked_at": "20261022T082803Z",
+  "results": [
+    {
+      "url": "https://s4-api.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/health",
+      "ok": true,
+      "status": 200,
+      "body": "{\"data\":{\"ai\":{\"model\":\"qwen2.5:3b\",\"note\":\"AI is advisory; the feature works without it\",\"ok\":false},\"database\":{\"detail\":{\"port\":6400,\"records\":{\"beds\":25,\"room_arrangements\":16,\"room_types\":10,\"rooms\":14,\"shortage_cases\":10},\"service\":\"student-4-database\"},\"ok\":true},\"port\":5400,\"service\":\"studen",
+      "ms": 135,
+      "app": "s4-api",
+      "student": "student-4",
+      "role": "backend"
+    },
+    {
+      "url": "https://s4-web.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/health",
+      "ok": true,
+      "status": 200,
+      "body": "{\"backend\":{\"ai\":{\"model\":\"qwen2.5:3b\",\"note\":\"AI is advisory; the feature works without it\",\"ok\":false},\"database\":{\"detail\":{\"port\":6400,\"records\":{\"beds\":25,\"room_arrangements\":16,\"room_types\":10,\"rooms\":14,\"shortage_cases\":10},\"service\":\"student-4-database\"},\"ok\":true},\"port\":5400,\"service\":\"stu",
+      "ms": 77,
+      "app": "s4-web",
+      "student": "student-4",
+      "role": "frontend"
+    }
+  ]
+}

@@ -16,7 +16,7 @@
 
     {"id": "CR1", "kind": "crud", "method": "POST", "description": "Create a test bed",
      "url": "${backend}/api/beds", "body": {"room_id": 1, "bed_number": "CLOUD-TEST-01"},
-     "expect_status": [201], "save": {"bed_id": "data.id"}},
+     "expect_status": [201], "save": {"bed_id": "data.bed_id"}},
     {"id": "CR2", "kind": "crud", "description": "Read the test bed back",
      "url": "${backend}/api/beds/{bed_id}", "expect_status": [200],
      "expect_json": {"data.bed_number": "CLOUD-TEST-01"}},

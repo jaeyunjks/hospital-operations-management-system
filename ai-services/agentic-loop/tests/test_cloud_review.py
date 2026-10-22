@@ -41,7 +41,7 @@ class FakeCloud:
         if (method, path) in self.overrides:
             value = self.overrides[(method, path)]
             return value.pop(0) if isinstance(value, list) else value
-        bed = {"id": 41, "bed_number": "CLOUD-TEST-01", "status": "available"}
+        bed = {"bed_id": 41, "bed_number": "CLOUD-TEST-01", "status": "available"}
         routes = {
             ("GET", "/"): {"reachable": True, "status": 200, "body": "<html>HOMS</html>", "duration_ms": 10},
             ("GET", "/health"): ok({"database": {"ok": True}, "ai": {"ok": False}}),

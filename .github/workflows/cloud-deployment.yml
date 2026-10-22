@@ -1,28 +1,140 @@
 # ==========================================================================
-# Cloud Deployment (PLACEHOLDER)
-# ==========================================================================
-# Team-wide deployment to the selected cloud platform: Microsoft Azure
-# (preferred service: Azure Container Apps). Planned for a later release.
+# Cloud Deployment (Release 2): Azure Container Apps
 #
-# This is a PLACEHOLDER. Deployment is not implemented yet, so this workflow
-# does NOT deploy anything and does NOT run on push / pull_request — it will
-# not pretend that a deployment pipeline exists.
+# validate -> deploy -> verify
+#   1. validate  every student's unit tests and the deployment script's own
+#                tests must pass first (the required CI/CD validation)
+#   2. deploy    builds each image, pushes it to Azure Container Registry and
+#                rolls it out to Azure Container Apps with
+#                scripts/deploy/azure_deploy.py (the same script used locally)
+#   3. verify    calls every public app and keeps the result as evidence
 #
-# When ready, replace the body below with a real deployment pipeline (build /
-# push images, then deploy to Azure Container Apps), using repository secrets
-# for credentials — never commit secrets. Choose an appropriate trigger then
-# (e.g. release tag or manual dispatch on a reviewed build).
+# AI-Mode, MCP, RAG and the Multi-Agent Server stay disabled in the cloud
+# (the Release 2 baseline); that is set per service in azure_deploy.py.
+#
+# Needs one repository secret, AZURE_CREDENTIALS: the JSON from
+#   az ad sp create-for-rbac --name homs-r2-github --role contributor \
+#     --scopes /subscriptions/<id>/resourceGroups/homs-r2-rg --json-auth
+# No other credential is stored in the repository.
 # ==========================================================================
-name: cloud-deployment (placeholder)
+name: cloud-deployment
 
 on:
   workflow_dispatch:
+    inputs:
+      only:
+        description: "Deploy only these (e.g. student-4, or s4-api s4-web). Empty = everything"
+        required: false
+        default: ""
+      always_on:
+        description: "Keep one replica of every app running (for recording the showcase)"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - 'student-*/**'
+      - 'shared/frontend/**'
+      - 'scripts/deploy/**'
+      - '.github/workflows/cloud-deployment.yml'
+
+concurrency:
+  group: cloud-deployment
+  cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
-  placeholder:
+  validate:
+    name: Validate ${{ matrix.student }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - student: student-1
+            install: student-1/backend/requirements.txt student-1/frontend/requirements.txt
+            test: python -m pytest -q student-1/tests
+          - student: student-2
+            install: student-2/frontend/requirements.txt student-2/backend/requirements.txt student-2/database/requirements.txt
+            test: python -m pytest -q student-2/tests
+          - student: student-3
+            install: student-3/database/requirements.txt student-3/backend/requirements.txt student-3/frontend/requirements.txt ai-services/mcp-server/requirements.txt ai-services/rag-server/requirements.txt
+            test: python -m pytest -q student-3
+          - student: student-4
+            install: student-4/backend/requirements.txt student-4/frontend/requirements.txt
+            test: python -m pytest -q student-4/tests
+          - student: student-5
+            install: student-5/frontend/requirements.txt student-5/backend/requirements.txt student-5/database/requirements.txt
+            test: python -m pytest -q student-5/tests
+          - student: deploy-script
+            install: ""
+            test: python -m pytest -q scripts/deploy/tests
     steps:
-      - name: Not yet implemented
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install
         run: |
-          echo "Cloud deployment is a placeholder — no deployment pipeline implemented yet."
-          echo "Target: Microsoft Azure (Azure Container Apps). See .github/workflows/README.md."
+          python -m pip install --upgrade pip
+          for file in ${{ matrix.install }}; do pip install -r "$file"; done
+          pip install pytest
+      - name: Run tests
+        env:
+          PYTHONPATH: ${{ matrix.student == 'student-1' && 'student-1' || '' }}
+        run: ${{ matrix.test }}
+
+  deploy:
+    name: Deploy to Azure Container Apps
+    runs-on: ubuntu-latest
+    needs: validate
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Container Apps CLI extension
+        run: az extension add --name containerapp --upgrade --yes --only-show-errors
+
+      - name: Build, push and deploy
+        env:
+          ONLY: ${{ github.event.inputs.only }}
+          ALWAYS_ON: ${{ github.event.inputs.always_on }}
+        run: |
+          set -euo pipefail
+          args=(deploy --tag "${GITHUB_SHA::12}")
+          if [ -n "${ONLY:-}" ]; then args+=(--only $ONLY); fi
+          if [ "${ALWAYS_ON:-false}" = "true" ]; then args+=(--always-on); fi
+          python scripts/deploy/azure_deploy.py "${args[@]}"
+
+      - name: Verify the cloud application
+        env:
+          ONLY: ${{ github.event.inputs.only }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ONLY:-}" ]; then
+            python scripts/deploy/azure_deploy.py smoke --only $ONLY
+          else
+            python scripts/deploy/azure_deploy.py smoke
+          fi
+          python scripts/deploy/azure_deploy.py probes
+
+      - name: Keep deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloud-deployment-evidence
+          path: docs/test-evidence/cloud/
+          if-no-files-found: warn
+
+      - name: Azure logout
+        if: always()
+        run: az logout || true
