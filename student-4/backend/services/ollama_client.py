@@ -27,6 +27,8 @@ class AIUnavailable(Exception):
 
 def generate(prompt, system=None, temperature=0.2):
     """Send one prompt to Ollama and return the raw text response."""
+    if not config.AI_ENABLED:
+        raise AIUnavailable("AI Mode is disabled")
     payload = {
         "model": config.OLLAMA_MODEL,
         "prompt": prompt,
@@ -79,6 +81,8 @@ def generate_json(prompt, system=None, retries=None):
 
 def is_available():
     """Cheap reachability probe used by /health."""
+    if not config.AI_ENABLED:
+        return False
     try:
         response = requests.get(config.OLLAMA_URL + "/api/tags", timeout=3)
         return response.status_code == 200

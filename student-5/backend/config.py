@@ -56,6 +56,11 @@ class Config:
     #: Shared Release 2 Multi-Agent API. The service remains a separate local,
     #: non-containerised process and is called only by an explicit workflow
     #: trigger. The deadline covers all three sequential local model stages.
+    #: It stays enabled by default to preserve the established local R2
+    #: workflow; the controlled cloud baseline explicitly sets it false.
+    MULTI_AGENT_ENABLED = (
+        os.environ.get("MULTI_AGENT_ENABLED", "true").lower() == "true"
+    )
     MULTI_AGENT_BASE_URL = os.environ.get(
         "MULTI_AGENT_BASE_URL", "http://127.0.0.1:8200"
     )

@@ -1,6 +1,6 @@
 # Release 2 — Multi-Agent + Deployment
 
-_Placeholder planning document._
+Release 2 implementation and deployment documentation.
 
 ## Agreed high-level scope
 
@@ -8,10 +8,12 @@ _Placeholder planning document._
 - **Testing** across the integrated application.
 - **Azure** cloud deployment (preferred service: **Azure Container Apps**).
 
-## To be planned
+## Shared implementation
 
-- Agent roles, coordination, and boundaries.
-- Integrated / end-to-end test strategy.
-- Azure deployment pipeline (extends the per-student CI/CD workflows).
+- Multi-Agent roles, coordination, Human Review and audit history are under
+  `ai-services/multi-agent-server/`.
+- Integrated validation remains in `.github/workflows/integration-ci.yml`.
+- The controlled shared Azure foundation, OIDC and incremental deployment
+  contract are documented in [`azure-deployment.md`](azure-deployment.md).
 
 Do not invent implementation details that have not been agreed.

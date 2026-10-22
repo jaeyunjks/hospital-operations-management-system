@@ -4,6 +4,7 @@ import pytest
 
 from backend.app import create_app
 from backend.services import summary as summary_service
+from backend.services import ollama_client
 from backend.services.ollama_client import AIUnavailable
 
 
@@ -67,3 +68,18 @@ def test_ai_endpoint_reports_unavailable_service(monkeypatch):
         "error": "Ollama is unavailable",
         "summary": "",
     }
+
+
+def test_ai_disabled_uses_fallback_without_network(monkeypatch):
+    monkeypatch.setattr(ollama_client, "AI_ENABLED", False)
+    monkeypatch.setattr(
+        ollama_client.requests,
+        "post",
+        lambda *args, **kwargs: pytest.fail("disabled AI contacted Ollama"),
+    )
+
+    result = ollama_client.generate_with_fallback(
+        "Patient needs interpreter support.", fallback="Rule-based summary"
+    )
+
+    assert result == "Rule-based summary"

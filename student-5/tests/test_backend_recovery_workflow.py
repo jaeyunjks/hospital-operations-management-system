@@ -324,6 +324,21 @@ def test_manager_guard_runs_before_evidence_or_shared_client(client, monkeypatch
     assert calls == []
 
 
+def test_cloud_multi_agent_switch_blocks_workflow_before_network(
+        client, monkeypatch):
+    calls = install_adapter(monkeypatch)
+    client.application.config["MULTI_AGENT_ENABLED"] = False
+
+    response = post(client)
+
+    assert response.status_code == 503
+    assert response.get_json() == {
+        "error": "multi_agent_unavailable",
+        "message": "The shared Multi-Agent workflow service is disabled.",
+    }
+    assert calls == []
+
+
 def test_unknown_and_invalid_shift_ids_do_not_call_shared_service(
         client, monkeypatch):
     calls = install_adapter(monkeypatch)

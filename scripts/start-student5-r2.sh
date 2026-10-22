@@ -205,6 +205,7 @@ export STUDENT5_RAG_ENABLED=true
 export STUDENT5_RAG_SERVER_URL=http://host.docker.internal:8100
 export STUDENT5_MCP_ENABLED=true
 export STUDENT5_MCP_SERVER_URL=http://host.docker.internal:8000/mcp
+export STUDENT5_MULTI_AGENT_ENABLED=true
 export STUDENT5_MULTI_AGENT_BASE_URL=http://host.docker.internal:8200
 export COMPOSE_PROGRESS="${COMPOSE_PROGRESS:-plain}"
 

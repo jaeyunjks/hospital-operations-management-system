@@ -29,6 +29,13 @@ RAG index, workflow audit history, and logs.
 |------------|-----------------------------------------------------|
 | `build/`   | Build helpers (images / assets)                     |
 | `test/`    | Test helpers (run per-service or integrated tests)  |
-| `deploy/`  | Deployment helpers (Azure Container Apps, later)    |
+| `deploy/`  | Shared Azure foundation and scoped deployment helpers |
 
-The remaining subdirectories are placeholders for future shared helpers.
+The Azure helpers are documented in
+[`docs/release-2/azure-deployment.md`](../docs/release-2/azure-deployment.md).
+They support dry runs, one-time foundation/OIDC setup, one-student deployment,
+and non-destructive endpoint validation. They do not include automated shared
+resource-group deletion.
+
+The `build/` and `test/` subdirectories remain placeholders for future shared
+helpers.

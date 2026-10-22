@@ -18,10 +18,11 @@ import re
 import requests
 
 try:
-    from backend.config import OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_RETRIES, OLLAMA_URL
+    from backend.config import AI_ENABLED, OLLAMA_MODEL, OLLAMA_TIMEOUT, OLLAMA_RETRIES, OLLAMA_URL
 except ImportError:  # pragma: no cover - supports direct module execution
     import config
 
+    AI_ENABLED = config.AI_ENABLED
     OLLAMA_MODEL = config.OLLAMA_MODEL
     OLLAMA_TIMEOUT = config.OLLAMA_TIMEOUT
     OLLAMA_RETRIES = config.OLLAMA_RETRIES
@@ -72,6 +73,8 @@ def _rule_based_fallback(prompt, system=None):
 def generate(prompt, system=None, temperature=0.2, retries=None):
     if prompt is None or str(prompt).strip() == "":
         raise ValueError("Prompt cannot be empty")
+    if not AI_ENABLED:
+        raise AIUnavailable("AI Mode is disabled")
 
     payload = {
         "model": OLLAMA_MODEL,
@@ -141,6 +144,8 @@ def summarize_notes(text, fallback=None):
 
 # Check whether the Ollama server is reachable and can accept requests.
 def healthcheck():
+    if not AI_ENABLED:
+        return {"ok": False, "error": "AI Mode is disabled"}
     try:
         response = requests.get(f"{str(OLLAMA_URL).rstrip('/')}/api/tags", timeout=OLLAMA_TIMEOUT)
         if response.status_code >= 400:
@@ -152,6 +157,8 @@ def healthcheck():
 
 # Return the model list from the local Ollama installation
 def list_models():
+    if not AI_ENABLED:
+        raise AIUnavailable("AI Mode is disabled")
     try:
         response = requests.get(f"{str(OLLAMA_URL).rstrip('/')}/api/tags", timeout=OLLAMA_TIMEOUT)
         response.raise_for_status()

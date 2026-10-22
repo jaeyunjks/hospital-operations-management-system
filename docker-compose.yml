@@ -62,6 +62,7 @@ services:
       RAG_ENABLED: "${STUDENT5_RAG_ENABLED:-false}"
       RAG_SERVER_URL: "${STUDENT5_RAG_SERVER_URL:-http://host.docker.internal:8100}"
       RAG_TIMEOUT: "${STUDENT5_RAG_TIMEOUT:-100}"
+      MULTI_AGENT_ENABLED: "${STUDENT5_MULTI_AGENT_ENABLED:-true}"
       MULTI_AGENT_BASE_URL: "${STUDENT5_MULTI_AGENT_BASE_URL:-http://host.docker.internal:8200}"
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -388,6 +389,9 @@ services:
       HOST: 0.0.0.0
       PORT: 6100
       FLASK_DEBUG: 0
+      # Preserve the established image-local database for Compose. Azure
+      # overrides this with /data/patients.db on the dedicated Files mount.
+      DB_PATH: /app/database/patients.db
     ports:
       - "6100:6100"
     command: python -m database.app

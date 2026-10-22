@@ -2504,7 +2504,49 @@
       "attempt_count": 1
     }
   },
-  "human_review": null,
-  "final_status": "awaiting_human_review",
-  "final_result": null
+  "human_review": {
+    "decision": "approve",
+    "comments": "",
+    "timestamp": "2026-10-22T04:50:00.059Z"
+  },
+  "final_status": "approved",
+  "final_result": {
+    "status": "approved",
+    "proposal": {
+      "selected_option_id": "staff-1",
+      "selected_option": "staff-1",
+      "metric_delta": 1,
+      "projected_value": 1,
+      "reasoning": [
+        "Passed hard constraint: backend_eligibility",
+        "No supplied option-specific risk indicator was identified."
+      ]
+    },
+    "review": {
+      "review_status": "changes_required",
+      "validated_findings": [],
+      "validated_evidence_refs": [
+        {
+          "source": "worker_output",
+          "path": "proposed_solution.projected_value",
+          "value": 1
+        }
+      ],
+      "risks": [
+        "No weekly-hours, overtime, fatigue, or consecutive-shift threshold is configured.",
+        "No authoritative department-to-ward mapping links this shift to ward occupancy.",
+        "Patient count and acuity are not available for the selected shift.",
+        "Required staff count is manager-entered and is not derived from a clinical staffing ratio."
+      ],
+      "unsupported_claims": [],
+      "recommended_option_id": "staff-1",
+      "recommendation": "Review the validated Worker proposal and authoritative evidence before action.",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "human_decision": "approve",
+    "human_comments_or_correction": "",
+    "mutation_executed": false
+  },
+  "completed_at": "2026-10-22T04:50:00.064Z"
 }

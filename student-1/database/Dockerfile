@@ -11,6 +11,8 @@ COPY database/ /app/database/
 RUN python -m database.init_database --check
 
 ENV PYTHONPATH=/app
+ENV DB_PATH=/data/patients.db
+RUN mkdir -p /data
 EXPOSE 6100
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
