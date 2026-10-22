@@ -1,0 +1,121 @@
+{
+  "platform": "azure",
+  "environment": "homs-r2-env (homs-r2-rg, australiaeast)",
+  "base_urls": {
+    "s4-api": "https://s4-api.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io",
+    "s4-web": "https://s4-web.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io"
+  },
+  "probes": [
+    {
+      "id": "S4_API",
+      "kind": "core",
+      "description": "student-4 backend answers",
+      "url": "https://s4-api.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/health",
+      "expect_status": [
+        200
+      ]
+    },
+    {
+      "id": "S4_WEB",
+      "kind": "core",
+      "description": "student-4 frontend answers",
+      "url": "https://s4-web.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/health",
+      "expect_status": [
+        200
+      ]
+    },
+    {
+      "id": "CR1",
+      "kind": "crud",
+      "method": "POST",
+      "description": "Create a bed in the cloud database",
+      "url": "https://s4-api.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/api/beds",
+      "body": {
+        "room_id": 1,
+        "bed_number": "CLOUD-TEST-01"
+      },
+      "expect_status": [
+        201
+      ],
+      "save": {
+        "bed_id": "data.bed_id"
+      }
+    },
+    {
+      "id": "CR2",
+      "kind": "crud",
+      "description": "Read it back",
+      "url": "https://s4-api.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/api/beds/{bed_id}",
+      "expect_status": [
+        200
+      ],
+      "expect_json": {
+        "data.bed_number": "CLOUD-TEST-01"
+      }
+    },
+    {
+      "id": "CR3",
+      "kind": "crud",
+      "method": "PUT",
+      "description": "Update it",
+      "url": "https://s4-api.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/api/beds/{bed_id}",
+      "body": {
+        "status": "maintenance"
+      },
+      "expect_status": [
+        200
+      ],
+      "expect_json": {
+        "data.status": "maintenance"
+      }
+    },
+    {
+      "id": "CR4",
+      "kind": "crud",
+      "method": "DELETE",
+      "description": "Delete it",
+      "url": "https://s4-api.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/api/beds/{bed_id}",
+      "expect_status": [
+        200,
+        204
+      ]
+    },
+    {
+      "id": "AI1",
+      "kind": "ai_disabled",
+      "service": "ai-mode",
+      "description": "No Ollama in the cloud",
+      "url": "https://s4-api.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/health",
+      "expect_json": {
+        "data.ai.ok": false
+      }
+    },
+    {
+      "id": "AI2",
+      "kind": "ai_disabled",
+      "service": "mcp",
+      "url": "https://s4-api.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/api/mcp/status",
+      "expect_json": {
+        "data.enabled": false
+      }
+    },
+    {
+      "id": "AI3",
+      "kind": "ai_disabled",
+      "service": "rag",
+      "url": "https://s4-api.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/api/rag/status",
+      "expect_json": {
+        "data.enabled": false
+      }
+    },
+    {
+      "id": "AI4",
+      "kind": "ai_disabled",
+      "service": "multi-agent",
+      "url": "https://s4-api.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/api/multi-agent/status",
+      "expect_json": {
+        "data.enabled": false
+      }
+    }
+  ]
+}

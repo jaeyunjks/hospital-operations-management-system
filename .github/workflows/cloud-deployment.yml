@@ -1,158 +1,140 @@
+# ==========================================================================
+# Cloud Deployment (Release 2): Azure Container Apps
+#
+# validate -> deploy -> verify
+#   1. validate  every student's unit tests and the deployment script's own
+#                tests must pass first (the required CI/CD validation)
+#   2. deploy    builds each image, pushes it to Azure Container Registry and
+#                rolls it out to Azure Container Apps with
+#                scripts/deploy/azure_deploy.py (the same script used locally)
+#   3. verify    calls every public app and keeps the result as evidence
+#
+# AI-Mode, MCP, RAG and the Multi-Agent Server stay disabled in the cloud
+# (the Release 2 baseline); that is set per service in azure_deploy.py.
+#
+# Needs one repository secret, AZURE_CREDENTIALS: the JSON from
+#   az ad sp create-for-rbac --name homs-r2-github --role contributor \
+#     --scopes /subscriptions/<id>/resourceGroups/homs-r2-rg --json-auth
+# No other credential is stored in the repository.
+# ==========================================================================
 name: cloud-deployment
 
 on:
   workflow_dispatch:
     inputs:
-      student:
-        description: Student feature slice to validate and deploy
-        required: true
-        type: choice
-        options:
-          - "1"
-          - "2"
-          - "3"
-          - "4"
-          - "5"
+      only:
+        description: "Deploy only these (e.g. student-4, or s4-api s4-web). Empty = everything"
+        required: false
+        default: ""
+      always_on:
+        description: "Keep one replica of every app running (for recording the showcase)"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths:
+      - 'student-*/**'
+      - 'shared/frontend/**'
+      - 'scripts/deploy/**'
+      - '.github/workflows/cloud-deployment.yml'
+
+concurrency:
+  group: cloud-deployment
+  cancel-in-progress: false
 
 permissions:
   contents: read
-  id-token: write
-
-concurrency:
-  group: homs-r2-cloud-student-${{ inputs.student }}
-  cancel-in-progress: false
 
 jobs:
   validate:
-    name: Validate Student ${{ inputs.student }}
+    name: Validate ${{ matrix.student }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - student: student-1
+            install: student-1/backend/requirements.txt student-1/frontend/requirements.txt
+            test: python -m pytest -q student-1/tests
+          - student: student-2
+            install: student-2/frontend/requirements.txt student-2/backend/requirements.txt student-2/database/requirements.txt
+            test: python -m pytest -q student-2/tests
+          - student: student-3
+            install: student-3/database/requirements.txt student-3/backend/requirements.txt student-3/frontend/requirements.txt ai-services/mcp-server/requirements.txt ai-services/rag-server/requirements.txt
+            test: python -m pytest -q student-3
+          - student: student-4
+            install: student-4/backend/requirements.txt student-4/frontend/requirements.txt
+            test: python -m pytest -q student-4/tests
+          - student: student-5
+            install: student-5/frontend/requirements.txt student-5/backend/requirements.txt student-5/database/requirements.txt
+            test: python -m pytest -q student-5/tests
+          - student: deploy-script
+            install: ""
+            test: python -m pytest -q scripts/deploy/tests
     steps:
-      - name: Check out selected revision
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: student-${{ inputs.student }}/**/requirements.txt
-
-      - name: Install selected Student dependencies
-        env:
-          STUDENT: ${{ inputs.student }}
+          python-version: '3.12'
+      - name: Install
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest
-          while IFS= read -r requirements; do
-            python -m pip install -r "$requirements"
-          done < <(find "student-$STUDENT" -maxdepth 2 -name requirements.txt -type f | sort)
-
-      - name: Run selected Student tests
+          for file in ${{ matrix.install }}; do pip install -r "$file"; done
+          pip install pytest
+      - name: Run tests
         env:
-          STUDENT: ${{ inputs.student }}
-          AI_ENABLED: "false"
-          MCP_ENABLED: "false"
-          RAG_ENABLED: "false"
-          MULTI_AGENT_ENABLED: "false"
-        run: |
-          PYTHONPATH="student-$STUDENT" python -m pytest -q "student-$STUDENT/tests"
-
-      - name: Validate Compose and deployment definitions
-        env:
-          STUDENT: ${{ inputs.student }}
-          AZURE_SUBSCRIPTION_ID: 00000000-0000-0000-0000-000000000000
-          HOMS_AZURE_ACR_NAME: homsr2dryrunregistry
-          HOMS_AZURE_STORAGE_ACCOUNT: homsr2dryrunstorage
-        run: |
-          docker compose config --quiet
-          bash -n scripts/deploy/*.sh
-          python -m compileall -q scripts/deploy
-          ./scripts/deploy/azure-foundation.sh --dry-run
-          GITHUB_REPOSITORY="$GITHUB_REPOSITORY" \
-            ./scripts/deploy/github-oidc-setup.sh --dry-run
-          ./scripts/deploy/deploy-student.sh "$STUDENT" --tag "$GITHUB_SHA" --dry-run
-          ./scripts/deploy/deployment-testing.sh "$STUDENT" --dry-run
+          PYTHONPATH: ${{ matrix.student == 'student-1' && 'student-1' || '' }}
+        run: ${{ matrix.test }}
 
   deploy:
-    name: Deploy Student ${{ inputs.student }}
-    needs: validate
+    name: Deploy to Azure Container Apps
     runs-on: ubuntu-latest
-    environment: azure-r2
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      HOMS_AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
-      HOMS_AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
-      HOMS_AZURE_ACR_NAME: ${{ vars.AZURE_CONTAINER_REGISTRY }}
-      HOMS_CONTAINERAPPS_ENVIRONMENT: ${{ vars.AZURE_CONTAINERAPPS_ENVIRONMENT }}
-      HOMS_AZURE_STORAGE_ACCOUNT: ${{ vars.AZURE_STORAGE_ACCOUNT }}
-      HOMS_APP_PREFIX: ${{ vars.AZURE_APP_PREFIX }}
-      HOMS_ACR_PULL_IDENTITY: ${{ vars.AZURE_ACR_PULL_IDENTITY }}
+    needs: validate
     steps:
-      - name: Check out selected revision
-        uses: actions/checkout@v4
-
-      - name: Validate required OIDC and foundation settings
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-        run: |
-          : "${AZURE_CLIENT_ID:?AZURE_CLIENT_ID secret is required}"
-          : "${AZURE_TENANT_ID:?AZURE_TENANT_ID secret is required}"
-          : "${AZURE_SUBSCRIPTION_ID:?AZURE_SUBSCRIPTION_ID secret is required}"
-          : "${HOMS_AZURE_RESOURCE_GROUP:?AZURE_RESOURCE_GROUP variable is required}"
-          : "${HOMS_AZURE_LOCATION:?AZURE_LOCATION variable is required}"
-          : "${HOMS_AZURE_ACR_NAME:?AZURE_CONTAINER_REGISTRY variable is required}"
-          : "${HOMS_CONTAINERAPPS_ENVIRONMENT:?AZURE_CONTAINERAPPS_ENVIRONMENT variable is required}"
-          : "${HOMS_AZURE_STORAGE_ACCOUNT:?AZURE_STORAGE_ACCOUNT variable is required}"
-          : "${HOMS_APP_PREFIX:?AZURE_APP_PREFIX variable is required}"
-          : "${HOMS_ACR_PULL_IDENTITY:?AZURE_ACR_PULL_IDENTITY variable is required}"
-
-      - name: Sign in to Azure using GitHub OIDC
-        uses: azure/login@v3
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
         with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          python-version: '3.12'
 
-      - name: Deploy only the selected Student slice
-        id: deployment
-        env:
-          STUDENT: ${{ inputs.student }}
-        run: ./scripts/deploy/deploy-student.sh "$STUDENT" --tag "$GITHUB_SHA"
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Validate deployed services and cloud baseline
+      - name: Container Apps CLI extension
+        run: az extension add --name containerapp --upgrade --yes --only-show-errors
+
+      - name: Build, push and deploy
         env:
-          STUDENT: ${{ inputs.student }}
-          FRONTEND_URL: ${{ steps.deployment.outputs.frontend_url }}
+          ONLY: ${{ github.event.inputs.only }}
+          ALWAYS_ON: ${{ github.event.inputs.always_on }}
         run: |
-          ./scripts/deploy/deployment-testing.sh "$STUDENT" \
-            --frontend-url "$FRONTEND_URL"
+          set -euo pipefail
+          args=(deploy --tag "${GITHUB_SHA::12}")
+          if [ -n "${ONLY:-}" ]; then args+=(--only $ONLY); fi
+          if [ "${ALWAYS_ON:-false}" = "true" ]; then args+=(--always-on); fi
+          python scripts/deploy/azure_deploy.py "${args[@]}"
 
-      - name: Record deployment summary
-        if: always()
+      - name: Verify the cloud application
         env:
-          STUDENT: ${{ inputs.student }}
-          FRONTEND_URL: ${{ steps.deployment.outputs.frontend_url }}
+          ONLY: ${{ github.event.inputs.only }}
         run: |
-          {
-            echo "## HOMS R2 cloud deployment"
-            echo "- Student slice: $STUDENT"
-            echo "- Immutable image tag: $GITHUB_SHA"
-            echo "- Frontend: ${FRONTEND_URL:-deployment did not return a URL}"
-            echo "- Baseline AI, MCP, RAG and Multi-Agent: disabled"
-            echo "- Database: dedicated Azure Files share, one replica"
-          } >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          if [ -n "${ONLY:-}" ]; then
+            python scripts/deploy/azure_deploy.py smoke --only $ONLY
+          else
+            python scripts/deploy/azure_deploy.py smoke
+          fi
+          python scripts/deploy/azure_deploy.py probes
 
-      - name: Upload non-secret deployment evidence
+      - name: Keep deployment evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: student-${{ inputs.student }}-cloud-deployment-${{ github.sha }}
-          path: .local-r2/cloud/
+          name: cloud-deployment-evidence
+          path: docs/test-evidence/cloud/
           if-no-files-found: warn
-          retention-days: 30
+
+      - name: Azure logout
+        if: always()
+        run: az logout || true
