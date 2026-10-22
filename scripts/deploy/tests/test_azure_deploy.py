@@ -101,6 +101,7 @@ def test_databases_are_internal_and_deployed_first():
 
 def test_select_one_student_and_reject_unknown():
     assert [s["app"] for s in deploy.select(["student-4"])] == ["s4-db", "s4-api", "s4-web"]
+    assert [s["app"] for s in deploy.select(["student-5"])] == ["s5-db", "s5-api", "s5-web"]
     with pytest.raises(deploy.DeployError):
         deploy.select(["student-9"])
 
@@ -162,6 +163,7 @@ def test_probe_file_matches_the_cloud_review_mode(fake, tmp_path):
     services = {p["service"] for p in spec["probes"] if p["kind"] == "ai_disabled"}
     assert services == {"ai-mode", "mcp", "rag", "multi-agent"}
     assert all(p["url"].startswith("https://") for p in spec["probes"])
+    assert any(probe["id"] == "S5_WEB" for probe in spec["probes"])
 
     sys.path.insert(0, str(ROOT / "ai-services" / "agentic-loop"))
     import cloud_review

@@ -7,6 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/azure-common.sh"
 
 DRY_RUN=false
+FOUNDATION_STUDENTS=(1 2 3 4 5)
 
 usage() {
   cat <<'EOF'
@@ -16,7 +17,7 @@ Usage:
   AZURE_SUBSCRIPTION_ID=<id> \
   HOMS_AZURE_ACR_NAME=<globally-unique-name> \
   HOMS_AZURE_STORAGE_ACCOUNT=<globally-unique-name> \
-  ./scripts/deploy/azure-foundation.sh [--dry-run]
+  ./scripts/deploy/azure-foundation.sh [--student STUDENT] [--dry-run]
 
 Optional environment variables:
   HOMS_AZURE_LOCATION                default: australiaeast
@@ -30,11 +31,22 @@ The script is additive and idempotent where Azure permits. It never deletes a
 resource. --dry-run performs read-only inspection when the Azure CLI is already
 authenticated to AZURE_SUBSCRIPTION_ID, then labels each resource as existing
 or missing. It never creates or changes a resource in dry-run mode.
+
+Required Azure resource providers must already be registered by the
+subscription owner. The script does not attempt subscription-level provider
+registration. Use --student to limit database share/storage-link work to one
+student while leaving shared foundation resources reusable by the whole team.
 EOF
 }
 
 while (($#)); do
   case "$1" in
+    --student)
+      (($# >= 2)) || die "--student requires a value."
+      validate_student "$2"
+      FOUNDATION_STUDENTS=("$2")
+      shift
+      ;;
     --dry-run) DRY_RUN=true ;;
     --help|-h) usage; exit 0 ;;
     *) die "Unknown argument: $1" ;;
@@ -66,7 +78,7 @@ if [[ "$DRY_RUN" == true ]]; then
     log "[planned] Log Analytics workspace: $HOMS_LOG_ANALYTICS_WORKSPACE"
     log "[planned] Storage account: $HOMS_AZURE_STORAGE_ACCOUNT"
     log "[planned] ACR pull identity: $HOMS_ACR_PULL_IDENTITY"
-    for student in 1 2 3 4 5; do
+    for student in "${FOUNDATION_STUDENTS[@]}"; do
       log "[planned] Student $student storage: $(database_share_name "$student") -> $(environment_storage_name "$student")"
     done
     exit 0
@@ -87,13 +99,18 @@ if [[ "$DRY_RUN" == true ]]; then
   report_resource "Container registry $HOMS_AZURE_ACR_NAME" \
     az acr show --name "$HOMS_AZURE_ACR_NAME" \
       --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors
-  report_resource "Container Apps environment $HOMS_CONTAINERAPPS_ENVIRONMENT" \
-    az containerapp env show --name "$HOMS_CONTAINERAPPS_ENVIRONMENT" \
-      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors
-  report_resource "Log Analytics workspace $HOMS_LOG_ANALYTICS_WORKSPACE" \
-    az monitor log-analytics workspace show \
-      --workspace-name "$HOMS_LOG_ANALYTICS_WORKSPACE" \
-      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors
+  if az containerapp env show --name "$HOMS_CONTAINERAPPS_ENVIRONMENT" \
+    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+    --only-show-errors >/dev/null 2>&1; then
+    log "[exists] Container Apps environment $HOMS_CONTAINERAPPS_ENVIRONMENT (would reuse)"
+    log "[unchanged] Existing environment logging configuration (workspace creation not needed)"
+  else
+    log "[missing] Container Apps environment $HOMS_CONTAINERAPPS_ENVIRONMENT (would create)"
+    report_resource "Log Analytics workspace $HOMS_LOG_ANALYTICS_WORKSPACE" \
+      az monitor log-analytics workspace show \
+        --workspace-name "$HOMS_LOG_ANALYTICS_WORKSPACE" \
+        --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors
+  fi
   report_resource "Storage account $HOMS_AZURE_STORAGE_ACCOUNT" \
     az storage account show --name "$HOMS_AZURE_STORAGE_ACCOUNT" \
       --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors
@@ -101,7 +118,7 @@ if [[ "$DRY_RUN" == true ]]; then
     az identity show --name "$HOMS_ACR_PULL_IDENTITY" \
       --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors
 
-  for student in 1 2 3 4 5; do
+  for student in "${FOUNDATION_STUDENTS[@]}"; do
     share_name="$(database_share_name "$student")"
     storage_name="$(environment_storage_name "$student")"
     report_resource "Azure Files share $share_name" \
@@ -124,12 +141,7 @@ fi
 azure_account_check
 select_subscription
 
-log "Registering required Azure resource providers."
-az provider register --namespace Microsoft.App --wait --only-show-errors
-az provider register --namespace Microsoft.OperationalInsights --wait --only-show-errors
-az provider register --namespace Microsoft.ContainerRegistry --wait --only-show-errors
-az provider register --namespace Microsoft.Storage --wait --only-show-errors
-az provider register --namespace Microsoft.ManagedIdentity --wait --only-show-errors
+log "Using resource providers pre-registered by the subscription owner."
 
 log "Creating or reusing resource group $HOMS_AZURE_RESOURCE_GROUP."
 az group create \
@@ -153,32 +165,32 @@ else
   log "Reusing Azure Container Registry $HOMS_AZURE_ACR_NAME."
 fi
 
-if ! az monitor log-analytics workspace show \
-  --workspace-name "$HOMS_LOG_ANALYTICS_WORKSPACE" \
-  --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors >/dev/null 2>&1; then
-  log "Creating Log Analytics workspace $HOMS_LOG_ANALYTICS_WORKSPACE."
-  az monitor log-analytics workspace create \
-    --workspace-name "$HOMS_LOG_ANALYTICS_WORKSPACE" \
-    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
-    --location "$HOMS_AZURE_LOCATION" \
-    --tags application=homs release=r2 \
-    --only-show-errors --output none
-else
-  log "Reusing Log Analytics workspace $HOMS_LOG_ANALYTICS_WORKSPACE."
-fi
-
-LOG_WORKSPACE_ID="$(az monitor log-analytics workspace show \
-  --workspace-name "$HOMS_LOG_ANALYTICS_WORKSPACE" \
-  --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
-  --query customerId --output tsv --only-show-errors)"
-LOG_WORKSPACE_KEY="$(az monitor log-analytics workspace get-shared-keys \
-  --workspace-name "$HOMS_LOG_ANALYTICS_WORKSPACE" \
-  --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
-  --query primarySharedKey --output tsv --only-show-errors)"
-
 if ! az containerapp env show \
   --name "$HOMS_CONTAINERAPPS_ENVIRONMENT" \
   --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors >/dev/null 2>&1; then
+  if ! az monitor log-analytics workspace show \
+    --workspace-name "$HOMS_LOG_ANALYTICS_WORKSPACE" \
+    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors >/dev/null 2>&1; then
+    log "Creating Log Analytics workspace $HOMS_LOG_ANALYTICS_WORKSPACE."
+    az monitor log-analytics workspace create \
+      --workspace-name "$HOMS_LOG_ANALYTICS_WORKSPACE" \
+      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+      --location "$HOMS_AZURE_LOCATION" \
+      --tags application=homs release=r2 \
+      --only-show-errors --output none
+  else
+    log "Reusing Log Analytics workspace $HOMS_LOG_ANALYTICS_WORKSPACE."
+  fi
+
+  LOG_WORKSPACE_ID="$(az monitor log-analytics workspace show \
+    --workspace-name "$HOMS_LOG_ANALYTICS_WORKSPACE" \
+    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+    --query customerId --output tsv --only-show-errors)"
+  LOG_WORKSPACE_KEY="$(az monitor log-analytics workspace get-shared-keys \
+    --workspace-name "$HOMS_LOG_ANALYTICS_WORKSPACE" \
+    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+    --query primarySharedKey --output tsv --only-show-errors)"
+
   log "Creating Container Apps environment $HOMS_CONTAINERAPPS_ENVIRONMENT."
   az containerapp env create \
     --name "$HOMS_CONTAINERAPPS_ENVIRONMENT" \
@@ -189,10 +201,10 @@ if ! az containerapp env show \
     --logs-workspace-key "$LOG_WORKSPACE_KEY" \
     --tags application=homs release=r2 \
     --only-show-errors --output none
+  unset LOG_WORKSPACE_KEY
 else
-  log "Reusing Container Apps environment $HOMS_CONTAINERAPPS_ENVIRONMENT."
+  log "Reusing Container Apps environment $HOMS_CONTAINERAPPS_ENVIRONMENT without changing its logging configuration."
 fi
-unset LOG_WORKSPACE_KEY
 
 if ! az storage account show \
   --name "$HOMS_AZURE_STORAGE_ACCOUNT" \
@@ -218,7 +230,7 @@ STORAGE_ACCOUNT_KEY="$(az storage account keys list \
   --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
   --query '[0].value' --output tsv --only-show-errors)"
 
-for student in 1 2 3 4 5; do
+for student in "${FOUNDATION_STUDENTS[@]}"; do
   share_name="$(database_share_name "$student")"
   storage_name="$(environment_storage_name "$student")"
   if ! az storage share-rm show \

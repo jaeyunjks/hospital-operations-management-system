@@ -18,7 +18,7 @@ One Azure subscription contains:
 - one Log Analytics workspace;
 - one Azure Container Apps environment;
 - one user-assigned identity with `AcrPull` on the registry;
-- one storage account with five dedicated Azure Files shares;
+- one storage account with up to five dedicated Azure Files shares;
 - three uniquely named Container Apps per student.
 
 Only frontends have external ingress. Backends and databases have internal
@@ -29,9 +29,9 @@ The shared environment is an administrative and network boundary, not a shared
 application resource name. A Student 5 deployment updates only:
 
 ```text
-homs-r2-student5-frontend
-homs-r2-student5-backend
-homs-r2-student5-database
+s5-web
+s5-api
+s5-db
 ```
 
 It does not enumerate, replace or delete another student's apps.
@@ -44,7 +44,8 @@ It does not enumerate, replace or delete another student's apps.
 | Container Apps environment | `homs-r2-env` |
 | Log Analytics workspace | `homs-r2-logs` |
 | ACR pull identity | `homs-r2-acr-pull` |
-| Container App | `homs-r2-student<N>-<frontend|backend|database>` |
+| Container App, Students 1–4 | `homs-r2-student<N>-<frontend|backend|database>` |
+| Container App, Student 5 | `s5-web`, `s5-api`, `s5-db` |
 | ACR repository | `student<N>/<frontend|backend|database>` |
 | Image tag | full Git commit SHA; never `latest` |
 | Azure Files share | `student<N>-db` |
@@ -54,9 +55,11 @@ ACR and storage-account names are globally unique Azure DNS names. They have no
 safe universal default and must be supplied through `HOMS_AZURE_ACR_NAME` and
 `HOMS_AZURE_STORAGE_ACCOUNT`. Both accept only lowercase letters and numbers.
 
-Every name can be configured through the environment variables documented by
-`./scripts/deploy/azure-foundation.sh --help`. All team members must use the
-same values after the foundation is created.
+Shared resource names and the Student 1–4 app prefix can be configured through
+the environment variables documented by
+`./scripts/deploy/azure-foundation.sh --help`. Student 5 app names are fixed to
+the existing `s5-*` convention for shared-tool compatibility. All team members
+must use the same shared values after the foundation is created.
 
 ## Database persistence
 
@@ -106,6 +109,7 @@ Prerequisites:
 
 - Azure CLI authenticated with `az login`;
 - permission to create resources and role assignments in the subscription;
+- required Azure resource providers already registered by the subscription owner;
 - permission to create an Entra application and federated credential;
 - GitHub CLI authenticated with repository-administration access;
 - two available, globally unique names for ACR and the storage account.
@@ -122,16 +126,25 @@ export GITHUB_REPOSITORY='jaeyunjks/hospital-operations-management-system'
 Preview without changing Azure:
 
 ```bash
-./scripts/deploy/azure-foundation.sh --dry-run
+./scripts/deploy/azure-foundation.sh --student 5 --dry-run
 ./scripts/deploy/github-oidc-setup.sh --dry-run
 ```
 
 Provision the foundation, then establish OIDC:
 
 ```bash
-./scripts/deploy/azure-foundation.sh
+./scripts/deploy/azure-foundation.sh --student 5
 ./scripts/deploy/github-oidc-setup.sh
 ```
+
+The foundation script does not call `az provider register`; subscription-level
+provider registration is outside this deployment path. With `--student 5`, it
+creates or reuses only the `student5-db` Azure Files share and
+`student5-db-storage` Container Apps environment link. Shared resources such as
+the resource group, registry, environment and pull identity remain reusable by
+the group. Omitting `--student` retains the team-wide all-student foundation
+behavior. When `homs-r2-env` already exists, the script reuses it without
+creating an unused Log Analytics workspace or changing its logging setup.
 
 The foundation script reuses an existing ACR without changing its current
 admin-account setting. After a managed-identity deployment and image pull have
@@ -184,6 +197,14 @@ The equivalent authenticated command for Student 5 is:
 The deployment script builds each image remotely in ACR, tags it with the
 current Git SHA, upserts only the selected student's three apps, and records a
 non-secret receipt under `.local-r2/cloud/`.
+
+For Student 5, those apps are `s5-db`, `s5-api`, and `s5-web`. The database and
+backend have internal ingress, while the frontend is external. Runtime wiring
+uses the Azure-assigned internal FQDNs: `s5-api` receives
+`DATABASE_SERVICE_URL=https://<s5-db-fqdn>` and `s5-web` receives
+`STAFF_SHIFT_API_URL=https://<s5-api-fqdn>`. The database receives
+`STUDENT5_DATABASE_PATH=/data/staff_shift.db`, mounts only
+`student5-db-storage` at `/data`, and remains fixed at one replica.
 
 An `all` deployment scope is intentionally not offered until every slice has
 completed an individual cloud validation. This prevents one unvalidated slice

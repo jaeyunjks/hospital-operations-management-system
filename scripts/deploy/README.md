@@ -27,7 +27,7 @@ export HOMS_AZURE_ACR_NAME='<existing-acr-name>'
 export HOMS_AZURE_STORAGE_ACCOUNT='<globally-unique-storage-name>'
 export GITHUB_REPOSITORY='jaeyunjks/hospital-operations-management-system'
 
-./scripts/deploy/azure-foundation.sh --dry-run
+./scripts/deploy/azure-foundation.sh --student 5 --dry-run
 ./scripts/deploy/github-oidc-setup.sh --dry-run
 ./scripts/deploy/deploy-student.sh 5 --dry-run
 ./scripts/deploy/deployment-testing.sh 5 --dry-run
@@ -37,20 +37,27 @@ When authenticated to the configured Azure subscription, the foundation dry
 run uses read-only queries to label resources as `exists` or `missing`. It
 never creates or changes resources.
 
+Azure resource providers are assumed to have been registered by the
+subscription owner. The foundation script never calls `az provider register`.
+For a Student 5-only rollout, `--student 5` limits share/storage-link inspection
+and provisioning to `student5-db` / `student5-db-storage`.
+
 ## One-time cloud-owner setup
 
 After reviewing the dry run:
 
 ```bash
-./scripts/deploy/azure-foundation.sh
+./scripts/deploy/azure-foundation.sh --student 5
 ./scripts/deploy/github-oidc-setup.sh
 ```
 
 The first script creates or reuses the resource group, ACR, Container Apps
 environment, Log Analytics workspace, managed ACR pull identity, storage
-account, and five isolated database shares/storage links. The second creates
-the GitHub OIDC trust and configures the required GitHub environment, secret
-names, and non-secret variables without creating a client password.
+account, and the selected student's isolated database share/storage link. Omit
+`--student` only when the cloud owner intentionally wants all five isolated
+share/storage links. The second creates the GitHub OIDC trust and configures
+the required GitHub environment, secret names, and non-secret variables without
+creating a client password.
 
 ## Deploy one student
 
@@ -58,6 +65,11 @@ names, and non-secret variables without creating a client password.
 ./scripts/deploy/deploy-student.sh 5
 ./scripts/deploy/deployment-testing.sh 5
 ```
+
+Student 5 uses the existing shared `homs-r2-env` and the established app names
+`s5-db`, `s5-api`, and `s5-web`. Its image repositories remain
+`student5/database`, `student5/backend`, and `student5/frontend`. Student 1–4
+naming remains unchanged.
 
 The active GitHub workflow performs the same operations after requiring an
 explicit Student 1–5 selection. There is no deploy-all option.
