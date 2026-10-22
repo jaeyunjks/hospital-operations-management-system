@@ -61,6 +61,16 @@ def create_app() -> Flask:
             }
         return jsonify({"status": "ok", "service": "student-5-database", "counts": counts})
 
+    @app.get("/live")
+    def live():
+        """Process-only probe that does not compete with operational writes.
+
+        The richer /health endpoint remains the end-to-end dependency check.
+        Container Apps probes use this endpoint so repeated probe reads do not
+        starve SQLite's exclusive commit lock on the Azure Files SMB mount.
+        """
+        return jsonify({"status": "ok", "service": "student-5-database"})
+
     # ----------------------------------------------------------------- staff
     @app.get("/staff")
     def list_staff():

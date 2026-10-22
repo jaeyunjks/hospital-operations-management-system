@@ -202,6 +202,9 @@ def test_student5_database_update_is_quiesced_and_dependency_health_gated():
     assert "wait_for_app_healthy \"$DATABASE_APP\"" in DEPLOY
     assert "wait_for_app_healthy \"$BACKEND_APP\"" in DEPLOY
     assert "properties.containers[0].ready" in DEPLOY
+    assert '[[ "$STUDENT" == "5" ]] && DATABASE_HEALTH_PATH=/live' in DEPLOY
+    assert '[[ "$STUDENT" == "5" ]] && BACKEND_HEALTH_PATH=/live' in DEPLOY
+    assert '[[ "$STUDENT" == "5" ]] && FRONTEND_HEALTH=/live' in DEPLOY
 
 
 def test_student5_existing_apps_use_narrow_updates_that_preserve_identity():

@@ -176,3 +176,18 @@ def test_startup_waits_for_transient_lock_then_health_reads_persistent_data(
         "shift": 13,
         "shift_assignment": 17,
     }
+
+
+def test_liveness_probe_does_not_open_sqlite(monkeypatch):
+    def unexpected_connection(*_args, **_kwargs):
+        pytest.fail("process liveness must not open the persistent database")
+
+    monkeypatch.setattr(database_db, "get_connection", unexpected_connection)
+
+    response = database_service.create_app().test_client().get("/live")
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        "status": "ok",
+        "service": "student-5-database",
+    }

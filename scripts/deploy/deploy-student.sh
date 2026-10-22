@@ -401,7 +401,9 @@ esac
 if [[ "$STUDENT" == "5" ]]; then
   quiesce_student5_database
 fi
-upsert_app "$DATABASE_APP" database "$DATABASE_PORT" internal /health "$STORAGE_NAME" \
+DATABASE_HEALTH_PATH=/health
+[[ "$STUDENT" == "5" ]] && DATABASE_HEALTH_PATH=/live
+upsert_app "$DATABASE_APP" database "$DATABASE_PORT" internal "$DATABASE_HEALTH_PATH" "$STORAGE_NAME" \
   "${DATABASE_ENV[@]}"
 if [[ "$STUDENT" == "5" ]]; then
   retire_other_student5_database_revisions
@@ -432,7 +434,9 @@ case "$STUDENT" in
   5) BACKEND_ENV=("BACKEND_PORT=$BACKEND_PORT" "DATABASE_SERVICE_URL=$DATABASE_URL") ;;
 esac
 
-upsert_app "$BACKEND_APP" backend "$BACKEND_PORT" internal /health "" \
+BACKEND_HEALTH_PATH=/health
+[[ "$STUDENT" == "5" ]] && BACKEND_HEALTH_PATH=/live
+upsert_app "$BACKEND_APP" backend "$BACKEND_PORT" internal "$BACKEND_HEALTH_PATH" "" \
   "${BACKEND_ENV[@]}" "${COMMON_AI_OFF[@]}"
 if [[ "$STUDENT" == "5" ]]; then
   wait_for_app_healthy "$BACKEND_APP"
@@ -453,6 +457,7 @@ esac
 
 FRONTEND_HEALTH=/health
 [[ "$STUDENT" == "1" ]] && FRONTEND_HEALTH=/
+[[ "$STUDENT" == "5" ]] && FRONTEND_HEALTH=/live
 upsert_app "$FRONTEND_APP" frontend "$FRONTEND_PORT" external "$FRONTEND_HEALTH" "" \
   "${FRONTEND_ENV[@]}"
 FRONTEND_FQDN="$(az containerapp show --name "$FRONTEND_APP" \
