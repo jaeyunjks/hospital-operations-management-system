@@ -30,8 +30,11 @@ def initialise(database_path=None, reset: bool = False, load_seed: bool = True) 
             db.drop_all(connection)
             print("Dropped existing tables.")
 
-        db.apply_schema(connection)
-        print(f"Schema applied to {target}")
+        if db.schema_is_current(connection):
+            print(f"Schema already current at {target} — no DDL required.")
+        else:
+            db.apply_schema(connection)
+            print(f"Schema applied to {target}")
 
         if not load_seed:
             print("Seeding skipped (--no-seed).")
