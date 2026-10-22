@@ -15,7 +15,10 @@ from services import shortage_options
 SCHEMA_VERSION = "1.0"
 EVIDENCE_TYPE = "student-4-bed-shortage"
 EVIDENCE_MODE = "authoritative_backend_snapshot"
-MAX_BED_OPTIONS = 6
+# Kept small on purpose: the local Worker model (llama3.2:3b by default) must
+# copy every option id, label and risk exactly, and fails semantic validation
+# when it paraphrases. Three beds plus escalation keeps the prompt short.
+MAX_BED_OPTIONS = 3
 ESCALATE_ID = "escalate"
 
 TASK_TEMPLATE = ("Recommend how to place the patient waiting in shortage case {case_id} "
@@ -27,11 +30,10 @@ UNKNOWNS = (
     "Clinical needs of the patient beyond the recorded care category.",
 )
 
-RISKS = {
-    "available_now": [],
-    "pending_cleaning": ["The bed cannot be used until cleaning is completed."],
-    "alternative_ward": ["The bed is outside the requested ward; the receiving ward must agree."],
-}
+PREFERENCES = (
+    "Among eligible beds, prefer the first one listed (the on-screen order).",
+    "If no bed option is eligible, report no_eligible_option; the coordinator then decides manually.",
+)
 
 
 def option_id(option):
@@ -45,38 +47,41 @@ def bed_id_from_option(value):
     return None
 
 
-def _label(option):
+def describe(option):
+    """Human-readable option text for the screen (labels sent to the agents are the ids)."""
     if not option.get("bed_id"):
         return "Escalate to the on-call operations manager"
     return "Bed {} in room {}, {}".format(option["bed_number"], option["room_number"], option["ward"])
 
 
 def _project(option, case):
+    """One option in the shared contract.
+
+    The label equals the id and risk_indicators stay empty, so there is no
+    free text for the Worker to copy; every fact it needs is a short attribute
+    (the same approach Student 5 uses for its staffing options).
+    """
     is_bed = bool(option.get("bed_id"))
-    risks = list(RISKS.get(option["kind"], []))
-    if not is_bed:
-        risks.append("No bed is reserved; the patient keeps waiting until the manager acts.")
-    if is_bed and case["urgency"] in ("High", "Critical") and option["kind"] != "available_now":
-        risks.append("{} urgency but the bed is not usable in the requested ward right now."
-                     .format(case["urgency"]))
+    same_ward = is_bed and (not case.get("required_ward") or option.get("ward") == case["required_ward"])
     return {
         "id": option_id(option),
-        "label": _label(option),
+        "label": option_id(option),
+        # Every true/false attribute is exactly one hard constraint below.
+        # Live Workers check each boolean they see as a hard constraint, so an
+        # extra boolean (or a missing constraint for one) fails validation.
         "attributes": {
+            "description": describe(option),
             "kind": option["kind"],
-            "care_category_match": True,
-            "same_ward": option["kind"] in ("available_now", "pending_cleaning")
-            and is_bed and (not case.get("required_ward") or option.get("ward") == case["required_ward"]),
-            "ready_now": option["kind"] in ("available_now", "alternative_ward"),
-            "reserves_bed": is_bed,
             "ward": option.get("ward"),
-            "room_type": option.get("type_name"),
+            "care_category_match": True,
+            "in_requested_ward": bool(same_ward),
+            "ready_now": option["kind"] in ("available_now", "alternative_ward"),
         },
         "outcomes": {
             "metric_delta": 1 if is_bed else 0,
             "projected_value": 1 if is_bed else 0,
         },
-        "risk_indicators": risks,
+        "risk_indicators": [],
     }
 
 
@@ -89,25 +94,32 @@ def task_for(case):
 def build(case, options=None):
     """Return the evidence document for one shortage case.
 
-    Bed options are capped at MAX_BED_OPTIONS (in on-screen order) so the
-    local models get a bounded prompt; escalation is always included.
+    Only bed options are sent, capped at MAX_BED_OPTIONS (in on-screen
+    order). Escalation is not an option for the agents: models judged it
+    ineligible because it places nobody, which contradicted the evidence.
+    It stays a manual choice on screen, and "no_eligible_option" from the
+    Worker means the coordinator should escalate.
     """
     options = shortage_options.options_for(case) if options is None else options
     beds = [o for o in options if o.get("bed_id")]
-    shown = beds[:MAX_BED_OPTIONS] + [o for o in options if not o.get("bed_id")]
+    shown = beds[:MAX_BED_OPTIONS]
     return {
         "schema_version": SCHEMA_VERSION,
         "evidence_type": EVIDENCE_TYPE,
         "evidence_mode": EVIDENCE_MODE,
-        "case_id": case["case_id"],
         "scenario": "Room & Bed Management bed shortage case",
-        "current_state": {
-            "case": {key: case.get(key) for key in (
-                "case_id", "status", "urgency", "required_care_category", "required_ward",
-                "holding_location", "opened_at")},
-            "compatible_beds_found": len(beds),
-            "bed_options_included": min(len(beds), MAX_BED_OPTIONS),
-        },
+        # Case facts are top-level keys on purpose: the shared Planner may only
+        # list top-level keys as required evidence, and smaller local models
+        # pick these names even when they sit inside a nested object.
+        "case_id": case["case_id"],
+        "status": case.get("status"),
+        "urgency": case.get("urgency"),
+        "required_care_category": case.get("required_care_category"),
+        "required_ward": case.get("required_ward"),
+        "holding_location": case.get("holding_location"),
+        "opened_at": case.get("opened_at"),
+        "compatible_beds_found": len(beds),
+        "bed_options_included": min(len(beds), MAX_BED_OPTIONS),
         "objective": {
             "metric": "patient_placed",
             "current": 0,
@@ -126,16 +138,22 @@ def build(case, options=None):
                 "description": "The bed must match the patient's required care category.",
             },
             {
-                "id": "prefer_ready_now",
-                "scope": "workflow",
-                "type": "policy",
-                "description": "Prefer a bed that is usable now, especially for High or Critical urgency.",
+                "id": "in_requested_ward",
+                "scope": "option",
+                "type": "hard",
+                "field": "in_requested_ward",
+                "operator": "equals",
+                "value": True,
+                "description": "The bed must be in the requested ward; another ward needs a manual decision.",
             },
             {
-                "id": "prefer_requested_ward",
-                "scope": "workflow",
-                "type": "policy",
-                "description": "Prefer the requested ward; an alternative ward needs that ward's agreement.",
+                "id": "ready_now",
+                "scope": "option",
+                "type": "hard",
+                "field": "ready_now",
+                "operator": "equals",
+                "value": True,
+                "description": "The bed must be usable now, not waiting for cleaning.",
             },
             {
                 "id": "human_approval",
@@ -150,6 +168,9 @@ def build(case, options=None):
                 "description": "This workflow is read-only and cannot reserve or allocate a bed.",
             },
         ],
+        # Preferences are advisory text, not constraints: the Worker treated
+        # policy constraints as hard checks and failed validation.
+        "preferences": list(PREFERENCES),
         "unknowns": list(UNKNOWNS),
         "provenance": {
             "sources": [

@@ -37,7 +37,7 @@ class FakeServer:
 
     def finish_agents(self, chosen):
         options = self.record["evidence"]["options"]
-        label = next(o["label"] for o in options if o["id"] == chosen)
+        label = next(o["label"] for o in options if o["id"] == chosen)  # equals the id
         stage = {"started_at": "2026-10-21T01:00:00.000Z", "completed_at": "2026-10-21T01:00:05.000Z",
                  "execution": {"provider": "live_ollama", "model": "llama3.1:8b"}}
         self.record.update({
@@ -117,22 +117,40 @@ def test_evidence_matches_the_shared_contract(api):
     assert "patient_id" not in str(evidence)
 
     ids = [o["id"] for o in evidence["options"]]
-    assert ids[-1] == "escalate" and len(ids) == len(set(ids))
+    assert ids and all(i.startswith("bed-") for i in ids) and len(ids) == len(set(ids))
     for option in evidence["options"]:
         assert {"id", "label", "attributes", "outcomes", "risk_indicators"} <= set(option)
-        assert option["outcomes"]["metric_delta"] == (0 if option["id"] == "escalate" else 1)
+        assert option["label"] == option["id"] and option["risk_indicators"] == []
+        assert option["outcomes"]["metric_delta"] == 1
 
+    assert {c["type"] for c in evidence["constraints"]} == {"hard", "approval", "safety"}
+    hard_fields = {c["field"] for c in evidence["constraints"] if c["type"] == "hard"}
+    for option in evidence["options"]:
+        booleans = {k for k, v in option["attributes"].items() if isinstance(v, bool)}
+        assert booleans == hard_fields, "every boolean attribute must be exactly one hard constraint"
     hard = [c for c in evidence["constraints"] if c["type"] == "hard"]
     assert all(c["scope"] == "option" and c["operator"] == "equals" for c in hard)
     assert any(c["type"] == "approval" for c in evidence["constraints"])
+
+
+def test_case_facts_are_top_level_keys(api):
+    """The shared Planner may only cite top-level keys; nested case facts made
+    llama3.1:8b cite keys like 'urgency' that did not exist at the top level."""
+    case = open_case(api)
+    evidence = data(api.get("/api/shortage-cases/{}/multi-agent/evidence".format(case["case_id"])))["evidence"]
+    for key in ("case_id", "status", "urgency", "required_care_category", "required_ward",
+                "holding_location", "compatible_beds_found", "bed_options_included"):
+        assert key in evidence
+    assert not any(isinstance(v, dict) for k, v in evidence.items()
+                   if k not in ("objective", "provenance"))
 
 
 def test_evidence_uses_the_same_options_as_the_screen(api):
     case = open_case(api)
     screen = data(api.get("/api/shortage-cases/{}/options".format(case["case_id"])))["options"]
     evidence = data(api.get("/api/shortage-cases/{}/multi-agent/evidence".format(case["case_id"])))
-    bed_ids = [o["bed_id"] for o in screen if o["bed_id"]][:6]
-    assert [o["id"] for o in evidence["evidence"]["options"]] == ["bed-{}".format(b) for b in bed_ids] + ["escalate"]
+    bed_ids = [o["bed_id"] for o in screen if o["bed_id"]][:3]
+    assert [o["id"] for o in evidence["evidence"]["options"]] == ["bed-{}".format(b) for b in bed_ids]
 
 
 def test_bed_ids_map_back_from_option_ids():
@@ -172,6 +190,7 @@ def test_full_workflow_needs_human_review_and_reserves_nothing(api, server):
     assert waiting["status"] == "awaiting_human_review"
     assert waiting["case_id"] == case["case_id"]
     assert waiting["recommendation"]["bed_id"] == int(first_bed[4:])
+    assert waiting["recommendation"]["label"].startswith("Bed ")
     assert "submitted_evidence" not in waiting
 
     reviewed = data(api.post("/api/multi-agent/workflows/{}/review".format(WORKFLOW_ID),
@@ -202,7 +221,7 @@ def test_history_is_scoped_to_the_case(api, server):
 def test_review_input_is_validated(api, server, body, message):
     case = open_case(api)
     api.post("/api/shortage-cases/{}/multi-agent".format(case["case_id"]))
-    server.finish_agents("escalate")
+    server.finish_agents(server.record["evidence"]["options"][0]["id"])
     response = api.post("/api/multi-agent/workflows/{}/review".format(WORKFLOW_ID), json=body)
     assert response.status_code == 400 and message in error(response)
 
@@ -251,3 +270,13 @@ def test_non_http_server_url_is_refused(mac, monkeypatch):
     monkeypatch.setattr(mac, "MULTI_AGENT_SERVER_URL", "file:///etc/passwd")
     result = mac.get(str(uuid.uuid4()))
     assert not result.ok and result.outcome == "unavailable"
+
+
+def test_case_without_beds_is_not_sent_to_the_agents(api, server, monkeypatch):
+    evidence_module = importlib.import_module("services.multi_agent_evidence")
+    monkeypatch.setattr(evidence_module.shortage_options, "options_for",
+                        lambda case: [{"kind": "escalate", "bed_id": None, "note": "Escalate"}])
+    case = open_case(api)
+    response = api.post("/api/shortage-cases/{}/multi-agent".format(case["case_id"]))
+    assert response.status_code == 409 and "escalate" in error(response)
+    assert server.calls == []

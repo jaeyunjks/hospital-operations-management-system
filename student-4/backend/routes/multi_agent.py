@@ -51,7 +51,7 @@ def _with_recommendation(workflow, submitted):
     workflow["case_id"] = (submitted or {}).get("case_id")
     workflow["recommendation"] = None if not option else {
         "option_id": chosen,
-        "label": option.get("label"),
+        "label": (option.get("attributes") or {}).get("description") or option.get("label"),
         "bed_id": evidence.bed_id_from_option(chosen),
         "kind": (option.get("attributes") or {}).get("kind"),
     }
@@ -86,6 +86,8 @@ def start_workflow(case_id):
     require_permission("bed.allocate")
     case = _open_case(case_id)
     document = evidence.build(case)
+    if not document["options"]:
+        raise ApiError("No compatible bed to review; escalate the case manually", status=409)
     workflow = _unwrap(mac.start(evidence.task_for(case), document))
     return ok(_with_recommendation(workflow, document), status=202)
 

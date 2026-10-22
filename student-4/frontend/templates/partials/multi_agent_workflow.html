@@ -12,6 +12,14 @@
   </div>
 {% endif %}
 
+{% if workflow and workflow.status == 'failed' %}
+  <div class="alert alert--error">
+    <strong>The agents could not finish this workflow</strong>
+    <div>{{ (workflow.final_result or {}).error or 'The Multi-Agent Server reported a failure.' }}</div>
+    <div class="u-muted u-label">Nothing was reserved. Run the review again, or decide manually above.</div>
+  </div>
+{% endif %}
+
 {% if workflow %}
   {% set planner = (workflow.planner or {}).output or {} %}
   {% set worker = (workflow.worker or {}).output or {} %}
@@ -34,6 +42,7 @@
         <div>{{ planner.goal }}</div>
         <ul>{% for step in planner.planned_steps or [] %}<li>{{ step }}</li>{% endfor %}</ul>
         <div class="u-muted u-label">Evidence required: {{ (planner.required_evidence or []) | join(', ') }}</div>
+      {% elif workflow.status == 'failed' %}<div class="u-muted">Stopped</div>
       {% else %}<div class="u-muted">Planning…</div>{% endif %}
     </li>
 
@@ -46,6 +55,7 @@
         {% if proposal.selected_option %}<div>Proposed: <strong>{{ proposal.selected_option }}</strong></div>{% endif %}
         <ul>{% for line in proposal.reasoning or [] %}<li>{{ line }}</li>{% endfor %}</ul>
         {% if worker.limitations %}<div class="u-muted u-label">Limitations: {{ worker.limitations | join(' · ') }}</div>{% endif %}
+      {% elif workflow.status == 'failed' %}<div class="u-muted">Not run</div>
       {% elif planner %}<div class="u-muted">Evaluating the options…</div>
       {% else %}<div class="u-muted">Waiting for the plan</div>{% endif %}
     </li>
@@ -58,6 +68,7 @@
         {% if reviewer.risks %}<div>Risks:</div><ul>{% for risk in reviewer.risks %}<li>{{ risk }}</li>{% endfor %}</ul>{% endif %}
         {% if reviewer.unsupported_claims %}<div class="u-label">Unsupported claims: {{ reviewer.unsupported_claims | join(' · ') }}</div>{% endif %}
         <div class="u-muted">{{ reviewer.recommendation }}</div>
+      {% elif workflow.status == 'failed' %}<div class="u-muted">Not run</div>
       {% elif worker %}<div class="u-muted">Checking the proposal…</div>
       {% else %}<div class="u-muted">Waiting for the Worker</div>{% endif %}
     </li>

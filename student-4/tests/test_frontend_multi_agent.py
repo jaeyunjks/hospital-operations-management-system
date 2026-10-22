@@ -115,3 +115,13 @@ def test_case_page_shows_the_panel_state(frontend, monkeypatch, status, expected
     html = frontend.app.test_client().get("/shortages/2").get_data(as_text=True)
     assert expected in html
     assert (WORKFLOW_ID[:8] in html) == status["enabled"]
+
+
+def test_failed_workflow_shows_the_reason(frontend, monkeypatch):
+    failed = workflow("in_progress")
+    failed.update(status="failed", planner=None,
+                  final_result={"status": "failed", "error": "planner output remained invalid after 3 attempts"})
+    stub(frontend, monkeypatch, {("GET", "/api/multi-agent/workflows/" + WORKFLOW_ID): (failed, None)})
+    html = frontend.app.test_client().get("/multi-agent/" + WORKFLOW_ID).get_data(as_text=True)
+    assert "planner output remained invalid" in html and "Planning" not in html
+    assert "hx-trigger" not in html
