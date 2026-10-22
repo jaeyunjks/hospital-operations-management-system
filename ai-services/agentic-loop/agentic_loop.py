@@ -30,6 +30,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -122,6 +123,16 @@ def ollama_generate_json(
 ) -> Dict[str, Any]:
     """Generate one deterministic JSON object through Ollama."""
 
+    try:
+        parsed_url = urllib.parse.urlsplit(base_url)
+        valid_url = parsed_url.scheme.lower() in {"http", "https"} and parsed_url.hostname
+    except (TypeError, ValueError):
+        valid_url = False
+    if not valid_url:
+        raise RuntimeError("Ollama URL must use http or https and include a host")
+
+    validated_base_url = base_url.rstrip("/")
+
     payload = {
         "model": model,
         "prompt": prompt,
@@ -129,15 +140,17 @@ def ollama_generate_json(
         "format": "json",
         "options": {"temperature": 0},
     }
-    request = urllib.request.Request(
-        f"{base_url.rstrip('/')}/api/generate",
+    request = urllib.request.Request(  # noqa: S310 - URL scheme validated above.
+        f"{validated_base_url}/api/generate",
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", "Accept": "application/json"},
         method="POST",
     )
 
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(  # noqa: S310 - request URL validated above.
+            request, timeout=timeout
+        ) as response:
             envelope = json.loads(response.read().decode("utf-8"))
     except (urllib.error.URLError, TimeoutError, OSError) as error:
         raise RuntimeError(f"Ollama request failed: {error}") from error

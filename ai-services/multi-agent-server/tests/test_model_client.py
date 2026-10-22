@@ -78,6 +78,17 @@ def test_default_role_models_are_the_phase_2b_assignment():
     }
 
 
+@pytest.mark.parametrize("base_url", [
+    "file:///tmp/ollama.sock",
+    "ftp://localhost/ollama",
+    "data:text/plain,ollama",
+    "javascript:alert(1)",
+])
+def test_ollama_client_rejects_non_http_urls(base_url):
+    with pytest.raises(ValueError, match="must use http or https"):
+        OllamaModelClient(model="test", base_url=base_url, timeout=1)
+
+
 @pytest.mark.parametrize("role", ["planner", "worker", "reviewer"])
 def test_role_model_client_routes_generation_by_role(role):
     clients = {name: CapturingClient(name) for name in DEFAULT_ROLE_MODELS}

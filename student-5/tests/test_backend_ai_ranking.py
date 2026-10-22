@@ -610,6 +610,29 @@ class TestOllamaClientTransport:
         assert captured["payload"]["system"] == "be careful"
         assert captured["timeout"] == 1
 
+    @pytest.mark.parametrize("base_url", [
+        "file:///tmp/ollama.sock",
+        "ftp://localhost/ollama",
+        "data:text/plain,ollama",
+        "javascript:alert(1)",
+    ])
+    def test_rejects_non_http_urls_before_network(
+            self, monkeypatch, base_url):
+        from services import ollama_client as module
+        from services.ollama_client import OllamaClient
+
+        def forbidden_network(*_args, **_kwargs):
+            raise AssertionError("urlopen must not run for an unsupported URL scheme")
+
+        monkeypatch.setattr(module.urllib.request, "urlopen", forbidden_network)
+        client = OllamaClient(base_url=base_url, model="llama3", timeout=1)
+
+        with pytest.raises(OllamaError) as excinfo:
+            client.generate_json("prompt")
+
+        assert excinfo.value.reason == REASON_UNAVAILABLE
+        assert "must use http or https" in excinfo.value.detail
+
     def test_timeout_raises_unavailable(self, fake_urlopen):
         fake_urlopen(error=TimeoutError("timed out"))
         with pytest.raises(OllamaError) as excinfo:

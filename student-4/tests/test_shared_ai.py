@@ -118,6 +118,26 @@ def test_rag_ask_while_disabled_returns_503(api):
     assert response.status_code == 503
 
 
+@pytest.mark.parametrize("server_url", [
+    "file:///tmp/rag.sock",
+    "ftp://localhost/rag",
+    "data:text/plain,rag",
+    "javascript:alert(1)",
+])
+def test_rag_rejects_non_http_urls_before_network(rag, monkeypatch, server_url):
+    def forbidden_network(*_args, **_kwargs):
+        raise AssertionError("urlopen must not run for an unsupported URL scheme")
+
+    monkeypatch.setattr(rag, "RAG_SERVER_URL", server_url)
+    monkeypatch.setattr(rag.urllib.request, "urlopen", forbidden_network)
+
+    result = rag.ask("How is safe shift coverage documented?")
+
+    assert result.ok is False
+    assert result.outcome == "unavailable"
+    assert result.error == "Shared RAG server returned an invalid response"
+
+
 def test_answered_question_keeps_its_citations(api, rag, monkeypatch):
     monkeypatch.setattr(rag, "_request", lambda *a, **k: (200, answered()))
     body = data(api.post("/api/rag/ask", json={

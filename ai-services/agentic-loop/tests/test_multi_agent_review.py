@@ -139,7 +139,8 @@ def homs_record(decision="approve", status="approved", comments="Approved.", fal
 
     return {
         "schema_version": "1.0", "workflow_id": "006a5a08", "timestamp": "2026-10-11T06:27:50.000Z",
-        "task": "Resolve a staffing shortage for the Emergency evening shift.", "input_evidence": {"x": 1},
+        "task": "Resolve a staffing shortage for the Emergency evening shift.",
+        "input_evidence": {"x": 1, "provenance": {"mutation_allowed": False}},
         "planner": stage("2026-10-11T06:27:50.100Z", "2026-10-11T06:27:52.000Z",
                          {"goal": "Fill the gap", "required_evidence": ["objective", "options"],
                           "constraints": ["qualified"], "planned_steps": ["Measure the gap", "Evaluate options"],
@@ -147,13 +148,61 @@ def homs_record(decision="approve", status="approved", comments="Approved.", fal
         "worker": stage("2026-10-11T06:27:52.100Z", "2026-10-11T06:27:55.000Z",
                         {"status": "proposal_ready", "missing_planner_evidence": [],
                          "plan_steps_followed": ["Measure the gap"],
-                         "proposed_solution": {"selected_option_id": "opt-2", "selected_option": "Call in Lee"}}),
+                         "proposed_solution": {"selected_option_id": "opt-2", "selected_option": "Call in Lee"},
+                         "mutation_executed": False}),
         "reviewer": stage("2026-10-11T06:27:55.100Z", "2026-10-11T06:27:58.000Z",
                           {"review_status": "validated_with_risks", "risks": ["Overtime"],
-                           "recommendation": "Approve opt-2", "unsupported_claims": []}),
+                           "recommendation": "Approve opt-2", "unsupported_claims": [],
+                           "mutation_verified_absent": True}),
         "human_review": {"decision": decision, "comments": comments, "timestamp": "2026-10-11T06:27:58.859Z"},
-        "final_status": status, "final_result": {"status": status},
+        "final_status": status,
+        "final_result": {
+            "status": status,
+            "proposal": {"selected_option_id": "opt-2", "selected_option": "Call in Lee"},
+            "review": {"review_status": "validated_with_risks", "recommendation": "Approve opt-2"},
+            "human_decision": decision,
+            "human_comments_or_correction": comments,
+            "mutation_executed": False,
+        },
     }
+
+
+def homs_staffing_record(rag_status="answered", mcp_status="available"):
+    """Sanitized equivalent of a persisted Student 5 schema-1.0 audit."""
+
+    record = homs_record(
+        decision="reject",
+        status="rejected",
+        comments="Rejected after advisory review; no roster action authorised.",
+        fallback=True,
+    )
+    record["input_evidence"].update({
+        "evidence_separation": {
+            "policy_is_advisory": True,
+            "operational_rules_remain_authoritative": True,
+        },
+        "policy_context": {
+            "context_type": "rag_policy_guidance",
+            "retrieval_status": rag_status,
+            "confidence": "medium" if rag_status == "answered" else "none",
+            "citations": ([{
+                "id": "S1", "source": "policy/coverage.md", "title": "Coverage",
+            }] if rag_status == "answered" else []),
+            "limitations": ["Policy is advisory and is not live operational state."],
+        },
+        "mcp_context": {
+            "context_type": "mcp_operational_access",
+            "retrieval_status": mcp_status,
+            "tool_name": "homs_read_context",
+            "source": "authoritative-evidence-api" if mcp_status == "available" else None,
+            "consistency_status": (
+                "matched_authoritative_backend_evidence"
+                if mcp_status == "available" else "not_checked"
+            ),
+            "limitations": ["The registered tool is controlled read-only access."],
+        },
+    })
+    return record
 
 
 def test_homs_record_is_mapped_and_passes():
@@ -164,6 +213,107 @@ def test_homs_record_is_mapped_and_passes():
     assert all(c["passed"] for c in checks.values()), checks
     obs = mar.observe(workflow, "x")
     assert obs["human"]["decision"] == "approved" and obs["worker"]["result"] == "proposal_ready: Call in Lee"
+    assert obs["final_result"]["proposal"]["selected_option_id"] == "opt-2"
+    assert obs["final_result"]["review"]["review_status"] == "validated_with_risks"
+    assert obs["mutation_safety"] == {
+        "worker_mutation_executed": False,
+        "reviewer_mutation_verified_absent": True,
+        "provenance_mutation_allowed": False,
+        "final_mutation_executed": False,
+    }
+
+
+@pytest.mark.parametrize(("decision", "status", "expected"), [
+    ("approve", "approved", "approved"),
+    ("reject", "rejected", "rejected"),
+    ("correct", "corrected", "corrected"),
+    ("partially_accept", "partially_accepted", "partially_accepted"),
+])
+def test_homs_real_decision_aliases_match_final_result(decision, status, expected):
+    record = homs_record(decision, status, "Human rationale recorded.")
+    obs = mar.observe(mar.unwrap(record), "x")
+    checks = {item["id"]: item for item in mar.check_workflow(obs)}
+
+    assert obs["human"]["decision"] == expected
+    assert obs["final_result"]["human_decision"] == expected
+    assert checks["MA10"]["passed"]
+
+
+def test_homs_final_result_mismatch_is_a_required_failure():
+    record = homs_record()
+    record["final_result"]["status"] = "rejected"
+    results = mar.check_workflow(mar.observe(mar.unwrap(record), "x"))
+    final_check = next(item for item in results if item["id"] == "MA10")
+
+    assert not final_check["passed"]
+    assert final_check["severity"] == "required"
+    assert "does not match workflow status" in final_check["detail"]
+    assert mar.summarise_checks(results)["verdict"] == "fail"
+
+
+def test_explicit_mutation_is_a_required_failure():
+    record = homs_record()
+    record["worker"]["output"]["mutation_executed"] = True
+    record["reviewer"]["output"]["mutation_verified_absent"] = False
+    record["input_evidence"]["provenance"]["mutation_allowed"] = True
+    record["final_result"]["mutation_executed"] = True
+    results = mar.check_workflow(mar.observe(mar.unwrap(record), "x"))
+    safety = next(item for item in results if item["id"] == "MA11")
+
+    assert not safety["passed"]
+    assert safety["severity"] == "required"
+    assert "indicates mutation is not safely absent" in safety["detail"]
+    assert mar.summarise_checks(results)["verdict"] == "fail"
+
+
+def test_homs_rag_and_mcp_provenance_are_surfaced_and_validated():
+    obs = mar.observe(mar.unwrap(homs_staffing_record()), "x")
+    checks = {item["id"]: item for item in mar.check_workflow(obs)}
+
+    assert obs["rag_provenance"] == {
+        "context_type": "rag_policy_guidance",
+        "retrieval_status": "answered",
+        "confidence": "medium",
+        "citation_count": 1,
+        "sources": ["policy/coverage.md"],
+        "policy_is_advisory": True,
+        "operational_rules_remain_authoritative": True,
+        "limitations": ["Policy is advisory and is not live operational state."],
+    }
+    assert obs["mcp_provenance"]["tool_name"] == "homs_read_context"
+    assert obs["mcp_provenance"]["source"] == "authoritative-evidence-api"
+    assert obs["mcp_provenance"]["consistency_status"] == \
+        "matched_authoritative_backend_evidence"
+    assert checks["MA12"]["passed"] and checks["MA13"]["passed"]
+
+
+def test_degraded_rag_and_mcp_are_reported_without_fabricated_success():
+    obs = mar.observe(
+        mar.unwrap(homs_staffing_record(rag_status="unavailable", mcp_status="unavailable")),
+        "x",
+    )
+    checks = {item["id"]: item for item in mar.check_workflow(obs)}
+
+    assert obs["rag_provenance"]["retrieval_status"] == "unavailable"
+    assert obs["rag_provenance"]["citation_count"] == 0
+    assert obs["mcp_provenance"]["retrieval_status"] == "unavailable"
+    assert obs["mcp_provenance"]["source"] is None
+    assert checks["MA12"]["passed"] and checks["MA13"]["passed"]
+
+
+def test_invalid_rag_grounding_and_mcp_mismatch_are_advisory_warnings():
+    record = homs_staffing_record()
+    record["input_evidence"]["policy_context"]["citations"] = []
+    record["input_evidence"]["mcp_context"]["consistency_status"] = \
+        "mismatch_with_authoritative_backend_evidence"
+    results = mar.check_workflow(mar.observe(mar.unwrap(record), "x"))
+    checks = {item["id"]: item for item in results}
+
+    assert not checks["MA12"]["passed"] and checks["MA12"]["severity"] == "advisory"
+    assert not checks["MA13"]["passed"] and checks["MA13"]["severity"] == "advisory"
+    assert "no citation sources" in checks["MA12"]["detail"]
+    assert "mismatch" in checks["MA13"]["detail"]
+    assert mar.summarise_checks(results)["verdict"] == "pass"
 
 
 def test_homs_api_view_uses_status_field():

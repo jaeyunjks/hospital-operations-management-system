@@ -25,6 +25,7 @@ import os
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -184,6 +185,15 @@ ChatFn = Callable[[List[Dict[str, Any]], Optional[List[Dict[str, Any]]]], Dict[s
 def make_ollama_chat(*, model: str, base_url: str, timeout: float) -> ChatFn:
     """Return a blocking chat function bound to one Ollama model."""
 
+    try:
+        parsed_url = urllib.parse.urlsplit(base_url)
+        valid_url = parsed_url.scheme.lower() in {"http", "https"} and parsed_url.hostname
+    except (TypeError, ValueError):
+        valid_url = False
+    if not valid_url:
+        raise ValueError("Ollama URL must use http or https and include a host")
+    validated_base_url = base_url.rstrip("/")
+
     def chat(
         messages: List[Dict[str, Any]], tools: Optional[List[Dict[str, Any]]]
     ) -> Dict[str, Any]:
@@ -195,14 +205,16 @@ def make_ollama_chat(*, model: str, base_url: str, timeout: float) -> ChatFn:
         }
         if tools:
             payload["tools"] = tools
-        request = urllib.request.Request(
-            f"{base_url.rstrip('/')}/api/chat",
+        request = urllib.request.Request(  # noqa: S310 - URL scheme validated above.
+            f"{validated_base_url}/api/chat",
             data=json.dumps(payload).encode("utf-8"),
             headers={"Content-Type": "application/json", "Accept": "application/json"},
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=timeout) as response:
+            with urllib.request.urlopen(  # noqa: S310 - request URL validated above.
+                request, timeout=timeout
+            ) as response:
                 envelope = json.loads(response.read().decode("utf-8"))
         except (urllib.error.URLError, TimeoutError, OSError) as error:
             raise RuntimeError(f"Ollama request failed: {error}") from error
