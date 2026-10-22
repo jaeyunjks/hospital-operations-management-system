@@ -1,0 +1,129 @@
+{# One Multi-Agent workflow: Planner -> Worker -> Reviewer -> Human Review.
+   While the agents run, the panel polls itself every 2 seconds. #}
+<div id="multi-agent-workflow"
+     {% if workflow and workflow.status == 'in_progress' %}
+     hx-get="/multi-agent/{{ workflow.workflow_id }}" hx-trigger="load delay:2s" hx-swap="outerHTML"
+     {% endif %}>
+
+{% if error %}
+  <div class="alert alert--error">
+    <strong>The Multi-Agent workflow could not continue</strong>
+    <div>{{ error }}</div>
+  </div>
+{% endif %}
+
+{% if workflow and workflow.status == 'failed' %}
+  <div class="alert alert--error">
+    <strong>The agents could not finish this workflow</strong>
+    <div>{{ (workflow.final_result or {}).error or 'The Multi-Agent Server reported a failure.' }}</div>
+    <div class="u-muted u-label">Nothing was reserved. Run the review again, or decide manually above.</div>
+  </div>
+{% endif %}
+
+{% if workflow %}
+  {% set planner = (workflow.planner or {}).output or {} %}
+  {% set worker = (workflow.worker or {}).output or {} %}
+  {% set reviewer = (workflow.reviewer or {}).output or {} %}
+
+  <div class="row row--between">
+    <span class="u-label u-mono">Workflow {{ workflow.workflow_id }}</span>
+    <span class="state state--{{ {'in_progress': 'InProgress', 'awaiting_human_review': 'Optionoffered',
+                                   'approved': 'Completed', 'partially_accepted': 'Completed',
+                                   'corrected': 'Scheduled', 'rejected': 'Cancelled',
+                                   'failed': 'Cancelled'}.get(workflow.status, 'Open') }}"
+          data-testid="workflow-status">{{ workflow.status | replace('_', ' ') }}</span>
+  </div>
+
+  <ol class="agent-steps">
+    <li class="agent-step agent-step--{{ 'done' if planner else 'waiting' }}">
+      <strong>1. Planner</strong>
+      {% if planner %}
+        {% if workflow.planner.execution %}<span class="u-label u-muted">{{ workflow.planner.execution.provider }}</span>{% endif %}
+        <div>{{ planner.goal }}</div>
+        <ul>{% for step in planner.planned_steps or [] %}<li>{{ step }}</li>{% endfor %}</ul>
+        <div class="u-muted u-label">Evidence required: {{ (planner.required_evidence or []) | join(', ') }}</div>
+      {% elif workflow.status == 'failed' %}<div class="u-muted">Stopped</div>
+      {% else %}<div class="u-muted">Planning…</div>{% endif %}
+    </li>
+
+    <li class="agent-step agent-step--{{ 'done' if worker else 'waiting' }}">
+      <strong>2. Worker</strong>
+      {% if worker %}
+        {% if workflow.worker.execution %}<span class="u-label u-muted">{{ workflow.worker.execution.provider }}</span>{% endif %}
+        <div>Result: {{ worker.status | replace('_', ' ') }}</div>
+        {% set proposal = worker.proposed_solution or {} %}
+        {% if proposal.selected_option %}<div>Proposed: <strong>{{ proposal.selected_option }}</strong></div>{% endif %}
+        <ul>{% for line in proposal.reasoning or [] %}<li>{{ line }}</li>{% endfor %}</ul>
+        {% if worker.limitations %}<div class="u-muted u-label">Limitations: {{ worker.limitations | join(' · ') }}</div>{% endif %}
+      {% elif workflow.status == 'failed' %}<div class="u-muted">Not run</div>
+      {% elif planner %}<div class="u-muted">Evaluating the options…</div>
+      {% else %}<div class="u-muted">Waiting for the plan</div>{% endif %}
+    </li>
+
+    <li class="agent-step agent-step--{{ 'done' if reviewer else 'waiting' }}">
+      <strong>3. Reviewer</strong>
+      {% if reviewer %}
+        {% if workflow.reviewer.execution %}<span class="u-label u-muted">{{ workflow.reviewer.execution.provider }}</span>{% endif %}
+        <div>Review: {{ reviewer.review_status | replace('_', ' ') }}</div>
+        {% if reviewer.risks %}<div>Risks:</div><ul>{% for risk in reviewer.risks %}<li>{{ risk }}</li>{% endfor %}</ul>{% endif %}
+        {% if reviewer.unsupported_claims %}<div class="u-label">Unsupported claims: {{ reviewer.unsupported_claims | join(' · ') }}</div>{% endif %}
+        <div class="u-muted">{{ reviewer.recommendation }}</div>
+      {% elif workflow.status == 'failed' %}<div class="u-muted">Not run</div>
+      {% elif worker %}<div class="u-muted">Checking the proposal…</div>
+      {% else %}<div class="u-muted">Waiting for the Worker</div>{% endif %}
+    </li>
+
+    <li class="agent-step agent-step--{{ 'done' if workflow.human_review else 'waiting' }}">
+      <strong>4. Human Review</strong>
+      {% if workflow.recommendation %}
+        <div>Agents recommend: <strong>{{ workflow.recommendation.label }}</strong></div>
+      {% endif %}
+
+      {% if workflow.status == 'awaiting_human_review' %}
+        <form class="stack stack--sm" hx-post="/multi-agent/{{ workflow.workflow_id }}/review"
+              hx-target="#multi-agent-workflow" hx-swap="outerHTML" hx-indicator="#loading-indicator">
+          <label class="field">
+            <span class="field__label">Your decision</span>
+            <select class="field__input" name="decision" required>
+              {% for value, label in decisions %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+            </select>
+          </label>
+          <label class="field field--wide">
+            <span class="field__label">Comment (required for Correct)</span>
+            <input class="field__input" name="comment" maxlength="2000"
+                   placeholder="Why, or what should change">
+          </label>
+          <button class="btn-primary" type="submit">Record review</button>
+        </form>
+      {% elif workflow.human_review %}
+        <div>Decision: <strong>{{ workflow.human_review.decision | replace('_', ' ') }}</strong></div>
+        {% if workflow.human_review.comments %}<div class="u-muted">{{ workflow.human_review.comments }}</div>{% endif %}
+        <div class="u-label u-muted u-mono">{{ workflow.human_review.timestamp }}</div>
+      {% elif workflow.status == 'failed' %}
+        <div class="u-muted">The agents did not finish, so there is nothing to review.</div>
+      {% else %}
+        <div class="u-muted">Opens when the Reviewer has finished.</div>
+      {% endif %}
+    </li>
+  </ol>
+
+  {% set rec = workflow.recommendation %}
+  {% if workflow.status in ('approved', 'partially_accepted') and rec and workflow.case_id %}
+    <div class="alert alert--info">
+      <div class="alert__body">
+        The agents never reserve a bed. To act on this approved proposal, record it as the case decision.
+        <form method="post" action="/shortages/{{ workflow.case_id }}/decide" class="stack stack--sm">
+          <input type="hidden" name="chosen_option" value="{{ rec.label }}">
+          {% if rec.bed_id %}<input type="hidden" name="resolved_bed_id" value="{{ rec.bed_id }}">
+          {% else %}<input type="hidden" name="escalate" value="1">{% endif %}
+          <input type="hidden" name="decision_reason"
+                 value="Approved Multi-Agent proposal (workflow {{ workflow.workflow_id }})">
+          <button class="btn-primary" type="submit">
+            {{ 'Reserve ' ~ rec.label if rec.bed_id else 'Escalate the case' }}
+          </button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+{% endif %}
+</div>

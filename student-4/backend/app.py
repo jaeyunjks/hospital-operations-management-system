@@ -15,6 +15,7 @@ from responses import ok, ApiError
 from routes.ai import bp as ai_bp
 from routes.arrangements import bp as arrangements_bp
 from routes.catalogue import bp as catalogue_bp
+from routes.multi_agent import bp as multi_agent_bp
 from routes.shared_ai import bp as shared_ai_bp
 from routes.shortages import bp as shortages_bp
 from routes.theatres import bp as theatres_bp
@@ -27,7 +28,7 @@ def create_app():
     app = Flask(__name__)
 
     for blueprint in (catalogue_bp, arrangements_bp, theatres_bp, wards_bp,
-                      shortages_bp, ai_bp, shared_ai_bp):
+                      shortages_bp, ai_bp, shared_ai_bp, multi_agent_bp):
         app.register_blueprint(blueprint, url_prefix="/api")
 
     @app.errorhandler(ApiError)

@@ -158,6 +158,12 @@ services:
       RAG_ENABLED: "${STUDENT4_RAG_ENABLED:-false}"
       RAG_SERVER_URL: "${STUDENT4_RAG_SERVER_URL:-http://host.docker.internal:8100}"
       RAG_TIMEOUT: "${STUDENT4_RAG_TIMEOUT:-100}"
+      # Shared Multi-Agent Server (Release 2), also on the host. Off by default
+      # (the cloud baseline); enable with STUDENT4_MULTI_AGENT_ENABLED=true and run
+      # the server with HOMS_MULTI_AGENT_HOST=0.0.0.0 HOMS_MULTI_AGENT_ALLOW_DOCKER_HOST=true.
+      MULTI_AGENT_ENABLED: "${STUDENT4_MULTI_AGENT_ENABLED:-false}"
+      MULTI_AGENT_SERVER_URL: "${STUDENT4_MULTI_AGENT_SERVER_URL:-http://host.docker.internal:8200}"
+      MULTI_AGENT_TIMEOUT: "${STUDENT4_MULTI_AGENT_TIMEOUT:-30}"
     ports: [ "5400:5400" ]
     depends_on:
       student-4-database:
