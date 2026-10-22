@@ -66,7 +66,8 @@ SERVICES: List[Dict[str, Any]] = [
     {"app": "s1-api", "student": "student-1", "role": "backend", "port": 5100, "ingress": "external",
      "context": "student-1", "dockerfile": "student-1/backend/Dockerfile", "health": "/health",
      "env": {"HOST": "0.0.0.0", "PORT": "5100", "DATABASE_URL": "{s1-db}", "OLLAMA_URL": AI_OFF,  # noqa: S104
-             "MCP_ENABLED": "false", "RAG_ENABLED": "false", "AUTH_ENABLED": "0", "FLASK_DEBUG": "0"}},
+             "MCP_ENABLED": "false", "RAG_ENABLED": "false", "MULTI_AGENT_ENABLED": "false",
+             "AUTH_ENABLED": "0", "FLASK_DEBUG": "0"}},
     {"app": "s1-web", "student": "student-1", "role": "frontend", "port": 3100, "ingress": "external",
      "context": "student-1", "dockerfile": "student-1/frontend/Dockerfile", "health": "/",
      "env": {"HOST": "0.0.0.0", "PORT": "3100", "BACKEND_URL": "{s1-api}", "FLASK_DEBUG": "0"}},  # noqa: S104

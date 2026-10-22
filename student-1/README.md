@@ -1,7 +1,7 @@
 # student-1
 
 Independently owned feature microservice set for the Hospital Operations
-Management System. **Scaffold only — no feature logic implemented yet.**
+Management System.
 
 - Owner: **Jesse Keyser** · Student 1 · HOMS Group 10
 - Feature area: 
@@ -16,10 +16,27 @@ Management System. **Scaffold only — no feature logic implemented yet.**
 | `tests/`    | Tests for this microservice                                |
 | `Dockerfile`| Container build for this microservice (placeholder)        |
 
-## Not yet implemented
+## Release 2 admission scheduling review
 
-CRUD endpoints, database schema, authentication, and AI workflows are
-intentionally out of scope for the current repository-initialisation task.
+The backend can send a read-only admission scheduling proposal to the shared
+host-local Multi-Agent Server. For a chosen day and duration it generates hourly candidate starts within
+assumed clinic hours (08:00–18:00) and checks them against recorded Pending and Active admissions, then pauses for a human review.
+Student-1 has no authoritative future slot-capacity source: a conflict-free
+option is not a confirmed slot or booking, and the workflow never changes
+admission records.
+
+The integration is disabled by default. For a local demonstration, configure
+the shared server for Docker-host access, then start it from the repository
+root:
+
+```bash
+HOMS_MULTI_AGENT_HOST=0.0.0.0 \
+HOMS_MULTI_AGENT_ALLOW_DOCKER_HOST=true \
+python3 ai-services/multi-agent-server/api.py
+```
+
+Start the integrated app with `STUDENT1_MULTI_AGENT_ENABLED=true`. See
+`ai-services/multi-agent-server/README.md` for model and audit-storage options.
 
 ## Naming and Organisational Structure
 

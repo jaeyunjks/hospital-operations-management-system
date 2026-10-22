@@ -1,7 +1,7 @@
 -- Seed data for the Patient & Admissions Management database
 -- Creation date: 29/08/2026
 
--- patients --> 10 records with a mix of required and optional details.
+-- patients --> 30 records with a mix of required and optional details.
 INSERT INTO patients (
     patient_id,
     p_title,
@@ -35,9 +35,28 @@ VALUES
     (7, 'Mrs', 'Emily', 'Davis', '1989-06-11', 'Female', '0412345684', 'Email', 'Rose', 'Em', NULL, NULL, 0, NULL, '0298765438', 'Married', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
     (8, 'Mr', 'Omar', 'Hassan', '1974-12-09', 'Male', '0412345685', 'Text', NULL, 'O', NULL, NULL, 1, 'omar.hassan@email.com', NULL, 'Divorced', 'Both', 1, 'Deceased', datetime('now'), datetime('now')),
     (9, 'Ms', 'Harper', 'Wilson', '2001-03-30', 'Alternate', '0412345686', 'Email', NULL, NULL, 'Harper', NULL, 0, 'harper.wilson@email.com', '0298765439', 'Single', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
-    (10, 'Mr', 'Ethan', 'Clark', '1982-08-19', 'Male', '0412345687', 'Post', 'James', NULL, NULL, 'White', 0, 'ethan.clark@email.com', '0298765440', 'De-Facto', 'Unknown', 1, 'Inactive', datetime('now'), datetime('now'));
-
--- patient_addresses --> 10 records, one primary address per patient.
+    (10, 'Mr', 'Ethan', 'Clark', '1982-08-19', 'Male', '0412345687', 'Post', 'James', NULL, NULL, 'White', 0, 'ethan.clark@email.com', '0298765440', 'De-Facto', 'Unknown', 1, 'Inactive', datetime('now'), datetime('now')),
+    (11, 'Mr', 'Liam', 'Anderson', '1975-03-02', 'Male', '0412345711', 'Email', NULL, NULL, NULL, NULL, 0, 'liam.anderson@email.com', '0298765411', 'Single', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (12, 'Ms', 'Chloe', 'Taylor', '1996-10-14', 'Female', '0412345712', 'Text', NULL, NULL, NULL, NULL, 1, 'chloe.taylor@email.com', '0298765412', 'Married', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (13, 'Mrs', 'Grace', 'Thompson', '1969-05-29', 'Female', '0412345713', 'Post', NULL, NULL, NULL, NULL, 0, 'grace.thompson@email.com', '0298765413', 'Divorced', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (14, 'Mr', 'Noah', 'Martin', '1988-01-08', 'Male', '0412345714', 'Email', NULL, NULL, NULL, NULL, 1, 'noah.martin@email.com', '0298765414', 'Widowed', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (15, 'Ms', 'Mia', 'Robinson', '2000-12-21', 'Female', '0412345715', 'Text', NULL, NULL, NULL, NULL, 0, 'mia.robinson@email.com', '0298765415', 'De-Facto', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (16, 'Mr', 'Jack', 'Walker', '1959-07-17', 'Male', '0412345716', 'Post', NULL, NULL, NULL, NULL, 1, 'jack.walker@email.com', '0298765416', 'Separated', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (17, 'Dr', 'Olivia', 'Harris', '1983-09-03', 'Female', '0412345717', 'Email', NULL, NULL, NULL, NULL, 0, 'olivia.harris@email.com', '0298765417', 'Single', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (18, 'Mr', 'William', 'Lewis', '1971-11-26', 'Male', '0412345718', 'Text', NULL, NULL, NULL, NULL, 1, 'william.lewis@email.com', '0298765418', 'Married', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (19, 'Mrs', 'Isla', 'Young', '1992-04-05', 'Female', '0412345719', 'Post', NULL, NULL, NULL, NULL, 0, 'isla.young@email.com', '0298765419', 'Divorced', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (20, 'Mr', 'Henry', 'King', '1964-02-11', 'Male', '0412345720', 'Email', NULL, NULL, NULL, NULL, 1, 'henry.king@email.com', '0298765420', 'Widowed', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (21, 'Ms', 'Zoe', 'Wright', '1998-08-30', 'Alternate', '0412345721', 'Text', NULL, NULL, NULL, NULL, 0, 'zoe.wright@email.com', '0298765421', 'De-Facto', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (22, 'Mr', 'Oscar', 'Scott', '1986-06-19', 'Male', '0412345722', 'Post', NULL, NULL, NULL, NULL, 1, 'oscar.scott@email.com', '0298765422', 'Separated', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (23, 'Mrs', 'Ruby', 'Green', '1977-10-01', 'Female', '0412345723', 'Email', NULL, NULL, NULL, NULL, 0, 'ruby.green@email.com', '0298765423', 'Single', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (24, 'Mr', 'Leo', 'Baker', '2004-05-23', 'Male', '0412345724', 'Text', NULL, NULL, NULL, NULL, 1, 'leo.baker@email.com', '0298765424', 'Married', 'Neither', 0, 'Active', datetime('now'), datetime('now')),
+    (25, 'Ms', 'Ella', 'Adams', '1990-01-27', 'Female', '0412345725', 'Post', NULL, NULL, NULL, NULL, 0, 'ella.adams@email.com', '0298765425', 'Divorced', 'Neither', 0, 'Inactive', datetime('now'), datetime('now')),
+    (26, 'Mr', 'Hugo', 'Nelson', '1955-12-12', 'Male', '0412345726', 'Email', NULL, NULL, NULL, NULL, 1, 'hugo.nelson@email.com', '0298765426', 'Widowed', 'Neither', 0, 'Inactive', datetime('now'), datetime('now')),
+    (27, 'Mrs', 'Sophie', 'Hill', '1981-03-16', 'Female', '0412345727', 'Text', NULL, NULL, NULL, NULL, 0, 'sophie.hill@email.com', '0298765427', 'De-Facto', 'Neither', 0, 'Inactive', datetime('now'), datetime('now')),
+    (28, 'Mr', 'Max', 'Campbell', '1994-09-09', 'Male', '0412345728', 'Post', NULL, NULL, NULL, NULL, 1, 'max.campbell@email.com', '0298765428', 'Separated', 'Neither', 0, 'Transferred', datetime('now'), datetime('now')),
+    (29, 'Ms', 'Lily', 'Mitchell', '1973-06-06', 'Female', '0412345729', 'Email', NULL, NULL, NULL, NULL, 0, 'lily.mitchell@email.com', '0298765429', 'Single', 'Neither', 0, 'Transferred', datetime('now'), datetime('now')),
+    (30, 'Mr', 'Ryan', 'Carter', '1967-08-24', 'Male', '0412345730', 'Text', NULL, NULL, NULL, NULL, 1, 'ryan.carter@email.com', '0298765430', 'Married', 'Neither', 0, 'Deceased', datetime('now'), datetime('now'));
+-- patient_addresses --> 30 records, one primary address per patient.
 INSERT INTO patient_addresses (
     address_id,
     patient_id,
@@ -57,9 +76,28 @@ VALUES
     (7, 7, '44 Valley Way', 'Darwin', 'Northern Territory', '0800', 1),
     (8, 8, '99 Capital Drive', 'Canberra', 'Australian Capital Territory', '2600', 1),
     (9, 9, '3 Coastal Drive', 'Gold Coast', 'Queensland', '4217', 1),
-    (10, 10, '71 Market Street', 'Newcastle', 'New South Wales', '2300', 1);
-
--- patient_medical_information --> 10 records.
+    (10, 10, '71 Market Street', 'Newcastle', 'New South Wales', '2300', 1),
+    (11, 11, '10 Oak Street', 'Sydney', 'New South Wales', '2000', 1),
+    (12, 12, '13 Elm Street', 'Melbourne', 'Victoria', '3000', 1),
+    (13, 13, '16 Cedar Street', 'Brisbane', 'Queensland', '4000', 1),
+    (14, 14, '19 Maple Street', 'Perth', 'Western Australia', '6000', 1),
+    (15, 15, '22 Wattle Street', 'Adelaide', 'South Australia', '5000', 1),
+    (16, 16, '25 Oak Street', 'Hobart', 'Tasmania', '7000', 1),
+    (17, 17, '28 Elm Street', 'Canberra', 'Australian Capital Territory', '2600', 1),
+    (18, 18, '31 Cedar Street', 'Newcastle', 'New South Wales', '2300', 1),
+    (19, 19, '34 Maple Street', 'Sydney', 'New South Wales', '2000', 1),
+    (20, 20, '37 Wattle Street', 'Melbourne', 'Victoria', '3000', 1),
+    (21, 21, '40 Oak Street', 'Brisbane', 'Queensland', '4000', 1),
+    (22, 22, '43 Elm Street', 'Perth', 'Western Australia', '6000', 1),
+    (23, 23, '46 Cedar Street', 'Adelaide', 'South Australia', '5000', 1),
+    (24, 24, '49 Maple Street', 'Hobart', 'Tasmania', '7000', 1),
+    (25, 25, '52 Wattle Street', 'Canberra', 'Australian Capital Territory', '2600', 1),
+    (26, 26, '55 Oak Street', 'Newcastle', 'New South Wales', '2300', 1),
+    (27, 27, '58 Elm Street', 'Sydney', 'New South Wales', '2000', 1),
+    (28, 28, '61 Cedar Street', 'Melbourne', 'Victoria', '3000', 1),
+    (29, 29, '64 Maple Street', 'Brisbane', 'Queensland', '4000', 1),
+    (30, 30, '67 Wattle Street', 'Perth', 'Western Australia', '6000', 1);
+-- patient_medical_information --> 30 records.
 INSERT INTO patient_medical_information (
     insurance_id,
     patient_id,
@@ -79,9 +117,28 @@ VALUES
     (7, 7, '789012346', '2', '2029-11-30', 0, '789012345G'),
     (8, 8, '890123457', '1', '2027-05-31', 1, '890123456H'),
     (9, 9, '901234568', '1', '2028-02-28', 0, '901234567I'),
-    (10, 10, '012345679', '3', '2029-07-31', 1, '012345678J');
-
--- patient_contacts --> 10 records.
+    (10, 10, '012345679', '3', '2029-07-31', 1, '012345678J'),
+    (11, 11, '222222243', '1', '2027-01-28', 0, '113456789K'),
+    (12, 12, '333333356', '2', '2028-02-28', 1, '123456789L'),
+    (13, 13, '444444469', '3', '2029-03-28', 0, '133456789M'),
+    (14, 14, '555555582', '1', '2027-04-28', 1, '143456789N'),
+    (15, 15, '666666695', '2', '2028-05-28', 0, '153456789P'),
+    (16, 16, '777777808', '3', '2029-06-28', 1, '163456789Q'),
+    (17, 17, '888888921', '1', '2027-07-28', 0, '173456789G'),
+    (18, 18, '000000034', '2', '2028-08-28', 1, '183456789H'),
+    (19, 19, '111111147', '3', '2029-09-28', 0, '193456789I'),
+    (20, 20, '222222260', '1', '2027-10-28', 1, '203456789J'),
+    (21, 21, '333333373', '2', '2028-11-28', 0, '213456789K'),
+    (22, 22, '444444486', '3', '2029-12-28', 1, '223456789L'),
+    (23, 23, '555555599', '1', '2027-01-28', 0, '233456789M'),
+    (24, 24, '666666712', '2', '2028-02-28', 1, '243456789N'),
+    (25, 25, '777777825', '3', '2029-03-28', 0, '253456789O'),
+    (26, 26, '888888938', '1', '2027-04-28', 1, '263456789P'),
+    (27, 27, '000000051', '2', '2028-05-28', 0, '273456789Q'),
+    (28, 28, '111111164', '3', '2029-06-28', 1, '283456789R'),
+    (29, 29, '222222277', '1', '2027-07-28', 0, '293456789S'),
+    (30, 30, '333333390', '2', '2028-08-28', 1, '303456789T');
+-- patient_contacts --> 30 records.
 INSERT INTO patient_contacts (
     contact_id,
     patient_id,
@@ -106,9 +163,28 @@ VALUES
     (7, 7, 1, 'Nathan', 'Davis', '1987-07-18', 'Husband', 0, '44 Valley Way, Darwin, Northern Territory, 0800', '0412345693', '0897654322', 'nathan.davis@email.com'),
     (8, 8, 1, 'Leah', 'Hassan', '1976-08-25', 'Daughter', 1, '99 Capital Drive, Canberra, Australian Capital Territory, 2600', '0412345694', '0265432198', 'leah.hassan@email.com'),
     (9, 9, 0, 'Theo', 'Wilson', '2003-04-16', 'Parent', 0, '3 Coastal Drive, Gold Coast, Queensland, 4217', '0412345695', '0754321098', 'theo.wilson@email.com'),
-    (10, 10, 1, 'Emma', 'Clark', '1985-03-13', 'Partner', 0, '71 Market Street, Newcastle, New South Wales, 2300', '0412345696', '0243210987', 'emma.clark@email.com');
-
--- patient_admin_notes --> 10 records.
+    (10, 10, 1, 'Emma', 'Clark', '1985-03-13', 'Partner', 0, '71 Market Street, Newcastle, New South Wales, 2300', '0412345696', '0243210987', 'emma.clark@email.com'),
+    (11, 11, 1, 'Alex', 'Anderson', '1980-01-01', 'Partner', 1, '10 Oak Street, Sydney, New South Wales, 2000', '0412345811', '0298765511', 'alex.anderson@email.com'),
+    (12, 12, 1, 'Alex', 'Taylor', '1980-01-01', 'Partner', 1, '13 Elm Street, Melbourne, Victoria, 3000', '0412345812', '0298765512', 'alex.taylor@email.com'),
+    (13, 13, 1, 'Alex', 'Thompson', '1980-01-01', 'Partner', 1, '16 Cedar Street, Brisbane, Queensland, 4000', '0412345813', '0298765513', 'alex.thompson@email.com'),
+    (14, 14, 1, 'Alex', 'Martin', '1980-01-01', 'Partner', 1, '19 Maple Street, Perth, Western Australia, 6000', '0412345814', '0298765514', 'alex.martin@email.com'),
+    (15, 15, 1, 'Alex', 'Robinson', '1980-01-01', 'Partner', 1, '22 Wattle Street, Adelaide, South Australia, 5000', '0412345815', '0298765515', 'alex.robinson@email.com'),
+    (16, 16, 1, 'Alex', 'Walker', '1980-01-01', 'Partner', 1, '25 Oak Street, Hobart, Tasmania, 7000', '0412345816', '0298765516', 'alex.walker@email.com'),
+    (17, 17, 1, 'Alex', 'Harris', '1980-01-01', 'Partner', 1, '28 Elm Street, Canberra, Australian Capital Territory, 2600', '0412345817', '0298765517', 'alex.harris@email.com'),
+    (18, 18, 1, 'Alex', 'Lewis', '1980-01-01', 'Partner', 1, '31 Cedar Street, Newcastle, New South Wales, 2300', '0412345818', '0298765518', 'alex.lewis@email.com'),
+    (19, 19, 1, 'Alex', 'Young', '1980-01-01', 'Partner', 1, '34 Maple Street, Sydney, New South Wales, 2000', '0412345819', '0298765519', 'alex.young@email.com'),
+    (20, 20, 1, 'Alex', 'King', '1980-01-01', 'Partner', 1, '37 Wattle Street, Melbourne, Victoria, 3000', '0412345820', '0298765520', 'alex.king@email.com'),
+    (21, 21, 1, 'Alex', 'Wright', '1980-01-01', 'Partner', 1, '40 Oak Street, Brisbane, Queensland, 4000', '0412345821', '0298765521', 'alex.wright@email.com'),
+    (22, 22, 1, 'Alex', 'Scott', '1980-01-01', 'Partner', 1, '43 Elm Street, Perth, Western Australia, 6000', '0412345822', '0298765522', 'alex.scott@email.com'),
+    (23, 23, 1, 'Alex', 'Green', '1980-01-01', 'Partner', 1, '46 Cedar Street, Adelaide, South Australia, 5000', '0412345823', '0298765523', 'alex.green@email.com'),
+    (24, 24, 1, 'Alex', 'Baker', '1980-01-01', 'Partner', 1, '49 Maple Street, Hobart, Tasmania, 7000', '0412345824', '0298765524', 'alex.baker@email.com'),
+    (25, 25, 1, 'Alex', 'Adams', '1980-01-01', 'Partner', 1, '52 Wattle Street, Canberra, Australian Capital Territory, 2600', '0412345825', '0298765525', 'alex.adams@email.com'),
+    (26, 26, 1, 'Alex', 'Nelson', '1980-01-01', 'Partner', 1, '55 Oak Street, Newcastle, New South Wales, 2300', '0412345826', '0298765526', 'alex.nelson@email.com'),
+    (27, 27, 1, 'Alex', 'Hill', '1980-01-01', 'Partner', 1, '58 Elm Street, Sydney, New South Wales, 2000', '0412345827', '0298765527', 'alex.hill@email.com'),
+    (28, 28, 1, 'Alex', 'Campbell', '1980-01-01', 'Partner', 1, '61 Cedar Street, Melbourne, Victoria, 3000', '0412345828', '0298765528', 'alex.campbell@email.com'),
+    (29, 29, 1, 'Alex', 'Mitchell', '1980-01-01', 'Partner', 1, '64 Maple Street, Brisbane, Queensland, 4000', '0412345829', '0298765529', 'alex.mitchell@email.com'),
+    (30, 30, 1, 'Alex', 'Carter', '1980-01-01', 'Partner', 1, '67 Wattle Street, Perth, Western Australia, 6000', '0412345830', '0298765530', 'alex.carter@email.com');
+-- patient_admin_notes --> 30 records.
 INSERT INTO patient_admin_notes (
     note_id,
     patient_id,
@@ -125,9 +201,28 @@ VALUES
     (7, 7, 'Medication list updated after pharmacy review.', datetime('now', '-20 days')),
     (8, 8, 'Advance care directive copied to patient file.', datetime('now', '-24 days')),
     (9, 9, 'Patient is accompanied by guardian during visits.', datetime('now', '-28 days')),
-    (10, 10, 'Insurance details verified and copied to records.', datetime('now', '-30 days'));
-
--- admissions --> 10 records.
+    (10, 10, 'Insurance details verified and copied to records.', datetime('now', '-30 days')),
+    (11, 11, 'Routine administrative note for Liam Anderson.', datetime('now', '-11 days')),
+    (12, 12, 'Routine administrative note for Chloe Taylor.', datetime('now', '-12 days')),
+    (13, 13, 'Routine administrative note for Grace Thompson.', datetime('now', '-13 days')),
+    (14, 14, 'Routine administrative note for Noah Martin.', datetime('now', '-14 days')),
+    (15, 15, 'Routine administrative note for Mia Robinson.', datetime('now', '-15 days')),
+    (16, 16, 'Routine administrative note for Jack Walker.', datetime('now', '-16 days')),
+    (17, 17, 'Routine administrative note for Olivia Harris.', datetime('now', '-17 days')),
+    (18, 18, 'Routine administrative note for William Lewis.', datetime('now', '-18 days')),
+    (19, 19, 'Routine administrative note for Isla Young.', datetime('now', '-19 days')),
+    (20, 20, 'Routine administrative note for Henry King.', datetime('now', '-20 days')),
+    (21, 21, 'Routine administrative note for Zoe Wright.', datetime('now', '-21 days')),
+    (22, 22, 'Routine administrative note for Oscar Scott.', datetime('now', '-22 days')),
+    (23, 23, 'Routine administrative note for Ruby Green.', datetime('now', '-23 days')),
+    (24, 24, 'Routine administrative note for Leo Baker.', datetime('now', '-24 days')),
+    (25, 25, 'Routine administrative note for Ella Adams.', datetime('now', '-25 days')),
+    (26, 26, 'Routine administrative note for Hugo Nelson.', datetime('now', '-26 days')),
+    (27, 27, 'Routine administrative note for Sophie Hill.', datetime('now', '-27 days')),
+    (28, 28, 'Routine administrative note for Max Campbell.', datetime('now', '-28 days')),
+    (29, 29, 'Routine administrative note for Lily Mitchell.', datetime('now', '-29 days')),
+    (30, 30, 'Routine administrative note for Ryan Carter.', datetime('now', '-30 days'));
+-- admissions --> 30 records.
 INSERT INTO admissions (
     admission_id,
     patient_id,
@@ -145,4 +240,24 @@ VALUES
     (7, 7, '2026-07-28', '2026-08-02', 'Completed'),
     (8, 8, date('now', '+22 days'), NULL, 'Pending'),
     (9, 9, '2026-08-15', '2026-08-17', 'Completed'),
-    (10, 10, '2026-08-25', NULL, 'Active');
+    (10, 10, '2026-08-25', NULL, 'Active'),
+    (11, 11, '2026-08-01', '2026-09-01', 'Completed'),
+    (12, 12, '2026-08-02', NULL, 'Active'),
+    (13, 13, date('now', '+5 days'), NULL, 'Pending'),
+    (14, 14, '2026-08-04', '2026-09-04', 'Completed'),
+    (15, 15, '2026-08-05', NULL, 'Active'),
+    (16, 16, date('now', '+8 days'), NULL, 'Pending'),
+    (17, 17, '2026-08-07', '2026-09-07', 'Completed'),
+    (18, 18, '2026-08-08', NULL, 'Active'),
+    (19, 19, date('now', '+11 days'), NULL, 'Pending'),
+    (20, 20, '2026-08-10', '2026-09-10', 'Completed'),
+    (21, 21, '2026-08-11', NULL, 'Active'),
+    (22, 22, date('now', '+14 days'), NULL, 'Pending'),
+    (23, 23, '2026-08-13', '2026-09-13', 'Completed'),
+    (24, 24, '2026-08-14', NULL, 'Active'),
+    (25, 25, date('now', '+17 days'), NULL, 'Pending'),
+    (26, 26, '2026-08-16', '2026-09-16', 'Completed'),
+    (27, 27, '2026-08-17', NULL, 'Active'),
+    (28, 28, date('now', '+20 days'), NULL, 'Pending'),
+    (29, 29, '2026-08-19', '2026-09-19', 'Completed'),
+    (30, 30, '2026-08-20', NULL, 'Active');

@@ -21,6 +21,7 @@ try:
     from backend.routes.patients import patients_bp
     from backend.routes.admissions import admissions_bp
     from backend.routes.mcp_endpoints import bp as mcp_bp
+    from backend.routes.multi_agent_endpoints import bp as multi_agent_bp
     from backend.routes.rag_endpoints import bp as rag_bp
 except ImportError:  # pragma: no cover - supports local execution
     import config
@@ -30,6 +31,7 @@ except ImportError:  # pragma: no cover - supports local execution
     from routes.patients import patients_bp
     from routes.admissions import admissions_bp
     from routes.mcp_endpoints import bp as mcp_bp
+    from routes.multi_agent_endpoints import bp as multi_agent_bp
     from routes.rag_endpoints import bp as rag_bp
 
 SERVICE_NAME = "student-1-backend"
@@ -42,6 +44,7 @@ def create_app():
     app.register_blueprint(patients_bp)
     app.register_blueprint(admissions_bp)
     app.register_blueprint(mcp_bp)
+    app.register_blueprint(multi_agent_bp)
     app.register_blueprint(rag_bp)
 
     @app.route('/health', methods=['GET'])
@@ -91,6 +94,20 @@ def create_app():
                     "ask": {
                         "method": "POST",
                         "path": "/api/rag/ask"
+                    }
+                },
+                "multi_agent": {
+                    "admission_scheduling": {
+                        "method": "POST",
+                        "path": "/api/multi-agent/admission-scheduling"
+                    },
+                    "get_admission_scheduling_review": {
+                        "method": "GET",
+                        "path": "/api/multi-agent/admission-scheduling/<workflow_id>"
+                    },
+                    "submit_admission_scheduling_review": {
+                        "method": "POST",
+                        "path": "/api/multi-agent/admission-scheduling/<workflow_id>/review"
                     }
                 },
                 "patients": {

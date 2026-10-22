@@ -111,6 +111,86 @@ def test_empty_intake_shows_required_fields(client):
     assert response.data.count(b'class="required-star"') >= 8
 
 
+def test_admission_scheduling_review_form_is_available(client):
+    response = client.get("/admission-scheduling-review")
+
+    assert response.status_code == 200
+    assert b"Choose a day and admission length" in response.data
+    assert b"not a capacity check or booking" in response.data
+
+
+def test_admission_scheduling_review_start_redirects_to_workflow(client, monkeypatch):
+    workflow_id = "90a3d71d-90cb-49dc-8728-296445ed85b1"
+    response = api_response({"data": {"workflow_id": workflow_id}}, 202)
+    post = Mock(return_value=response)
+    monkeypatch.setattr(frontend_app.requests, "post", post)
+
+    result = client.post(
+        "/admission-scheduling-review",
+        data={
+            "date": "2030-01-02",
+            "duration_choice": "15",
+        },
+    )
+
+    assert result.status_code == 302
+    assert f"workflow_id={workflow_id}" in result.location
+    assert post.call_args.kwargs["json"]["duration_minutes"] == "15"
+
+
+def test_admission_scheduling_review_shows_disabled_service_message(client, monkeypatch):
+    monkeypatch.setattr(
+        frontend_app.requests,
+        "post",
+        Mock(return_value=api_response({"data": {"error": "multi_agent_disabled"}}, 503)),
+    )
+
+    response = client.post(
+        "/admission-scheduling-review",
+        data={
+            "date": "2030-01-02",
+            "duration_choice": "15",
+        },
+    )
+
+    assert response.status_code == 200
+    assert b"Multi-Agent review is disabled." in response.data
+
+
+def test_admission_scheduling_review_displays_human_review_stage(client, monkeypatch):
+    workflow_id = "90a3d71d-90cb-49dc-8728-296445ed85b1"
+    workflow = {
+        "workflow_id": workflow_id,
+        "status": "awaiting_human_review",
+        "task": "Review scheduling options.",
+        "submitted_evidence": {
+            "options": [{
+                "label": "09:00–09:15",
+                "attributes": {
+                    "has_recorded_admission_overlap": False,
+                    "schedule_evidence_complete": True,
+                },
+            }],
+        },
+        "planner": None,
+        "worker": None,
+        "reviewer": None,
+        "final_result": None,
+    }
+    get = Mock(side_effect=[
+        api_response({"data": workflow}),
+        api_response({"data": {"role": "Receptionist", "name": "Receptionist"}}),
+    ])
+    monkeypatch.setattr(frontend_app.requests, "get", get)
+
+    response = client.get(f"/admission-scheduling-review?workflow_id={workflow_id}")
+
+    assert response.status_code == 200
+    assert b"Required human decision" in response.data
+    assert b"09:00" in response.data
+    assert b"does not book a time" in response.data
+
+
 def test_census_has_collapsed_lazy_load_ward_occupancy_tile(client, monkeypatch):
     api_get = Mock()
     monkeypatch.setattr(frontend_app, "_api_get", api_get)
@@ -687,3 +767,41 @@ def test_receptionist_search_defaults_to_active_only(client, monkeypatch):
     assert response.status_code == 200
     assert b"Active Patient" in response.data
     assert b"Inactive Patient" not in response.data
+
+
+def test_admission_scheduling_review_form_uses_day_and_duration_only(client):
+    html = client.get("/admission-scheduling-review").get_data(as_text=True)
+
+    assert 'name="earliest_time"' not in html
+    assert 'name="latest_time"' not in html
+    assert 'value="60"' in html and 'value="custom"' in html
+    assert 'name="duration_custom"' in html
+
+
+def test_admission_scheduling_review_sends_custom_duration(client, monkeypatch):
+    post = Mock(return_value=api_response({"data": {"workflow_id": "wf-1"}}, 202))
+    monkeypatch.setattr(frontend_app.requests, "post", post)
+
+    client.post(
+        "/admission-scheduling-review",
+        data={
+            "date": "2030-01-02",
+            "duration_choice": "custom",
+            "duration_custom": "90",
+        },
+    )
+
+    assert post.call_args.kwargs["json"]["duration_minutes"] == "90"
+
+
+def test_partial_acceptance_redirects_to_follow_up_workflow(client, monkeypatch):
+    post = Mock(return_value=api_response({"data": {"next_workflow_id": "next-id"}}, 200))
+    monkeypatch.setattr(frontend_app.requests, "post", post)
+
+    result = client.post(
+        "/admission-scheduling-review/90a3d71d-90cb-49dc-8728-296445ed85b1/review",
+        data={"decision": "partially_accept", "comment": ""},
+    )
+
+    assert result.status_code == 302
+    assert "workflow_id=next-id" in result.location

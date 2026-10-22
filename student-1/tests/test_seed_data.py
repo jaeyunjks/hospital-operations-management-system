@@ -1,7 +1,7 @@
 from database.init_database import TABLES, build, healthCheck
 
 
-def test_seed_data_has_ten_records_in_every_table(tmp_path):
+def test_seed_data_has_thirty_records_in_every_table(tmp_path):
     connection = build(tmp_path / "patients.db")
     try:
         counts = {
@@ -11,7 +11,7 @@ def test_seed_data_has_ten_records_in_every_table(tmp_path):
     finally:
         connection.close()
 
-    assert counts == {table: 10 for table in TABLES}
+    assert counts == {table: 30 for table in TABLES}
 
 
 def test_seed_data_preserves_expected_patient_statuses(tmp_path):
@@ -27,10 +27,10 @@ def test_seed_data_preserves_expected_patient_statuses(tmp_path):
         connection.close()
 
     assert statuses == {
-        "Active": 6,
-        "Inactive": 2,
-        "Transferred": 1,
-        "Deceased": 1,
+        "Active": 20,
+        "Inactive": 5,
+        "Transferred": 3,
+        "Deceased": 2,
     }
 
 
