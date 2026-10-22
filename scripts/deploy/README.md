@@ -15,7 +15,8 @@ deployment-testing.sh <1-5>
 This path provides one shared Azure Container Apps environment with uniquely
 named student services, managed-identity ACR pulls, dedicated Azure Files
 shares for SQLite, explicit cloud-off AI flags, immutable Git SHA image tags,
-and non-destructive post-deployment validation.
+local Docker builds pushed after `az acr login`, and non-destructive
+post-deployment validation. The active path does not use ACR Tasks.
 
 ## Preview safely
 

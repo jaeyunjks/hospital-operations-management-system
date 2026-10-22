@@ -24,8 +24,9 @@ Required environment variables:
   HOMS_AZURE_STORAGE_ACCOUNT
 
 The shared foundation and OIDC setup must already exist. Images use immutable
-commit-SHA tags. This script never deletes an app and never touches another
-student's uniquely named resources.
+commit-SHA tags and are built with local Docker, then pushed after az acr login.
+This script never uses ACR Tasks, deletes an app, or touches another student's
+uniquely named resources.
 EOF
 }
 
@@ -65,21 +66,22 @@ fi
 build_context() {
   case "$1:$2" in
     1:*) printf 'student-1' ;;
-    2:frontend|3:*|4:frontend|5:*) printf '.' ;;
+    2:frontend|3:*|4:frontend) printf '.' ;;
     2:backend) printf 'student-2/backend' ;;
     2:database) printf 'student-2/database' ;;
     4:backend) printf 'student-4/backend' ;;
     4:database) printf 'student-4/database' ;;
+    5:*) printf 'student-5/%s' "$2" ;;
     *) die "No build context for Student $1 $2." ;;
   esac
 }
 
 dockerfile_path() {
   case "$1:$2" in
-    1:*) printf '%s/Dockerfile' "$2" ;;
+    1:*) printf 'student-1/%s/Dockerfile' "$2" ;;
     2:frontend) printf 'student-2/frontend/Dockerfile' ;;
-    2:backend|2:database|4:backend|4:database) printf 'Dockerfile' ;;
-    3:*|5:*) printf 'student-%s/%s/Dockerfile' "$1" "$2" ;;
+    2:backend|2:database|4:backend|4:database|5:*) printf 'student-%s/%s/Dockerfile' "$1" "$2" ;;
+    3:*) printf 'student-%s/%s/Dockerfile' "$1" "$2" ;;
     4:frontend) printf 'student-4/frontend/Dockerfile' ;;
     *) die "No Dockerfile for Student $1 $2." ;;
   esac
@@ -89,8 +91,8 @@ for service in frontend backend database; do
   context="$(build_context "$STUDENT" "$service")"
   dockerfile="$(dockerfile_path "$STUDENT" "$service")"
   [[ -d "$REPOSITORY_ROOT/$context" ]] || die "Missing build context: $context"
-  [[ -f "$REPOSITORY_ROOT/$context/$dockerfile" ]] || die \
-    "Missing Dockerfile for Student $STUDENT $service: $context/$dockerfile"
+  [[ -f "$REPOSITORY_ROOT/$dockerfile" ]] || die \
+    "Missing Dockerfile for Student $STUDENT $service: $dockerfile"
 done
 
 DATABASE_PORT=$((6000 + STUDENT * 100))
@@ -106,8 +108,15 @@ if [[ "$DRY_RUN" == true ]]; then
   log "Student: $STUDENT"
   log "Immutable image tag: $IMAGE_TAG"
   for service in database backend frontend; do
-    log "$service image: $HOMS_AZURE_ACR_NAME.azurecr.io/student$STUDENT/$service:$IMAGE_TAG"
+    image="$HOMS_AZURE_ACR_NAME.azurecr.io/student$STUDENT/$service:$IMAGE_TAG"
+    extra_context=""
+    if [[ "$STUDENT:$service" == "5:frontend" ]]; then
+      extra_context=" --build-context shared=shared/frontend"
+    fi
+    log "$service image: $image"
     log "$service build: context=$(build_context "$STUDENT" "$service") dockerfile=$(dockerfile_path "$STUDENT" "$service")"
+    log "$service command: docker build -t $image -f $(dockerfile_path "$STUDENT" "$service")$extra_context $(build_context "$STUDENT" "$service")"
+    log "$service push: docker push $image"
     log "$service app: $(container_app_name "$STUDENT" "$service")"
   done
   log "Database storage: $STORAGE_NAME mounted at /data; replicas fixed at 1."
@@ -152,6 +161,10 @@ ACR_LOGIN_SERVER="$(az acr show \
   --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
   --query loginServer --output tsv --only-show-errors)"
 
+require_command docker
+log "Authenticating Docker to $ACR_LOGIN_SERVER using the existing Azure OIDC session."
+az acr login --name "$HOMS_AZURE_ACR_NAME" --only-show-errors
+
 DATABASE_IMAGE="$ACR_LOGIN_SERVER/student$STUDENT/database:$IMAGE_TAG"
 BACKEND_IMAGE="$ACR_LOGIN_SERVER/student$STUDENT/backend:$IMAGE_TAG"
 FRONTEND_IMAGE="$ACR_LOGIN_SERVER/student$STUDENT/frontend:$IMAGE_TAG"
@@ -166,19 +179,25 @@ image_uri() {
 }
 
 for service in database backend frontend; do
-  repository="student$STUDENT/$service"
   context="$(build_context "$STUDENT" "$service")"
   dockerfile="$(dockerfile_path "$STUDENT" "$service")"
-  log "Building and pushing $(image_uri "$service")."
+  build_command=(
+    docker build
+    -t "$(image_uri "$service")"
+    -f "$dockerfile"
+  )
+  if [[ "$STUDENT:$service" == "5:frontend" ]]; then
+    build_command+=(--build-context "shared=$REPOSITORY_ROOT/shared/frontend")
+  fi
+  build_command+=("$context")
+
+  log "Building $(image_uri "$service") locally with Docker."
   (
     cd "$REPOSITORY_ROOT"
-    az acr build \
-      --registry "$HOMS_AZURE_ACR_NAME" \
-      --image "$repository:$IMAGE_TAG" \
-      --file "$dockerfile" \
-      "$context" \
-      --only-show-errors --output none
+    "${build_command[@]}"
   )
+  log "Pushing $(image_uri "$service") to $ACR_LOGIN_SERVER."
+  docker push "$(image_uri "$service")"
 done
 
 upsert_app() {

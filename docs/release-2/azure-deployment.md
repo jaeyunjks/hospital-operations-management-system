@@ -199,9 +199,10 @@ The equivalent authenticated command for Student 5 is:
 ./scripts/deploy/deployment-testing.sh 5
 ```
 
-The deployment script builds each image remotely in ACR, tags it with the
-current Git SHA, upserts only the selected student's three apps, and records a
-non-secret receipt under `.local-r2/cloud/`.
+The deployment script authenticates Docker with `az acr login`, builds each
+image on the GitHub Actions runner, pushes its immutable Git SHA tag to ACR,
+upserts only the selected student's three apps, and records a non-secret
+receipt under `.local-r2/cloud/`. It does not use ACR Tasks or `az acr build`.
 
 For Student 5, those apps are `s5-db`, `s5-api`, and `s5-web`. The database and
 backend have internal ingress, while the frontend is external. Runtime wiring

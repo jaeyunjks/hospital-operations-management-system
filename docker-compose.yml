@@ -23,8 +23,8 @@ services:
   student5-database:
     networks: [ homs-net ]
     build:
-      context: .
-      dockerfile: student-5/database/Dockerfile
+      context: ./student-5/database
+      dockerfile: Dockerfile
     environment:
       DATABASE_SERVICE_PORT: "6500"
       STUDENT5_DATABASE_PATH: /data/staff_shift.db
@@ -47,8 +47,8 @@ services:
   student5-backend:
     networks: [ homs-net ]
     build:
-      context: .
-      dockerfile: student-5/backend/Dockerfile
+      context: ./student-5/backend
+      dockerfile: Dockerfile
     environment:
       BACKEND_PORT: "5500"
       DATABASE_SERVICE_URL: "${STUDENT5_DATABASE_SERVICE_URL:-http://student5-database:6500}"
@@ -86,8 +86,10 @@ services:
   student5-frontend:
     networks: [ homs-net ]
     build:
-      context: .
-      dockerfile: student-5/frontend/Dockerfile
+      context: ./student-5/frontend
+      dockerfile: Dockerfile
+      additional_contexts:
+        shared: ./shared/frontend
     environment:
       FRONTEND_PORT: "3500"
       STAFF_SHIFT_API_URL: "${STUDENT5_API_URL:-http://student5-backend:5500}"

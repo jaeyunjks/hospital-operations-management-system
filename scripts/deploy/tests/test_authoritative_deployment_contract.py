@@ -105,6 +105,28 @@ def test_student5_cloud_flags_and_persistence_are_explicit():
         assert value in DEPLOY
 
 
+def test_active_deployment_uses_local_docker_and_never_acr_tasks():
+    assert "az acr login" in DEPLOY
+    assert "docker build" in DEPLOY
+    assert "docker push" in DEPLOY
+    assert "az acr build" not in DEPLOY
+    assert "ACR Tasks" in DEPLOY
+
+    output = shell_output(
+        "AZURE_SUBSCRIPTION_ID=00000000-0000-0000-0000-000000000000 "
+        "HOMS_AZURE_ACR_NAME=homsr2dryrunregistry "
+        "HOMS_AZURE_STORAGE_ACCOUNT=homsr2dryrunstorage "
+        "./scripts/deploy/deploy-student.sh 5 "
+        "--tag 0123456789abcdef --dry-run"
+    )
+    for service in ("database", "backend", "frontend"):
+        image = f"homsr2dryrunregistry.azurecr.io/student5/{service}:0123456789abcdef"
+        assert f"docker build -t {image}" in output
+        assert f"docker push {image}" in output
+        assert f"student-5/{service}" in output
+    assert "--build-context shared=shared/frontend" in output
+
+
 def test_student5_uses_existing_short_app_names_without_changing_students_1_to_4():
     output = shell_output(
         "source scripts/deploy/azure-common.sh; "
