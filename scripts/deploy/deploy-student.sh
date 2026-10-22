@@ -123,7 +123,7 @@ if [[ "$DRY_RUN" == true ]]; then
   log "Ingress: frontend=external, backend=internal, database=internal."
   log "Cloud baseline: AI_ENABLED=false, MCP_ENABLED=false, RAG_ENABLED=false, MULTI_AGENT_ENABLED=false."
   if [[ "$STUDENT" == "5" ]]; then
-    log "Lifecycle: scale s5-db to zero before update, then require database and API health before continuing."
+    log "Lifecycle: quiesce s5-db in multiple-revision mode, then require database and API health before continuing."
   fi
   exit 0
 fi
@@ -211,6 +211,7 @@ upsert_app() {
   local health_path="$5"
   local storage_name="$6"
   shift 6
+  local env_settings=("$@")
   local config_file
   config_file="$(mktemp)"
 
@@ -232,20 +233,33 @@ upsert_app() {
   if [[ -n "$storage_name" ]]; then
     render+=(--storage-name "$storage_name" --mount-path /data)
   fi
-  while (($#)); do
-    render+=(--env "$1")
-    shift
+  local env_setting
+  for env_setting in "${env_settings[@]}"; do
+    render+=(--env "$env_setting")
   done
   "${render[@]}" >"$config_file"
 
   if az containerapp show --name "$app_name" \
     --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors >/dev/null 2>&1; then
     log "Updating only $app_name."
-    az containerapp update \
-      --name "$app_name" \
-      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
-      --yaml "$config_file" \
-      --only-show-errors --output none
+    if [[ "$STUDENT" == "5" ]]; then
+      # Azure CLI's full-YAML update can lose the existing managed-identity
+      # reference when an app has no ready revision. Patch only the mutable
+      # Student 5 fields and preserve identity, storage, ingress and probes.
+      az containerapp update \
+        --name "$app_name" \
+        --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+        --image "$(image_uri "$service")" \
+        --min-replicas 1 --max-replicas 1 \
+        --set-env-vars "${env_settings[@]}" \
+        --only-show-errors --output none
+    else
+      az containerapp update \
+        --name "$app_name" \
+        --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+        --yaml "$config_file" \
+        --only-show-errors --output none
+    fi
   else
     log "Creating $app_name."
     az containerapp create \
@@ -283,32 +297,23 @@ quiesce_student5_database() {
     return
   fi
 
-  log "Scaling $DATABASE_APP to zero before replacing its SQLite revision."
-  az containerapp update \
+  # Multiple mode prevents Container Apps from reactivating the last healthy
+  # database revision as a rollback target while the replacement starts.
+  log "Switching $DATABASE_APP to multiple-revision mode for a zero-overlap update."
+  az containerapp revision set-mode \
     --name "$DATABASE_APP" \
     --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
-    --min-replicas 0 --max-replicas 1 \
+    --mode multiple \
     --only-show-errors --output none
 
-  # Keep the newest zero-scale revision active. Azure's YAML updater needs an
-  # active revision to retain the app's managed-identity association, but a
-  # failed deployment can leave older revisions active as well. Stop only
-  # those stale revisions so no process can retain the SQLite file lock.
-  local retained_revision active_revisions revision
-  retained_revision="$(az containerapp show \
-    --name "$DATABASE_APP" \
-    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
-    --query properties.latestRevisionName --output tsv --only-show-errors)"
-  [[ -n "$retained_revision" ]] || die \
-    "Azure did not return the retained zero-scale revision for $DATABASE_APP."
-
+  local active_revisions revision
   active_revisions="$(az containerapp revision list --all \
     --name "$DATABASE_APP" \
     --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
     --query "[?properties.active].name" --output tsv --only-show-errors)"
   while IFS= read -r revision; do
-    [[ -n "$revision" && "$revision" != "$retained_revision" ]] || continue
-    log "Deactivating stale $DATABASE_APP revision $revision."
+    [[ -n "$revision" ]] || continue
+    log "Deactivating $DATABASE_APP revision $revision before replacement."
     az containerapp revision deactivate \
       --name "$DATABASE_APP" \
       --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
@@ -326,7 +331,31 @@ quiesce_student5_database() {
   done <<<"$revisions"
 
   # Give Azure Files time to release SMB handles after the last replica exits.
-  sleep 10
+  sleep 30
+}
+
+retire_other_student5_database_revisions() {
+  local latest_revision active_revisions revision
+  latest_revision="$(az containerapp show \
+    --name "$DATABASE_APP" \
+    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+    --query properties.latestRevisionName --output tsv --only-show-errors)"
+  [[ -n "$latest_revision" ]] || die \
+    "Azure did not return the new revision for $DATABASE_APP."
+
+  active_revisions="$(az containerapp revision list --all \
+    --name "$DATABASE_APP" \
+    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+    --query "[?properties.active].name" --output tsv --only-show-errors)"
+  while IFS= read -r revision; do
+    [[ -n "$revision" && "$revision" != "$latest_revision" ]] || continue
+    log "Deactivating unexpected overlapping $DATABASE_APP revision $revision."
+    az containerapp revision deactivate \
+      --name "$DATABASE_APP" \
+      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+      --revision "$revision" --only-show-errors >/dev/null
+    wait_for_revision_replicas_to_stop "$DATABASE_APP" "$revision"
+  done <<<"$active_revisions"
 }
 
 wait_for_app_healthy() {
@@ -375,7 +404,12 @@ fi
 upsert_app "$DATABASE_APP" database "$DATABASE_PORT" internal /health "$STORAGE_NAME" \
   "${DATABASE_ENV[@]}"
 if [[ "$STUDENT" == "5" ]]; then
+  retire_other_student5_database_revisions
   wait_for_app_healthy "$DATABASE_APP"
+  az containerapp revision set-mode \
+    --name "$DATABASE_APP" \
+    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+    --mode single --only-show-errors --output none
 fi
 DATABASE_FQDN="$(az containerapp show --name "$DATABASE_APP" \
   --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \

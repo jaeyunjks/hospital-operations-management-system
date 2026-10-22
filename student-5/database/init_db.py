@@ -13,7 +13,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
+import shutil
 import sys
+import tempfile
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -22,6 +26,16 @@ import db          # noqa: E402
 import seed_data   # noqa: E402
 
 MAX_EMPTY_DATABASE_JOURNAL_BYTES = 512
+
+
+def next_preservation_path(path: Path, suffix: str) -> Path:
+    """Return a non-existing sibling path used to preserve startup evidence."""
+    candidate = path.with_name(f"{path.name}{suffix}")
+    counter = 1
+    while candidate.exists():
+        candidate = path.with_name(f"{path.name}{suffix}-{counter}")
+        counter += 1
+    return candidate
 
 
 def preserve_interrupted_empty_journal(database_path: Path) -> Path | None:
@@ -47,20 +61,72 @@ def preserve_interrupted_empty_journal(database_path: Path) -> Path | None:
             "recovery."
         )
 
-    backup = journal.with_name(f"{journal.name}.interrupted")
-    counter = 1
-    while backup.exists():
-        backup = journal.with_name(f"{journal.name}.interrupted-{counter}")
-        counter += 1
+    backup = next_preservation_path(journal, ".interrupted")
     journal.rename(backup)
     print(f"Preserved interrupted empty-database journal at {backup}")
     return backup
+
+
+def bootstrap_empty_database(target: Path, load_seed: bool) -> None:
+    """Build a first database locally, then publish it to the mounted path.
+
+    SQLite schema creation uses rollback locks that are unreliable on an empty
+    Azure Files SMB file after an interrupted Container Apps rollout. Build the
+    complete database on local container storage, close SQLite, then copy and
+    rename it on the mounted filesystem. This path is strictly limited to a
+    missing or zero-byte target; a non-empty persistent database is never
+    overwritten or reseeded.
+    """
+    if target.exists() and target.stat().st_size != 0:
+        raise RuntimeError("Refusing to bootstrap a non-empty database.")
+
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="student5-db-bootstrap-") as directory:
+        staged = Path(directory) / target.name
+        with db.get_connection(staged) as connection:
+            db.apply_schema(connection)
+            counts = seed_data.seed(connection) if load_seed else None
+
+        publish_path = target.with_name(
+            f".{target.name}.bootstrap-{uuid.uuid4().hex}"
+        )
+        try:
+            shutil.copyfile(staged, publish_path)
+            with publish_path.open("rb") as published:
+                os.fsync(published.fileno())
+
+            if target.exists():
+                if target.stat().st_size != 0:
+                    raise RuntimeError(
+                        "Database changed while first-start bootstrap was in progress; "
+                        "refusing to replace it."
+                    )
+                backup = next_preservation_path(target, ".interrupted-empty")
+                target.rename(backup)
+                print(f"Preserved interrupted empty database at {backup}")
+
+            publish_path.replace(target)
+        finally:
+            if publish_path.exists():
+                publish_path.unlink()
+
+    print(f"Schema applied to {target} using safe first-start staging")
+    if not load_seed:
+        print("Seeding skipped (--no-seed).")
+    elif counts is not None:
+        print("Seed data inserted:")
+        for table, count in counts.items():
+            print(f"  {table:<18} {count} records")
 
 
 def initialise(database_path=None, reset: bool = False, load_seed: bool = True) -> None:
     target = Path(database_path) if database_path else db.get_database_path()
 
     preserve_interrupted_empty_journal(target)
+
+    if not reset and (not target.exists() or target.stat().st_size == 0):
+        bootstrap_empty_database(target, load_seed)
+        return
 
     with db.get_connection(target) as connection:
         if reset:

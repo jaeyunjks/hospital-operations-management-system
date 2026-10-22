@@ -42,9 +42,36 @@ def test_interrupted_first_startup_journal_is_preserved_before_initialisation(
 
     backup = tmp_path / "staff_shift.db-journal.interrupted"
     assert backup.read_bytes() == bytes(512)
+    assert (tmp_path / "staff_shift.db.interrupted-empty").read_bytes() == b""
     assert not journal.exists()
     with database_db.get_connection(database_path) as connection:
         assert database_db.schema_is_current(connection)
+        assert connection.execute("SELECT COUNT(*) FROM staff;").fetchone()[0] == 12
+
+
+def test_empty_database_is_built_off_mount_before_safe_publication(
+    tmp_path, monkeypatch
+):
+    database_path = tmp_path / "mounted" / "staff_shift.db"
+    database_path.parent.mkdir()
+    database_path.touch()
+    connected_paths = []
+    original_connect = database_db.connect
+
+    def record_connection(path=None):
+        connected_paths.append(Path(path) if path is not None else None)
+        assert Path(path) != database_path
+        return original_connect(path)
+
+    monkeypatch.setattr(database_db, "connect", record_connection)
+
+    database_init.initialise(database_path)
+
+    assert connected_paths
+    assert database_path.stat().st_size > 0
+    assert (database_path.parent / "staff_shift.db.interrupted-empty").exists()
+
+    with sqlite3.connect(database_path) as connection:
         assert connection.execute("SELECT COUNT(*) FROM staff;").fetchone()[0] == 12
 
 
