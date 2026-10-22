@@ -27,8 +27,9 @@ Optional environment variables:
   HOMS_APP_PREFIX                    default: homs-r2
 
 The script is additive and idempotent where Azure permits. It never deletes a
-resource. --dry-run validates inputs and prints the intended resource names
-without calling Azure.
+resource. --dry-run performs read-only inspection when the Azure CLI is already
+authenticated to AZURE_SUBSCRIPTION_ID, then labels each resource as existing
+or missing. It never creates or changes a resource in dry-run mode.
 EOF
 }
 
@@ -48,17 +49,74 @@ validate_acr_name "$HOMS_AZURE_ACR_NAME"
 validate_storage_name "$HOMS_AZURE_STORAGE_ACCOUNT"
 
 if [[ "$DRY_RUN" == true ]]; then
-  log "Dry run: no Azure command will be executed."
+  log "Dry run: no Azure or GitHub resource will be changed."
   log "Subscription: configured"
   log "Location: $HOMS_AZURE_LOCATION"
-  log "Resource group: $HOMS_AZURE_RESOURCE_GROUP"
-  log "Container registry: $HOMS_AZURE_ACR_NAME"
-  log "Container Apps environment: $HOMS_CONTAINERAPPS_ENVIRONMENT"
-  log "Log Analytics workspace: $HOMS_LOG_ANALYTICS_WORKSPACE"
-  log "Storage account: $HOMS_AZURE_STORAGE_ACCOUNT"
-  log "ACR pull identity: $HOMS_ACR_PULL_IDENTITY"
+
+  CURRENT_SUBSCRIPTION=""
+  if command -v az >/dev/null 2>&1; then
+    CURRENT_SUBSCRIPTION="$(az account show --query id --output tsv --only-show-errors 2>/dev/null || true)"
+  fi
+
+  if [[ "$CURRENT_SUBSCRIPTION" != "$AZURE_SUBSCRIPTION_ID" ]]; then
+    log "Read-only Azure inspection skipped: authenticate/select the configured subscription to see exists/missing status."
+    log "[planned] Resource group: $HOMS_AZURE_RESOURCE_GROUP"
+    log "[planned] Container registry: $HOMS_AZURE_ACR_NAME"
+    log "[planned] Container Apps environment: $HOMS_CONTAINERAPPS_ENVIRONMENT"
+    log "[planned] Log Analytics workspace: $HOMS_LOG_ANALYTICS_WORKSPACE"
+    log "[planned] Storage account: $HOMS_AZURE_STORAGE_ACCOUNT"
+    log "[planned] ACR pull identity: $HOMS_ACR_PULL_IDENTITY"
+    for student in 1 2 3 4 5; do
+      log "[planned] Student $student storage: $(database_share_name "$student") -> $(environment_storage_name "$student")"
+    done
+    exit 0
+  fi
+
+  report_resource() {
+    local label="$1"
+    shift
+    if "$@" >/dev/null 2>&1; then
+      log "[exists] $label (would reuse)"
+    else
+      log "[missing] $label (would create)"
+    fi
+  }
+
+  report_resource "Resource group $HOMS_AZURE_RESOURCE_GROUP" \
+    az group show --name "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors
+  report_resource "Container registry $HOMS_AZURE_ACR_NAME" \
+    az acr show --name "$HOMS_AZURE_ACR_NAME" \
+      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors
+  report_resource "Container Apps environment $HOMS_CONTAINERAPPS_ENVIRONMENT" \
+    az containerapp env show --name "$HOMS_CONTAINERAPPS_ENVIRONMENT" \
+      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors
+  report_resource "Log Analytics workspace $HOMS_LOG_ANALYTICS_WORKSPACE" \
+    az monitor log-analytics workspace show \
+      --workspace-name "$HOMS_LOG_ANALYTICS_WORKSPACE" \
+      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors
+  report_resource "Storage account $HOMS_AZURE_STORAGE_ACCOUNT" \
+    az storage account show --name "$HOMS_AZURE_STORAGE_ACCOUNT" \
+      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors
+  report_resource "ACR pull identity $HOMS_ACR_PULL_IDENTITY" \
+    az identity show --name "$HOMS_ACR_PULL_IDENTITY" \
+      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors
+
   for student in 1 2 3 4 5; do
-    log "Student $student storage: $(database_share_name "$student") -> $(environment_storage_name "$student")"
+    share_name="$(database_share_name "$student")"
+    storage_name="$(environment_storage_name "$student")"
+    report_resource "Azure Files share $share_name" \
+      az storage share-rm show --storage-account "$HOMS_AZURE_STORAGE_ACCOUNT" \
+        --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+        --name "$share_name" --only-show-errors
+    if [[ "$(az containerapp env storage list \
+      --name "$HOMS_CONTAINERAPPS_ENVIRONMENT" \
+      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+      --query "[?name=='$storage_name'] | length(@)" \
+      --output tsv --only-show-errors 2>/dev/null || true)" == "1" ]]; then
+      log "[exists] Container Apps storage link $storage_name (would update/reuse)"
+    else
+      log "[missing] Container Apps storage link $storage_name (would create)"
+    fi
   done
   exit 0
 fi

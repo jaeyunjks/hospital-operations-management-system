@@ -1,4 +1,8 @@
-"""Offline tests for azure_deploy.py: no Azure account, Docker or network needed.
+"""Offline regression tests for the deprecated Azure prototype.
+
+The active deployment contract is the shell/OIDC path. These tests preserve
+historical behavior without making ``azure_deploy.py`` an active entrypoint.
+No Azure account, Docker or network is needed.
 
 ``run`` is replaced by a recorder, so these check the exact Azure CLI
 commands the script would send, which is what breaks a real deployment.

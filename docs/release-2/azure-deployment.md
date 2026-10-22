@@ -4,6 +4,11 @@ This is the deployment contract for the group HOMS environment. It is designed
 for controlled, incremental deployment: the team creates the shared foundation
 once, then each student deploys only their own frontend, backend and database.
 
+The shell scripts under `scripts/deploy/` and the OIDC-based
+`cloud-deployment.yml` are the single authoritative implementation. The older
+`azure_deploy.py` prototype is retained only for historical evidence and
+offline regression tests; it must not be used for Release 2 deployment.
+
 ## Architecture
 
 One Azure subscription contains:
@@ -128,6 +133,11 @@ Provision the foundation, then establish OIDC:
 ./scripts/deploy/github-oidc-setup.sh
 ```
 
+The foundation script reuses an existing ACR without changing its current
+admin-account setting. After a managed-identity deployment and image pull have
+been proven, the cloud owner may separately disable an existing ACR admin
+account. That hardening action is intentionally not part of foundation setup.
+
 The OIDC script creates no client password. It creates/reuses the `azure-r2`
 GitHub environment and configures these repository secret names:
 
@@ -158,6 +168,12 @@ The controlled path is GitHub Actions:
 4. Review the validation job before the OIDC deployment job runs.
 5. Download the non-secret deployment evidence artifact.
 
+GitHub only exposes a manually dispatched workflow after that workflow exists
+on the repository's default branch. The team must therefore review this change
+on `develop`, then merge it through the normal pull-request process to `main`
+before treating **Run workflow** as operational. Do not change the repository
+default branch merely to bypass that review step.
+
 The equivalent authenticated command for Student 5 is:
 
 ```bash
@@ -187,6 +203,14 @@ or broad update from affecting the other students.
   attempting the local Multi-Agent server.
 
 It sends no create, update or delete application request.
+
+## Deprecated prototype
+
+`scripts/deploy/azure_deploy.py` is not called by the active workflow. It uses
+a different resource naming, registry authentication and ephemeral database
+contract and remains only to preserve historical cloud evidence and its
+offline tests. `AZURE_CREDENTIALS`, ACR admin credentials, `/tmp` SQLite paths,
+and its deploy-all behavior are not part of the supported deployment path.
 
 ## Cleanup warning
 
