@@ -52,10 +52,6 @@ jobs:
       - name: Run selected Student tests
         env:
           STUDENT: ${{ inputs.student }}
-          AI_ENABLED: "false"
-          MCP_ENABLED: "false"
-          RAG_ENABLED: "false"
-          MULTI_AGENT_ENABLED: "false"
         run: |
           PYTHONPATH="student-$STUDENT" python -m pytest -q "student-$STUDENT/tests"
 

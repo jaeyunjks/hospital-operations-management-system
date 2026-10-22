@@ -50,6 +50,20 @@ def test_workflow_requires_one_student_and_has_no_deploy_all_default():
     assert "--only" not in WORKFLOW
 
 
+def test_ci_tests_do_not_inherit_cloud_runtime_feature_flags():
+    test_step = WORKFLOW.split("- name: Run selected Student tests", 1)[1].split(
+        "- name: Validate Compose and deployment definitions", 1
+    )[0]
+    for setting in (
+        "AI_ENABLED",
+        "MCP_ENABLED",
+        "RAG_ENABLED",
+        "MULTI_AGENT_ENABLED",
+    ):
+        assert setting not in test_step
+        assert f'"{setting}=false"' in DEPLOY
+
+
 def test_oidc_helper_is_read_only_and_targets_existing_managed_identity():
     assert "homs-r2-github" in OIDC_HELPER
     assert "refs/heads/develop" in OIDC_HELPER
