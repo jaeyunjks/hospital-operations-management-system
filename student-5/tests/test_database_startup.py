@@ -30,6 +30,44 @@ def test_connection_uses_bounded_lock_wait_and_rollback_journal(tmp_path):
     assert not database_path.with_name(f"{database_path.name}-wal").exists()
 
 
+def test_interrupted_first_startup_journal_is_preserved_before_initialisation(
+    tmp_path,
+):
+    database_path = tmp_path / "staff_shift.db"
+    database_path.touch()
+    journal = tmp_path / "staff_shift.db-journal"
+    journal.write_bytes(bytes(512))
+
+    database_init.initialise(database_path)
+
+    backup = tmp_path / "staff_shift.db-journal.interrupted"
+    assert backup.read_bytes() == bytes(512)
+    assert not journal.exists()
+    with database_db.get_connection(database_path) as connection:
+        assert database_db.schema_is_current(connection)
+        assert connection.execute("SELECT COUNT(*) FROM staff;").fetchone()[0] == 12
+
+
+def test_nonempty_or_page_bearing_database_state_is_never_auto_recovered(tmp_path):
+    populated = tmp_path / "populated.db"
+    populated.write_bytes(b"existing-data")
+    populated_journal = tmp_path / "populated.db-journal"
+    populated_journal.write_bytes(bytes(512))
+
+    assert database_init.preserve_interrupted_empty_journal(populated) is None
+    assert populated.read_bytes() == b"existing-data"
+    assert populated_journal.read_bytes() == bytes(512)
+
+    empty = tmp_path / "empty.db"
+    empty.touch()
+    page_bearing_journal = tmp_path / "empty.db-journal"
+    page_bearing_journal.write_bytes(bytes(513))
+
+    with pytest.raises(RuntimeError, match="Refusing automatic recovery"):
+        database_init.preserve_interrupted_empty_journal(empty)
+    assert page_bearing_journal.read_bytes() == bytes(513)
+
+
 def test_existing_persistent_database_is_not_reseeded_or_rewritten(
     tmp_path, monkeypatch
 ):

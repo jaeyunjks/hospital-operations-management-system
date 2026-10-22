@@ -21,9 +21,46 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import db          # noqa: E402
 import seed_data   # noqa: E402
 
+MAX_EMPTY_DATABASE_JOURNAL_BYTES = 512
+
+
+def preserve_interrupted_empty_journal(database_path: Path) -> Path | None:
+    """Archive a header-only journal left by an interrupted first startup.
+
+    Azure Files can retain the rollback-journal file after a container is
+    stopped mid-initialisation. Recovery is safe only when the database file
+    is still empty and the journal contains no database pages. The journal is
+    renamed, never deleted, so the original evidence remains available.
+    """
+    if str(database_path) == ":memory:" or not database_path.exists():
+        return None
+
+    journal = Path(f"{database_path}-journal")
+    if database_path.stat().st_size != 0 or not journal.exists():
+        return None
+
+    journal_size = journal.stat().st_size
+    if journal_size > MAX_EMPTY_DATABASE_JOURNAL_BYTES:
+        raise RuntimeError(
+            "Refusing automatic recovery: the empty database has a rollback "
+            f"journal containing {journal_size} bytes. Preserve it for manual "
+            "recovery."
+        )
+
+    backup = journal.with_name(f"{journal.name}.interrupted")
+    counter = 1
+    while backup.exists():
+        backup = journal.with_name(f"{journal.name}.interrupted-{counter}")
+        counter += 1
+    journal.rename(backup)
+    print(f"Preserved interrupted empty-database journal at {backup}")
+    return backup
+
 
 def initialise(database_path=None, reset: bool = False, load_seed: bool = True) -> None:
     target = Path(database_path) if database_path else db.get_database_path()
+
+    preserve_interrupted_empty_journal(target)
 
     with db.get_connection(target) as connection:
         if reset:

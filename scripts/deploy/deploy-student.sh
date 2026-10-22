@@ -122,6 +122,9 @@ if [[ "$DRY_RUN" == true ]]; then
   log "Database storage: $STORAGE_NAME mounted at /data; replicas fixed at 1."
   log "Ingress: frontend=external, backend=internal, database=internal."
   log "Cloud baseline: AI_ENABLED=false, MCP_ENABLED=false, RAG_ENABLED=false, MULTI_AGENT_ENABLED=false."
+  if [[ "$STUDENT" == "5" ]]; then
+    log "Lifecycle: quiesce s5-db before update, then require database and API health before continuing."
+  fi
   exit 0
 fi
 
@@ -254,6 +257,89 @@ upsert_app() {
   rm -f "$config_file"
 }
 
+wait_for_revision_replicas_to_stop() {
+  local app_name="$1"
+  local revision="$2"
+  local live_replicas
+  for _attempt in {1..24}; do
+    live_replicas="$(az containerapp replica list \
+      --name "$app_name" \
+      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+      --revision "$revision" \
+      --query "[?properties.runningState!='NotRunning'] | length(@)" \
+      --output tsv --only-show-errors 2>/dev/null || printf '0')"
+    if [[ "$live_replicas" == "0" ]]; then
+      return
+    fi
+    sleep 5
+  done
+  die "Timed out waiting for $app_name revision $revision to stop."
+}
+
+quiesce_student5_database() {
+  if ! az containerapp show --name "$DATABASE_APP" \
+    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+    --only-show-errors >/dev/null 2>&1; then
+    return
+  fi
+
+  local revisions
+  revisions="$(az containerapp revision list \
+    --name "$DATABASE_APP" \
+    --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+    --query "[?properties.active].name" --output tsv --only-show-errors)"
+  if [[ -z "$revisions" ]]; then
+    log "$DATABASE_APP already has no active revision."
+    return
+  fi
+
+  log "Quiescing $DATABASE_APP before replacing its SQLite revision."
+  local revision
+  while IFS= read -r revision; do
+    [[ -n "$revision" ]] || continue
+    az containerapp revision deactivate \
+      --name "$DATABASE_APP" \
+      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+      --revision "$revision" --only-show-errors >/dev/null
+    wait_for_revision_replicas_to_stop "$DATABASE_APP" "$revision"
+  done <<<"$revisions"
+
+  # Give Azure Files time to release SMB handles after the last replica exits.
+  sleep 10
+}
+
+wait_for_app_healthy() {
+  local app_name="$1"
+  local active_revision health ready_replicas
+  log "Waiting for $app_name to report one healthy, ready replica."
+  for _attempt in {1..48}; do
+    active_revision="$(az containerapp revision list \
+      --name "$app_name" \
+      --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+      --query "[?properties.active].name | [0]" \
+      --output tsv --only-show-errors)"
+    if [[ -n "$active_revision" ]]; then
+      health="$(az containerapp revision show \
+        --name "$app_name" \
+        --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+        --revision "$active_revision" \
+        --query properties.healthState --output tsv --only-show-errors)"
+      ready_replicas="$(az containerapp replica list \
+        --name "$app_name" \
+        --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
+        --revision "$active_revision" \
+        --query "[?properties.containers[0].ready==\`true\`] | length(@)" \
+        --output tsv --only-show-errors)"
+      if [[ "$health" == "Healthy" && "$ready_replicas" == "1" ]]; then
+        log "$app_name is healthy on revision $active_revision."
+        return
+      fi
+    fi
+    sleep 5
+  done
+  die "$app_name did not become healthy with exactly one ready replica."
+}
+
 case "$STUDENT" in
   1) DATABASE_ENV=("PORT=$DATABASE_PORT" "HOST=0.0.0.0" "FLASK_DEBUG=0" "DB_PATH=/data/patients.db") ;;
   2) DATABASE_ENV=("PORT=$DATABASE_PORT" "DATABASE_PATH=/data/clinical_staff.db") ;;
@@ -262,8 +348,14 @@ case "$STUDENT" in
   5) DATABASE_ENV=("DATABASE_SERVICE_PORT=$DATABASE_PORT" "STUDENT5_DATABASE_PATH=/data/staff_shift.db") ;;
 esac
 
+if [[ "$STUDENT" == "5" ]]; then
+  quiesce_student5_database
+fi
 upsert_app "$DATABASE_APP" database "$DATABASE_PORT" internal /health "$STORAGE_NAME" \
   "${DATABASE_ENV[@]}"
+if [[ "$STUDENT" == "5" ]]; then
+  wait_for_app_healthy "$DATABASE_APP"
+fi
 DATABASE_FQDN="$(az containerapp show --name "$DATABASE_APP" \
   --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
   --query properties.configuration.ingress.fqdn --output tsv --only-show-errors)"
@@ -287,6 +379,9 @@ esac
 
 upsert_app "$BACKEND_APP" backend "$BACKEND_PORT" internal /health "" \
   "${BACKEND_ENV[@]}" "${COMMON_AI_OFF[@]}"
+if [[ "$STUDENT" == "5" ]]; then
+  wait_for_app_healthy "$BACKEND_APP"
+fi
 BACKEND_FQDN="$(az containerapp show --name "$BACKEND_APP" \
   --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
   --query properties.configuration.ingress.fqdn --output tsv --only-show-errors)"

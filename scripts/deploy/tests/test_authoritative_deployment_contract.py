@@ -187,7 +187,18 @@ def test_student5_dry_runs_use_final_names_and_only_its_storage_link():
         assert name in deploy_output
         assert name in test_output
     assert "student5-db-storage mounted at /data" in deploy_output
+    assert "quiesce s5-db before update" in deploy_output
+    assert "require database and API health" in deploy_output
     assert "homs-r2-student5" not in deploy_output + test_output
+
+
+def test_student5_database_update_is_quiesced_and_dependency_health_gated():
+    assert "quiesce_student5_database" in DEPLOY
+    assert "az containerapp revision deactivate" in DEPLOY
+    assert "wait_for_revision_replicas_to_stop" in DEPLOY
+    assert "wait_for_app_healthy \"$DATABASE_APP\"" in DEPLOY
+    assert "wait_for_app_healthy \"$BACKEND_APP\"" in DEPLOY
+    assert "properties.containers[0].ready" in DEPLOY
 
 
 def test_retained_status_smoke_and_cloud_review_catalogue_uses_student5_names():
