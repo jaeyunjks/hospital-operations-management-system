@@ -517,10 +517,24 @@ MULTI_AGENT_DECISIONS = (("approve", "Approve"), ("correct", "Correct"),
                          ("partially_accept", "Partially accept"), ("reject", "Reject"))
 
 
-def _multi_agent_view(body):
-    return render_template("partials/multi_agent_result.html", workflow=body["workflow"],
-                           evidence=body.get("evidence_summary"), decisions=MULTI_AGENT_DECISIONS,
-                           is_manager=is_manager())
+COMMENT_REQUIRED = "Add a comment explaining your decision; it is required for Correct, Partially accept and Reject"
+
+
+def _multi_agent_view(body, review_error=None, chosen="", comment=""):
+    html = render_template("partials/multi_agent_result.html", workflow=body["workflow"],
+                           evidence=body["workflow"].get("evidence_summary"), decisions=MULTI_AGENT_DECISIONS,
+                           is_manager=is_manager(), review_error=review_error, chosen=chosen, comment=comment)
+    # Refresh the "Recent reviews" table once a workflow is no longer running.
+    headers = {} if body["workflow"].get("status") == "in_progress" else {"HX-Trigger": "multiAgentChanged"}
+    return html, 200, headers
+
+
+def _review_again(workflow_id, error, chosen, comment):
+    """Show the same workflow and form again, with the problem explained and the input kept."""
+    try:
+        return _multi_agent_view(api_client.multi_agent_workflow(workflow_id), error, chosen, comment)
+    except api_client.BackendError as exc:
+        return render_template("partials/multi_agent_error.html", error=str(exc))
 
 
 @app.get("/multi-agent/status")
@@ -530,6 +544,16 @@ def multi_agent_status_badge():
                                error=None)
     except api_client.BackendError as exc:
         return render_template("partials/multi_agent_status.html", status=None, error=str(exc))
+
+
+@app.get("/multi-agent/history")
+def multi_agent_history():
+    """Recent pharmacy reorder reviews; each can be reopened in the panel."""
+    try:
+        reviews, error = api_client.multi_agent_history(), None
+    except api_client.BackendError as exc:
+        reviews, error = [], str(exc)
+    return render_template("partials/multi_agent_history.html", reviews=reviews, error=error)
 
 
 @app.get("/multi-agent/form")
@@ -568,13 +592,17 @@ def multi_agent_review(workflow_id):
     if not is_manager():
         return render_template("partials/multi_agent_error.html", error="Pharmacy Manager role required"), 403
     decision = request.form.get("decision", "")
+    comment = request.form.get("comment", "").strip()
     if decision not in dict(MULTI_AGENT_DECISIONS):
-        return render_template("partials/multi_agent_error.html", error="Choose a decision first")
+        return _review_again(workflow_id, "Choose a decision first", "", comment)
+    if decision != "approve" and not comment:
+        return _review_again(workflow_id, COMMENT_REQUIRED, decision, comment)
     try:
-        body = api_client.multi_agent_review(workflow_id, decision, request.form.get("comment", ""),
-                                             current_identity()["role"])
+        body = api_client.multi_agent_review(workflow_id, decision, comment, current_identity()["role"])
         return _multi_agent_view(body)
     except api_client.BackendError as exc:
+        if exc.status == 400:
+            return _review_again(workflow_id, str(exc), decision, comment)
         return render_template("partials/multi_agent_error.html", error=str(exc))
 
 

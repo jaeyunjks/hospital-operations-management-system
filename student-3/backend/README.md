@@ -136,6 +136,7 @@ Manager-changing routes require `X-HOMS-Role: Pharmacy Manager`.
 | GET | `/api/multi-agent/status` | Multi-Agent flag and reachability. |
 | GET | `/api/multi-agent/candidates` | Medicines that currently qualify for a reorder decision. |
 | POST | `/api/multi-agent/reorder-workflows` | Run Planner → Worker → Reviewer for one medicine (`{"medicine_id": ...}`). |
+| GET | `/api/multi-agent/workflows` | Recent pharmacy reviews, newest first (`?limit=1-20`, default 10). |
 | GET | `/api/multi-agent/workflows/{id}` | Read one pharmacy workflow. |
 | POST | `/api/multi-agent/workflows/{id}/review` | Manager human-review decision (`approve`, `correct`, `partially_accept`, `reject`). |
 
@@ -276,10 +277,20 @@ qualifies (409), and sends the Multi-Agent Server a task prefixed
 the current state, an objective (usable stock against the coverage target), three
 options (order the suggested quantity, order half, do not order) with their risks,
 hard constraints, the manager-approval rule and the known unknowns. All numbers
-come from the backend, never from a model.
+come from the backend, never from a model. `services/reorder_context.py` adds
+Release 1 context first: the `homs_pharmacy_order_alerts` MCP result (pharmacy-wide
+counts and listed orders for the same medicine; an overdue one becomes a risk) as
+`mcp_order_alerts`, and two cited RAG answers (how the reorder quantity is
+calculated, who must approve an order) as `rag_reorder_policy`. Either is left out,
+and listed under unknowns, when MCP or RAG is disabled or unavailable. The evidence
+carries `evidence_type: student3_reorder_decision`, which
+`GET /api/multi-agent/workflows` uses to list recent pharmacy reviews.
 
-The Multi-Agent Server runs the Planner, Worker and Reviewer and returns
-`awaiting_human_review`. `services/multi_agent_client.py` (standard library only)
+The Multi-Agent Server accepts the workflow at once (HTTP 202, status `in_progress`)
+and runs the Planner, Worker and Reviewer in the background; this route then returns
+202 and the frontend polls `GET /api/multi-agent/workflows/{id}` (which reads the
+workflow with its stored evidence) until the status is `awaiting_human_review` or
+`failed`. `services/multi_agent_client.py` (standard library only)
 returns an allowlisted view of each stage and refuses any workflow whose task is
 not a pharmacy reorder decision (403). Only a Pharmacy Manager may submit the
 review; a comment is required unless the decision is `approve`. The workflow

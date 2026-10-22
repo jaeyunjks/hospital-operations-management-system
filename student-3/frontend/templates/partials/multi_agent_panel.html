@@ -17,4 +17,6 @@
     </div>
   </div>
   <div id="multi-agent-result" aria-live="polite"></div>
+  <h3 class="mcp-subtitle ma-history-title">Recent reviews</h3>
+  <div id="multi-agent-history" hx-get="/multi-agent/history" hx-trigger="load, multiAgentChanged from:body" hx-swap="innerHTML"><p class="table__muted">Loading recent reviews…</p></div>
 </div>

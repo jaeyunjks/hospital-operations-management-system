@@ -11,6 +11,7 @@ import math
 from typing import Any
 
 AGENT_BUDGET_CAP = 500.00
+EVIDENCE_TYPE = "student3_reorder_decision"  # lets the Multi-Agent Server list pharmacy reviews
 
 
 def _money(value: float) -> str:
@@ -27,8 +28,9 @@ def _option(option_id: str, label: str, quantity: int, risks: list[str]) -> dict
     }
 
 
-def build_evidence(candidate: dict[str, Any]) -> dict[str, Any]:
-    """Turn one reorder candidate into Multi-Agent evidence."""
+def build_evidence(candidate: dict[str, Any], mcp_context: dict[str, Any] | None = None,
+                   rag_context: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Turn one reorder candidate, plus optional MCP and RAG context, into Multi-Agent evidence."""
     available = candidate["available_quantity"]
     near_expiry = candidate["near_expiry_quantity"]
     open_units = candidate["open_order_quantity"]
@@ -43,6 +45,11 @@ def build_evidence(candidate: dict[str, Any]) -> dict[str, Any]:
         shared_risks.append(f"{near_expiry} units expire within the supplier lead time and are not counted as usable.")
     if open_units:
         shared_risks.append(f"{open_units} units are already on open purchase orders.")
+    overdue = [order for order in (mcp_context or {}).get("listed_orders_for_this_medicine", [])
+               if order.get("days_overdue")]
+    for order in overdue:
+        shared_risks.append(f"Purchase order #{order['po_id']} for this medicine is {order['days_overdue']} days "
+                            "overdue (MCP); chasing that delivery may be better than ordering more.")
 
     full_value = round(suggested * price, 2)
     full_risks = list(shared_risks)
@@ -62,19 +69,28 @@ def build_evidence(candidate: dict[str, Any]) -> dict[str, Any]:
     unknowns = ["Demand beyond the last 30 days of issues is not known."]
     if not candidate["daily_usage_rate"]:
         unknowns.append("No stock was issued in the last 30 days, so the usage rate may underestimate demand.")
+    if mcp_context is None:
+        unknowns.append("Live purchase-order alerts from the shared MCP server were not available.")
+    if rag_context is None:
+        unknowns.append("The reorder and approval rules from the shared RAG server were not available.")
+    context = {}
+    if mcp_context is not None:
+        context["mcp_order_alerts"] = mcp_context
+    if rag_context is not None:
+        context["rag_reorder_policy"] = rag_context
 
+    # Facts are top-level keys: the Multi-Agent Planner may only cite top-level evidence keys.
     return {
+        "evidence_type": EVIDENCE_TYPE,
         "scenario": "Pharmacy reorder decision",
-        "current_state": {
-            "medicine": candidate["medicine_name"],
-            "supplier": candidate["supplier_name"],
-            "available_units": available,
-            "near_expiry_units": near_expiry,
-            "open_order_units": open_units,
-            "daily_usage_rate": candidate["daily_usage_rate"],
-            "lead_time_days": candidate["lead_time_days"],
-            "unit_price": price,
-        },
+        "medicine": candidate["medicine_name"],
+        "supplier": candidate["supplier_name"],
+        "available_units": available,
+        "near_expiry_units": near_expiry,
+        "open_order_units": open_units,
+        "daily_usage_rate": candidate["daily_usage_rate"],
+        "lead_time_days": candidate["lead_time_days"],
+        "unit_price": price,
         "objective": {"metric": "usable_stock_units", "current": current, "target": target, "unit": "units"},
         "options": options,
         "constraints": [
@@ -90,4 +106,5 @@ def build_evidence(candidate: dict[str, Any]) -> dict[str, Any]:
         ],
         "unknowns": unknowns,
         "evidence_mode": "live_pharmacy_data",
+        **context,
     }

@@ -13,6 +13,7 @@ from flask import Flask, g, jsonify, request
 
 from services import mcp_client, multi_agent_client, rag_client
 from services.reorder_workflow import build_evidence as build_reorder_evidence
+from services.reorder_context import mcp_order_context, rag_policy_context
 from services.http_url import http_url
 from services.ai_client import health_check
 from services.expiry_advisory import advisory as expiry_advisory
@@ -457,7 +458,7 @@ def multi_agent_candidates():
 
 @app.post("/api/multi-agent/reorder-workflows")
 def multi_agent_start_reorder():
-    """Run Planner -> Worker -> Reviewer for one medicine; never creates or changes orders."""
+    """Start Planner -> Worker -> Reviewer for one medicine; never creates or changes orders."""
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict) or set(payload) != {"medicine_id"}:
         return fail("Body must be a JSON object with only 'medicine_id'", 400)
@@ -474,12 +475,33 @@ def multi_agent_start_reorder():
         return fail(str(exc), exc.status)
     if candidate is None:
         return fail("This medicine does not currently need a reorder decision", 409)
-    result = multi_agent_client.start(candidate["medicine_name"], build_reorder_evidence(candidate))
+    # Release 1 context for the agents: live order alerts (MCP) and the reorder rules (RAG).
+    evidence = build_reorder_evidence(candidate, mcp_order_context(candidate["medicine_name"]),
+                                      rag_policy_context())
+    result = multi_agent_client.start(candidate["medicine_name"], evidence)
     body = result.to_dict()
-    body["evidence_summary"] = {key: candidate[key] for key in (
-        "medicine_name", "supplier_name", "available_quantity", "near_expiry_quantity",
-        "open_order_quantity", "daily_usage_rate", "lead_time_days", "suggested_quantity", "unit_price")}
-    return jsonify(body), 201 if result.ok else MULTI_AGENT_STATUS_CODES[result.outcome]
+    if result.workflow is not None:
+        body["workflow"]["evidence_summary"] = {
+            **{key: candidate[key] for key in (
+                "medicine_name", "supplier_name", "available_quantity", "near_expiry_quantity",
+                "open_order_quantity", "daily_usage_rate", "lead_time_days", "suggested_quantity", "unit_price")},
+            "mcp_order_alerts": evidence.get("mcp_order_alerts"),
+            "rag_reorder_policy": evidence.get("rag_reorder_policy")}
+    # 202: the agents are still running; the client polls GET /api/multi-agent/workflows/<id>.
+    if not result.ok:
+        return jsonify(body), MULTI_AGENT_STATUS_CODES[result.outcome]
+    return jsonify(body), 202 if result.workflow["status"] == "in_progress" else 201
+
+
+@app.get("/api/multi-agent/workflows")
+def multi_agent_history():
+    """Recent pharmacy reorder reviews (newest first); ?limit=1-20, default 10."""
+    raw_limit = request.args.get("limit", "10")
+    limit = int(raw_limit) if raw_limit.isdigit() else 0
+    if not 1 <= limit <= multi_agent_client.MAX_HISTORY:
+        return fail(f"limit must be between 1 and {multi_agent_client.MAX_HISTORY}", 400)
+    result = multi_agent_client.history(limit)
+    return jsonify(result), 200 if result["ok"] else MULTI_AGENT_STATUS_CODES[result["outcome"]]
 
 
 @app.get("/api/multi-agent/workflows/<workflow_id>")

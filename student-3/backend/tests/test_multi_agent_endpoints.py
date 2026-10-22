@@ -27,6 +27,7 @@ REVIEWED = {**WORKFLOW, "status": "completed",
             "human_review": {"decision": "approve", "comments": "Order it.", "timestamp": "2026-10-19T01:02:00Z"},
             "final_result": {"decision": "approve"}}
 OTHER_FEATURE = {**WORKFLOW, "task": "Resolve a staffing shortage for the Emergency evening shift."}
+ACCEPTED = {**WORKFLOW, "status": "in_progress", "planner": None, "worker": None, "reviewer": None}
 MANAGER = {"X-HOMS-Role": "Pharmacy Manager"}
 
 
@@ -78,23 +79,43 @@ class MultiAgentDisabledTests(MultiAgentTestCase):
         self.assertEqual(self.start().status_code, 503)
         self.assertEqual(self.client.get(f"/api/multi-agent/workflows/{WORKFLOW_ID}").status_code, 503)
         self.assertEqual(self.review({"decision": "approve"}).status_code, 503)
+        self.assertEqual(self.client.get("/api/multi-agent/workflows").status_code, 503)
         self.assertEqual(self.calls, [])
 
 
 class MultiAgentStartTests(MultiAgentTestCase):
     def test_start_sends_pharmacy_task_and_backend_evidence(self):
-        self.respond((201, WORKFLOW))
-        response = self.start()
-        self.assertEqual(response.status_code, 201)
+        self.respond((202, ACCEPTED))
+        response = self.start()  # MCP and RAG are disabled here, so the evidence notes they were unavailable
+        self.assertEqual(response.status_code, 202)  # accepted; the agents run in the background
         method, path, payload = self.calls[0]
         self.assertEqual((method, path), ("POST", "/workflows"))
         self.assertEqual(payload["task"], "Pharmacy reorder decision: Paracetamol 500mg")
         self.assertEqual(payload["evidence"], build_evidence(CANDIDATE))
         body = response.get_json()
-        self.assertEqual(body["workflow"]["status"], "awaiting_human_review")
+        self.assertEqual(body["workflow"]["status"], "in_progress")
         self.assertEqual(body["workflow"]["medicine"], "Paracetamol 500mg")
-        self.assertEqual(body["evidence_summary"]["suggested_quantity"], 180)
-        self.assertNotIn("raw", str(body["workflow"]["planner"]))  # internal model attempts are not forwarded
+        self.assertEqual(body["workflow"]["evidence_summary"]["suggested_quantity"], 180)
+
+    def test_start_adds_mcp_and_rag_context(self):
+        mcp = {"source": "MCP", "pharmacy_overdue_deliveries": 22, "pharmacy_pending_approval": 16,
+               "listed_orders_for_this_medicine": [], "note": "n"}
+        rag = {"source": "RAG", "answers": [{"question": "q", "answer": "a [S1]", "confidence": "high",
+                                             "citations": ["T > S"]}]}
+        self.respond((202, ACCEPTED))
+        with patch.object(app, "mcp_order_context", return_value=mcp) as mcp_call, \
+                patch.object(app, "rag_policy_context", return_value=rag):
+            response = self.start()
+        mcp_call.assert_called_once_with("Paracetamol 500mg")
+        self.assertEqual(self.calls[0][2]["evidence"], build_evidence(CANDIDATE, mcp, rag))
+        summary = response.get_json()["workflow"]["evidence_summary"]
+        self.assertEqual((summary["mcp_order_alerts"], summary["rag_reorder_policy"]), (mcp, rag))
+
+    def test_a_finished_synchronous_reply_is_also_accepted(self):
+        self.respond((201, WORKFLOW))
+        response = self.start()
+        self.assertEqual(response.status_code, 201)
+        self.assertNotIn("raw", str(response.get_json()["workflow"]["planner"]))  # internal attempts are not forwarded
 
     def test_bad_requests_and_ineligible_medicines_never_reach_the_server(self):
         self.respond()
@@ -118,11 +139,16 @@ class MultiAgentStartTests(MultiAgentTestCase):
 
 
 class MultiAgentScopeTests(MultiAgentTestCase):
-    def test_get_returns_pharmacy_workflow(self):
-        self.respond((200, WORKFLOW))
+    def test_get_returns_pharmacy_workflow_with_its_evidence_summary(self):
+        self.respond((200, {**WORKFLOW, "submitted_evidence": build_evidence(CANDIDATE)}))
         response = self.client.get(f"/api/multi-agent/workflows/{WORKFLOW_ID}")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(self.calls[0][:2], ("GET", f"/workflows/{WORKFLOW_ID}"))
+        self.assertEqual(self.calls[0][:2], ("GET", f"/workflows/{WORKFLOW_ID}?include_evidence=true"))
+        summary = response.get_json()["workflow"]["evidence_summary"]
+        self.assertEqual((summary["medicine_name"], summary["available_quantity"], summary["near_expiry_quantity"],
+                          summary["open_order_quantity"], summary["suggested_quantity"]),
+                         ("Paracetamol 500mg", 20, 5, 30, 180))
+        self.assertNotIn("submitted_evidence", response.get_json()["workflow"])
 
     def test_other_features_workflows_are_refused(self):
         self.respond((200, OTHER_FEATURE))
@@ -138,13 +164,40 @@ class MultiAgentScopeTests(MultiAgentTestCase):
         self.assertEqual(self.calls, [])
 
 
+class MultiAgentHistoryTests(MultiAgentTestCase):
+    def test_history_lists_only_pharmacy_reviews_with_their_decisions(self):
+        other_id = "11111111-2222-3333-4444-555555555555"
+        listing = {"count": 2, "workflows": [
+            {"workflow_id": WORKFLOW_ID, "status": "completed", "started_at": "2026-10-19T01:00:00Z"},
+            {"workflow_id": other_id, "status": "approved", "started_at": "2026-10-18T01:00:00Z"}]}
+        self.respond((200, listing), (200, REVIEWED), (200, {**OTHER_FEATURE, "workflow_id": other_id}))
+        response = self.client.get("/api/multi-agent/workflows?limit=5")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.calls[0][:2],
+                         ("GET", "/workflows?evidence_type=student3_reorder_decision&limit=5"))
+        reviews = response.get_json()["reviews"]
+        self.assertEqual(len(reviews), 1)  # the other feature's workflow is dropped
+        self.assertEqual((reviews[0]["medicine"], reviews[0]["decision"], reviews[0]["comment"]),
+                         ("Paracetamol 500mg", "approve", "Order it."))
+
+    def test_history_validation_and_failures(self):
+        self.respond()
+        for query in ("?limit=0", "?limit=21", "?limit=x"):
+            with self.subTest(query=query):
+                self.assertEqual(self.client.get("/api/multi-agent/workflows" + query).status_code, 400)
+        self.respond(urllib.error.URLError("refused"))
+        response = self.client.get("/api/multi-agent/workflows")
+        self.assertEqual((response.status_code, response.get_json()["outcome"]), (502, "unavailable"))
+
+
 class MultiAgentReviewTests(MultiAgentTestCase):
     def test_manager_review_is_forwarded_after_scope_check(self):
         self.respond((200, WORKFLOW), (200, REVIEWED))
         response = self.review({"decision": "approve", "comment": " Order it. "})
         self.assertEqual(response.status_code, 200)
         self.assertEqual([call[:2] for call in self.calls],
-                         [("GET", f"/workflows/{WORKFLOW_ID}"), ("POST", f"/workflows/{WORKFLOW_ID}/review")])
+                         [("GET", f"/workflows/{WORKFLOW_ID}?include_evidence=true"),
+                          ("POST", f"/workflows/{WORKFLOW_ID}/review")])
         self.assertEqual(self.calls[1][2], {"decision": "approve", "comment": "Order it."})
         self.assertEqual(response.get_json()["workflow"]["status"], "completed")
 
@@ -191,7 +244,61 @@ class ReorderEvidenceTests(unittest.TestCase):
                                    "daily_usage_rate": 0})
         self.assertIn("above the $500.00 per-cycle cap", evidence["options"][0]["risk_indicators"][-1])
         self.assertEqual([option["id"] for option in evidence["options"]], ["order_suggested", "defer"])
-        self.assertEqual(len(evidence["unknowns"]), 2)
+        self.assertIn("No stock was issued in the last 30 days", " ".join(evidence["unknowns"]))
+
+    def test_mcp_and_rag_context_are_added_as_evidence(self):
+        mcp = {"source": "MCP tool homs_pharmacy_order_alerts", "pharmacy_overdue_deliveries": 22,
+               "pharmacy_pending_approval": 16,
+               "listed_orders_for_this_medicine": [{"po_id": 7, "status": "approved", "outstanding": 40,
+                                                    "expected_at": "2026-10-01", "days_overdue": 21}],
+               "note": "MCP lists up to 10 orders per category; counts cover all orders."}
+        rag = {"source": "RAG knowledge base (student-3)", "answers": [
+            {"question": "q", "answer": "Only a Pharmacy Manager [S1].", "confidence": "high",
+             "citations": ["Reordering and Purchase Orders > Human approval"]}]}
+        evidence = build_evidence(CANDIDATE, mcp, rag)
+        self.assertEqual(evidence["evidence_type"], "student3_reorder_decision")
+        self.assertEqual((evidence["mcp_order_alerts"], evidence["rag_reorder_policy"]), (mcp, rag))
+        self.assertIn("Purchase order #7 for this medicine is 21 days overdue (MCP)",
+                      " ".join(evidence["options"][0]["risk_indicators"]))
+        self.assertNotIn("MCP server were not available", " ".join(evidence["unknowns"]))
+        bare = build_evidence(CANDIDATE)
+        self.assertNotIn("mcp_order_alerts", bare)
+        self.assertIn("Live purchase-order alerts from the shared MCP server were not available.", bare["unknowns"])
+        self.assertIn("The reorder and approval rules from the shared RAG server were not available.", bare["unknowns"])
+
+
+class ReorderContextTests(unittest.TestCase):
+    """The MCP and RAG context gathered before a review starts."""
+
+    def test_mcp_context_keeps_counts_and_this_medicines_orders(self):
+        from services import mcp_client, reorder_context
+        order = {"po_id": 7, "medicine_name": "Paracetamol 500mg", "status": "approved", "outstanding": 40,
+                 "expected_at": "2026-10-01", "days_overdue": 21}
+        other = {**order, "po_id": 8, "medicine_name": "Ibuprofen 400mg"}
+        data = {"counts": {"overdue": 22, "pending_approval": 16}, "pending_approval": [], "approved": [order],
+                "ordered": [], "overdue": [order, other]}
+        reply = mcp_client.MCPResult(True, "ok", result={"ok": True, "data": data})
+        with patch.object(mcp_client, "call_tool", return_value=reply) as call:
+            context = reorder_context.mcp_order_context("Paracetamol 500mg")
+        call.assert_called_once_with("homs_pharmacy_order_alerts", {"alert_type": "all"})
+        self.assertEqual((context["pharmacy_overdue_deliveries"], context["pharmacy_pending_approval"]), (22, 16))
+        self.assertEqual([o["po_id"] for o in context["listed_orders_for_this_medicine"]], [7])  # de-duplicated
+        with patch.object(mcp_client, "call_tool", return_value=mcp_client.MCPResult(False, "disabled")):
+            self.assertIsNone(reorder_context.mcp_order_context("Paracetamol 500mg"))
+
+    def test_rag_context_keeps_only_answered_questions(self):
+        from services import rag_client, reorder_context
+        answered = rag_client.RAGResult(True, "answered", "q", answer="Only a Pharmacy Manager can approve [S1].",
+                                        confidence="high", citations=[{"title": "Reordering and Purchase Orders",
+                                                                       "section": "Human approval"}])
+        refused = rag_client.RAGResult(True, "insufficient_context", "q")
+        with patch.object(rag_client, "ask", side_effect=[refused, answered]) as ask:
+            context = reorder_context.rag_policy_context()
+        self.assertEqual([call.args[0] for call in ask.call_args_list], list(reorder_context.POLICY_QUESTIONS))
+        self.assertEqual(len(context["answers"]), 1)
+        self.assertEqual(context["answers"][0]["citations"], ["Reordering and Purchase Orders > Human approval"])
+        with patch.object(rag_client, "ask", return_value=refused):
+            self.assertIsNone(reorder_context.rag_policy_context())
 
 
 if __name__ == "__main__":
