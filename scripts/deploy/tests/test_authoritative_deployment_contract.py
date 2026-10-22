@@ -1,6 +1,8 @@
 """Regression checks for the authoritative shell/OIDC deployment contract."""
 
+import json
 import subprocess
+import sys
 from pathlib import Path
 
 
@@ -207,11 +209,49 @@ def test_student5_database_update_is_quiesced_and_dependency_health_gated():
     assert '[[ "$STUDENT" == "5" ]] && FRONTEND_HEALTH=/live' in DEPLOY
 
 
-def test_student5_existing_apps_use_narrow_updates_that_preserve_identity():
+def test_student5_existing_apps_use_template_only_arm_updates():
     assert 'if [[ "$STUDENT" == "5" ]]' in DEPLOY
-    assert '--image "$(image_uri "$service")"' in DEPLOY
-    assert '--set-env-vars "${env_settings[@]}"' in DEPLOY
-    assert "preserve identity, storage, ingress and probes" in DEPLOY
+    assert "render-container-app-template-patch.py" in DEPLOY
+    assert "az rest" in DEPLOY
+    assert "api-version=2025-01-01" in DEPLOY
+    assert '"STUDENT5_SQLITE_NOLOCK=true"' in DEPLOY
+
+
+def test_template_only_patch_excludes_shared_app_configuration(tmp_path):
+    rendered = tmp_path / "container-app.json"
+    rendered.write_text(json.dumps({
+        "identity": {"type": "UserAssigned"},
+        "properties": {
+            "environmentId": "/shared/environment",
+            "configuration": {"ingress": {"external": False}},
+            "template": {
+                "revisionSuffix": "old-suffix",
+                "containers": [{
+                    "name": "database",
+                    "image": "registry/student5/database:sha",
+                    "probes": [{"httpGet": {"path": "/live"}}],
+                }],
+                "scale": {"minReplicas": 1, "maxReplicas": 1},
+            },
+        },
+    }), encoding="utf-8")
+
+    output = subprocess.run(  # noqa: S603 - fixed interpreter and repository script
+        [sys.executable, "scripts/deploy/render-container-app-template-patch.py",
+         str(rendered)],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    patch = json.loads(output.stdout)
+
+    assert set(patch) == {"properties"}
+    assert set(patch["properties"]) == {"template"}
+    assert "revisionSuffix" not in patch["properties"]["template"]
+    assert patch["properties"]["template"]["containers"][0]["probes"][0][
+        "httpGet"
+    ]["path"] == "/live"
 
 
 def test_student5_cloud_validation_uses_public_dependency_chain_without_exec_tty():

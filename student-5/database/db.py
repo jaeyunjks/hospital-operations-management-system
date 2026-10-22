@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator, Optional, Union
@@ -21,6 +22,15 @@ DEFAULT_DATABASE_PATH = DATABASE_DIR / "staff_shift.db"
 
 #: Environment variable used to relocate the database (e.g. inside Docker).
 DATABASE_PATH_ENV_VAR = "STUDENT5_DATABASE_PATH"
+
+# Azure Files is mounted over SMB in Container Apps. SQLite's POSIX byte-range
+# locking cannot complete the rollback-journal commit protocol on that mount,
+# even when there is only one database replica. The cloud deployment therefore
+# opts into SQLite's documented ``nolock`` URI mode and this module serialises
+# every database connection inside the single database process. Local and
+# Docker development keep SQLite's normal file locking.
+SQLITE_NOLOCK_ENV_VAR = "STUDENT5_SQLITE_NOLOCK"
+_NOLOCK_CONNECTION_LOCK = threading.RLock()
 
 # Azure Container Apps can briefly overlap old and new revisions during an
 # update. Both revisions see the same Azure Files database, so a short-lived
@@ -57,6 +67,13 @@ REQUIRED_SCHEMA_OBJECTS = frozenset({
 PathLike = Union[str, Path]
 
 
+def sqlite_nolock_enabled() -> bool:
+    """Return whether single-process Azure Files compatibility is enabled."""
+    return os.environ.get(SQLITE_NOLOCK_ENV_VAR, "").strip().lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
 def get_database_path() -> Path:
     """Return the configured database path.
 
@@ -79,8 +96,20 @@ def connect(database_path: Optional[PathLike] = None) -> sqlite3.Connection:
     if str(target) != ":memory:":
         target.parent.mkdir(parents=True, exist_ok=True)
 
+    connection_target = str(target)
+    connect_options: dict[str, object] = {}
+    if sqlite_nolock_enabled() and connection_target != ":memory:":
+        if not target.is_absolute():
+            raise RuntimeError(
+                f"{SQLITE_NOLOCK_ENV_VAR} requires an absolute database path."
+            )
+        connection_target = f"{target.as_uri()}?nolock=1"
+        connect_options["uri"] = True
+
     connection = sqlite3.connect(
-        str(target), timeout=SQLITE_BUSY_TIMEOUT_MS / 1000
+        connection_target,
+        timeout=SQLITE_BUSY_TIMEOUT_MS / 1000,
+        **connect_options,
     )
     connection.row_factory = sqlite3.Row
     connection.execute(f"PRAGMA busy_timeout = {SQLITE_BUSY_TIMEOUT_MS};")
@@ -91,15 +120,23 @@ def connect(database_path: Optional[PathLike] = None) -> sqlite3.Connection:
 @contextmanager
 def get_connection(database_path: Optional[PathLike] = None) -> Iterator[sqlite3.Connection]:
     """Context manager that commits on success and rolls back on error."""
-    connection = connect(database_path)
+    lock = _NOLOCK_CONNECTION_LOCK if sqlite_nolock_enabled() else None
+    if lock is not None:
+        lock.acquire()
+    connection = None
     try:
+        connection = connect(database_path)
         yield connection
         connection.commit()
     except Exception:
-        connection.rollback()
+        if connection is not None:
+            connection.rollback()
         raise
     finally:
-        connection.close()
+        if connection is not None:
+            connection.close()
+        if lock is not None:
+            lock.release()
 
 
 def apply_schema(connection: sqlite3.Connection) -> None:

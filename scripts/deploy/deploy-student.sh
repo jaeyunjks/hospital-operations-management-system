@@ -243,16 +243,26 @@ upsert_app() {
     --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors >/dev/null 2>&1; then
     log "Updating only $app_name."
     if [[ "$STUDENT" == "5" ]]; then
-      # Azure CLI's full-YAML update can lose the existing managed-identity
-      # reference when an app has no ready revision. Patch only the mutable
-      # Student 5 fields and preserve identity, storage, ingress and probes.
-      az containerapp update \
+      # Full-YAML CLI updates can lose a managed-identity reference when the
+      # database has deliberately been quiesced and has no ready revision.
+      # Patch only the desired template through ARM: identity, registry,
+      # ingress and environment storage configuration remain untouched, while
+      # image, env, mount, scale and probe changes are all applied together in
+      # one new revision.
+      local patch_file resource_id
+      patch_file="$(mktemp)"
+      python3 "$SCRIPT_DIR/render-container-app-template-patch.py" \
+        "$config_file" >"$patch_file"
+      resource_id="$(az containerapp show \
         --name "$app_name" \
         --resource-group "$HOMS_AZURE_RESOURCE_GROUP" \
-        --image "$(image_uri "$service")" \
-        --min-replicas 1 --max-replicas 1 \
-        --set-env-vars "${env_settings[@]}" \
+        --query id --output tsv --only-show-errors)"
+      az rest \
+        --method patch \
+        --url "https://management.azure.com${resource_id}?api-version=2025-01-01" \
+        --body "@$patch_file" \
         --only-show-errors --output none
+      rm -f "$patch_file"
     else
       az containerapp update \
         --name "$app_name" \
@@ -395,7 +405,11 @@ case "$STUDENT" in
   2) DATABASE_ENV=("PORT=$DATABASE_PORT" "DATABASE_PATH=/data/clinical_staff.db") ;;
   3) DATABASE_ENV=("PORT=$DATABASE_PORT" "STUDENT3_DATABASE_PATH=/data/pharmacy.db") ;;
   4) DATABASE_ENV=("PORT=$DATABASE_PORT" "FLASK_DEBUG=0" "DB_PATH=/data/rooms.db") ;;
-  5) DATABASE_ENV=("DATABASE_SERVICE_PORT=$DATABASE_PORT" "STUDENT5_DATABASE_PATH=/data/staff_shift.db") ;;
+  5) DATABASE_ENV=(
+       "DATABASE_SERVICE_PORT=$DATABASE_PORT"
+       "STUDENT5_DATABASE_PATH=/data/staff_shift.db"
+       "STUDENT5_SQLITE_NOLOCK=true"
+     ) ;;
 esac
 
 if [[ "$STUDENT" == "5" ]]; then

@@ -294,4 +294,11 @@ def create_app() -> Flask:
 
 if __name__ == "__main__":
     port = int(os.environ.get("DATABASE_SERVICE_PORT", DEFAULT_PORT))
-    create_app().run(host="0.0.0.0", port=port, debug=False)
+    # nolock is safe here only because the cloud deployment fixes this service
+    # at one replica and db.py serialises all connections in this process.
+    create_app().run(
+        host="0.0.0.0",
+        port=port,
+        debug=False,
+        threaded=not db.sqlite_nolock_enabled(),
+    )

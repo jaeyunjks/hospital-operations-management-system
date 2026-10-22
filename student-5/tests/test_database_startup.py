@@ -30,6 +30,64 @@ def test_connection_uses_bounded_lock_wait_and_rollback_journal(tmp_path):
     assert not database_path.with_name(f"{database_path.name}-wal").exists()
 
 
+def test_azure_files_mode_uses_nolock_uri(tmp_path, monkeypatch):
+    database_path = (tmp_path / "staff_shift.db").resolve()
+    calls = []
+    original_connect = sqlite3.connect
+
+    def record_connect(target, *args, **kwargs):
+        calls.append((target, kwargs.copy()))
+        return original_connect(target, *args, **kwargs)
+
+    monkeypatch.setenv(database_db.SQLITE_NOLOCK_ENV_VAR, "true")
+    monkeypatch.setattr(database_db.sqlite3, "connect", record_connect)
+
+    with database_db.get_connection(database_path) as connection:
+        connection.execute("CREATE TABLE probe (value INTEGER);")
+
+    assert calls[0][0] == f"{database_path.as_uri()}?nolock=1"
+    assert calls[0][1]["uri"] is True
+
+
+def test_azure_files_mode_serialises_connections(tmp_path, monkeypatch):
+    database_path = (tmp_path / "staff_shift.db").resolve()
+    monkeypatch.setenv(database_db.SQLITE_NOLOCK_ENV_VAR, "true")
+    first_entered = threading.Event()
+    release_first = threading.Event()
+    second_entered = threading.Event()
+
+    def hold_first_connection():
+        with database_db.get_connection(database_path) as connection:
+            connection.execute("CREATE TABLE probe (value INTEGER);")
+            first_entered.set()
+            release_first.wait(timeout=2)
+
+    def open_second_connection():
+        with database_db.get_connection(database_path):
+            second_entered.set()
+
+    first = threading.Thread(target=hold_first_connection)
+    second = threading.Thread(target=open_second_connection)
+    first.start()
+    assert first_entered.wait(timeout=1)
+    second.start()
+    assert not second_entered.wait(timeout=0.1)
+    release_first.set()
+    first.join(timeout=2)
+    second.join(timeout=2)
+
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert second_entered.is_set()
+
+
+def test_azure_files_mode_requires_absolute_database_path(monkeypatch):
+    monkeypatch.setenv(database_db.SQLITE_NOLOCK_ENV_VAR, "true")
+
+    with pytest.raises(RuntimeError, match="requires an absolute database path"):
+        database_db.connect("relative.db")
+
+
 def test_interrupted_first_startup_journal_is_preserved_before_initialisation(
     tmp_path,
 ):
