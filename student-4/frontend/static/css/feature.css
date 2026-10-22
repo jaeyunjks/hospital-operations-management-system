@@ -319,3 +319,20 @@
   font-size: var(--size-ui-xs);
   color: var(--color-text-muted);
 }
+
+
+/* Multi-Agent workflow: Planner -> Worker -> Reviewer -> Human Review */
+.agent-steps {
+  list-style: none;
+  margin: var(--space-4) 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+.agent-step {
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-surface);
+  border-left: 3px solid var(--color-neutral-soft);
+}
+.agent-step--done { border-left-color: var(--color-success-mark); }
+.agent-step ul { margin: var(--space-2) 0; padding-left: var(--space-5); }

@@ -102,5 +102,46 @@
   </div>
 </section>
 
+<section class="panel" id="multi-agent">
+  <div class="row row--between">
+    <h2 class="panel__title">Multi-Agent review</h2>
+    <span class="state state--{{ 'Available' if multi_agent.enabled and multi_agent.reachable else 'OutofService' }}">
+      {% if not multi_agent.enabled %}Multi-Agent disabled{% elif multi_agent.reachable %}Multi-Agent ready{% else %}Server unreachable{% endif %}
+    </span>
+  </div>
+  <p class="u-muted">
+    The shared Multi-Agent Server reviews these options: a Planner sets the plan, a Worker evaluates
+    each option, a Reviewer checks the proposal, then you approve, correct, partially accept or reject it.
+    The agents only advise; no bed is reserved until you record a decision.
+  </p>
+
+  {% if multi_agent.enabled %}
+    {% if case.status not in ('Resolved', 'Cancelled') %}
+      <form hx-post="/shortages/{{ case.case_id }}/multi-agent" hx-target="#multi-agent-workflow"
+            hx-swap="outerHTML" hx-indicator="#loading-indicator">
+        <button class="btn btn--primary" type="submit">Run Multi-Agent review</button>
+      </form>
+    {% endif %}
+
+    <div id="multi-agent-workflow"></div>
+
+    {% if history %}
+      <h3 class="u-label">Earlier workflows for this case</h3>
+      <ul class="citations">
+        {% for item in history %}
+          <li>
+            <a href="#multi-agent" hx-get="/multi-agent/{{ item.workflow_id }}"
+               hx-target="#multi-agent-workflow" hx-swap="outerHTML">{{ item.workflow_id[:8] }}</a>
+            <span class="u-muted u-label">{{ item.status | replace('_', ' ') }} · {{ item.started_at }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% else %}
+    <p class="u-muted u-label">Start the Multi-Agent Server and set MULTI_AGENT_ENABLED=true for the backend
+      (STUDENT4_MULTI_AGENT_ENABLED=true with Docker Compose) to use this panel.</p>
+  {% endif %}
+</section>
+
 {% endif %}
 {% endblock %}
