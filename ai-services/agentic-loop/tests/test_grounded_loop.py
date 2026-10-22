@@ -82,6 +82,22 @@ def make_loop(chat, provider=None, **kwargs):
                                         log=lambda _: None, **kwargs)
 
 
+@pytest.mark.parametrize("base_url", [
+    "file:///tmp/ollama.sock",
+    "ftp://localhost/ollama",
+    "data:text/plain,ollama",
+    "javascript:alert(1)",
+])
+def test_ollama_chat_rejects_non_http_urls_before_network(monkeypatch, base_url):
+    def forbidden_network(*_args, **_kwargs):
+        raise AssertionError("urlopen must not run for an unsupported URL scheme")
+
+    monkeypatch.setattr(grounded.urllib.request, "urlopen", forbidden_network)
+
+    with pytest.raises(ValueError, match="must use http or https"):
+        grounded.make_ollama_chat(model="test", base_url=base_url, timeout=1)
+
+
 def test_tool_then_grounded_answer():
     chat = ScriptedChat(
         tool_call("homs_ward_occupancy_status", {"ward": "Emergency"}),

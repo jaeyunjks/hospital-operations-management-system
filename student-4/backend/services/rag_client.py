@@ -27,7 +27,6 @@ CONFIDENCE = {"answered": ("high", "medium", "low"), "insufficient_context": ("n
 
 RAG_ENABLED = os.environ.get("RAG_ENABLED", "false").strip().lower() == "true"
 RAG_SERVER_URL = os.environ.get("RAG_SERVER_URL", "http://127.0.0.1:8100").strip().rstrip("/")
-ALLOWED_SCHEMES = ("http", "https")
 try:
     RAG_TIMEOUT = float(os.environ.get("RAG_TIMEOUT", "100"))
 except ValueError:
@@ -70,26 +69,29 @@ class RAGResult:
         return {key: value for key, value in asdict(self).items() if value is not None}
 
 
-def _server_url(path: str) -> str:
-    """Return the RAG URL for ``path``, refusing anything but http(s) to a host.
+def _validated_rag_server_url() -> str:
+    """Return the configured RAG URL only when it is safe for HTTP transport."""
 
-    urllib would also open ``file:`` and custom schemes, so the configured
-    base URL is checked before every request (Ruff S310).
-    """
-    parts = urllib.parse.urlsplit(RAG_SERVER_URL)
-    if parts.scheme not in ALLOWED_SCHEMES or not parts.netloc:
-        raise urllib.error.URLError("RAG_SERVER_URL must be an http(s) URL")
-    return RAG_SERVER_URL + path
+    try:
+        parsed_url = urllib.parse.urlsplit(RAG_SERVER_URL)
+        valid_url = parsed_url.scheme.lower() in {"http", "https"} and parsed_url.hostname
+    except (TypeError, ValueError):
+        valid_url = False
+    if not valid_url:
+        raise InvalidResponse("RAG server URL must use http or https and include a host")
+    return RAG_SERVER_URL
 
 
 def _request(method: str, path: str, payload: dict | None = None, timeout: float | None = None):
     data = json.dumps(payload).encode() if payload is not None else None
-    call = urllib.request.Request(  # noqa: S310 - scheme validated by _server_url
-        _server_url(path), data=data, method=method,
+    call = urllib.request.Request(  # noqa: S310 - base URL validated immediately above.
+        _validated_rag_server_url() + path, data=data, method=method,
         headers={"Content-Type": "application/json"} if data else {},
     )
     try:
-        with urllib.request.urlopen(call, timeout=timeout or RAG_TIMEOUT) as response:  # noqa: S310
+        with urllib.request.urlopen(  # noqa: S310 - request URL validated above.
+            call, timeout=timeout or RAG_TIMEOUT
+        ) as response:
             return response.status, json.load(response)
     except urllib.error.HTTPError as exc:
         try:
@@ -189,7 +191,7 @@ def status() -> dict:
         health_code, _health = _request("GET", "/health", timeout=5)
         _code, sources = _request(
             "GET", "/sources?" + urllib.parse.urlencode({"feature": FEATURE}), timeout=5)
-    except (urllib.error.URLError, OSError, json.JSONDecodeError):
+    except (urllib.error.URLError, OSError, json.JSONDecodeError, InvalidResponse):
         return {**base, "reachable": False, "ready": False, "documents": [],
                 "error": "Shared RAG server is unavailable"}
     documents = sources.get("documents", []) if isinstance(sources, dict) else []

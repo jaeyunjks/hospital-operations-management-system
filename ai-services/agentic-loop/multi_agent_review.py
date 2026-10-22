@@ -59,7 +59,12 @@ DEFAULT_TIMEOUT = 30.0
 STAGES = ("planner", "worker", "reviewer", "human")
 STAGE_ALIASES = {"human_review": "human", "human-review": "human", "humanreview": "human"}
 HUMAN_DECISIONS = ("approved", "corrected", "partially_accepted", "rejected")
-DECISIONS_NEEDING_COMMENT = ("corrected", "partially_accepted", "rejected")
+# The HOMS Multi-Agent Server stores the imperative form of the decision.
+DECISION_ALIASES = {"approve": "approved", "correct": "corrected", "reject": "rejected",
+                    "partially_accept": "partially_accepted", "partial": "partially_accepted"}
+DECISIONS_NEEDING_COMMENT = ("corrected",)
+DECISIONS_SHOULD_HAVE_COMMENT = ("partially_accepted", "rejected")
+FINAL_STATUSES = HUMAN_DECISIONS + ("completed",)
 
 PLAN_CHECKS = [
     "MA1 stages run Planner -> Worker -> Reviewer -> Human Review",
@@ -67,9 +72,15 @@ PLAN_CHECKS = [
     "MA3 Worker returns a result and cites the evidence it used",
     "MA4 Worker covers every piece of evidence the Planner required (advisory)",
     "MA5 Reviewer gives a verdict, risks and recommendations",
-    "MA6 Human Review records a valid decision, a reviewer and a reason when needed",
+    "MA6 Human Review records a valid decision, with correction details for 'corrected'",
+    "MA6 Rejections and partial acceptances explain why (advisory)",
     "MA7 Audit log is ordered and covers every actor",
     "MA8 Workflow status matches the human decision (advisory)",
+    "MA9 Agents ran on the live model, not the deterministic fallback (advisory)",
+    "MA10 Final result agrees with the persisted workflow outcome when present",
+    "MA11 Explicit mutation-safety fields prohibit and deny operational mutation",
+    "MA12 RAG provenance is grounded, advisory and separated from operational facts (advisory)",
+    "MA13 MCP provenance identifies controlled retrieval and backend consistency (advisory)",
 ]
 
 
@@ -107,7 +118,151 @@ def unwrap(body: Any) -> Dict[str, Any]:
         body = body["data"]
     if not isinstance(body, dict):
         raise ValueError("workflow history is not a JSON object")
-    return body
+    return from_homs(body) if is_homs(body) else body
+
+
+# --------------------------------------------------------------------------- #
+# HOMS Multi-Agent Server record (schema 1.0) -> steps + audit log
+# --------------------------------------------------------------------------- #
+
+
+def is_homs(record: Dict[str, Any]) -> bool:
+    """A record (or GET /workflows/<id> view) written by ai-services/multi-agent-server."""
+
+    return "steps" not in record and any(k in record for k in ("planner", "worker", "reviewer")) \
+        and ("final_status" in record or "human_review" in record)
+
+
+def _homs_worker(output: Dict[str, Any], required: Sequence[str]) -> Dict[str, Any]:
+    solution = output.get("proposed_solution") if isinstance(output.get("proposed_solution"), dict) else {}
+    result = output.get("status")
+    if solution.get("selected_option") or solution.get("selected_option_id"):
+        result = f"{result}: {solution.get('selected_option') or solution.get('selected_option_id')}"
+    missing = {str(m).lower() for m in output.get("missing_planner_evidence") or []}
+    return {"result": result, "evidence_used": [r for r in required if r.lower() not in missing],
+            "missing_evidence": sorted(missing), "plan_steps_followed": output.get("plan_steps_followed")}
+
+
+def _homs_rag_provenance(evidence: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    context = evidence.get("policy_context")
+    if not isinstance(context, dict):
+        return None
+    separation = evidence.get("evidence_separation")
+    separation = separation if isinstance(separation, dict) else {}
+    citations = context.get("citations") if isinstance(context.get("citations"), list) else []
+    sources = [
+        citation.get("source") for citation in citations
+        if isinstance(citation, dict) and isinstance(citation.get("source"), str)
+    ]
+    return {
+        "context_type": context.get("context_type"),
+        "retrieval_status": context.get("retrieval_status") or context.get("status"),
+        "confidence": context.get("confidence"),
+        "citation_count": len(citations),
+        "sources": sources,
+        "policy_is_advisory": separation.get("policy_is_advisory"),
+        "operational_rules_remain_authoritative": separation.get(
+            "operational_rules_remain_authoritative"
+        ),
+        "limitations": context.get("limitations") if isinstance(context.get("limitations"), list) else [],
+    }
+
+
+def _homs_mcp_provenance(evidence: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    context = evidence.get("mcp_context")
+    if not isinstance(context, dict):
+        return None
+    return {
+        "context_type": context.get("context_type"),
+        "retrieval_status": context.get("retrieval_status") or context.get("status"),
+        "tool_name": context.get("tool_name"),
+        "source": context.get("source"),
+        "consistency_status": context.get("consistency_status"),
+        "read_only": context.get("read_only"),
+        "mutation_allowed": context.get("mutation_allowed"),
+        "limitations": context.get("limitations") if isinstance(context.get("limitations"), list) else [],
+    }
+
+
+def from_homs(record: Dict[str, Any]) -> Dict[str, Any]:
+    """Map the Multi-Agent Server's audit record onto the steps + audit_log contract.
+
+    The server has no separate event log: each stage keeps its own started_at /
+    completed_at, and Human Review keeps its timestamp. The audit log is built
+    from those stored timestamps, in order, without inventing any event.
+    """
+
+    steps: List[Dict[str, Any]] = []
+    audit: List[Dict[str, Any]] = []
+    fallbacks: List[str] = []
+    required: List[str] = []
+    mutation_safety = {
+        "worker_mutation_executed": None,
+        "reviewer_mutation_verified_absent": None,
+        "provenance_mutation_allowed": None,
+        "final_mutation_executed": None,
+    }
+    evidence = record.get("input_evidence")
+    evidence = evidence if isinstance(evidence, dict) else {}
+    provenance = evidence.get("provenance")
+    provenance = provenance if isinstance(provenance, dict) else {}
+    mutation_safety["provenance_mutation_allowed"] = provenance.get("mutation_allowed")
+    final_result = record.get("final_result")
+    final_result = final_result if isinstance(final_result, dict) else None
+    if final_result is not None:
+        mutation_safety["final_mutation_executed"] = final_result.get("mutation_executed")
+    if record.get("timestamp"):
+        audit.append({"timestamp": record["timestamp"], "actor": "system", "event": "workflow_created"})
+    for role in ("planner", "worker", "reviewer"):
+        stage = record.get(role)
+        if not isinstance(stage, dict):
+            continue
+        raw = stage.get("output") if isinstance(stage.get("output"), dict) else {}
+        execution = stage.get("execution") if isinstance(stage.get("execution"), dict) else {}
+        if execution.get("fallback_used") or execution.get("provider") == "deterministic_fallback":
+            fallbacks.append(role)
+        if role == "planner":
+            required = [str(e) for e in raw.get("required_evidence") or []]
+            output = {"plan": raw.get("planned_steps"), "required_evidence": required, "goal": raw.get("goal")}
+        elif role == "worker":
+            output = _homs_worker(raw, required)
+            mutation_safety["worker_mutation_executed"] = raw.get("mutation_executed")
+        else:
+            output = {"verdict": raw.get("review_status"), "risks": raw.get("risks"),
+                      "recommendations": [raw["recommendation"]] if raw.get("recommendation") else [],
+                      "unsupported_claims": raw.get("unsupported_claims")}
+            mutation_safety["reviewer_mutation_verified_absent"] = raw.get(
+                "mutation_verified_absent"
+            )
+        if stage.get("output") is None:
+            output = {"error": execution.get("error")}
+        steps.append({"agent": role, "started_at": stage.get("started_at"),
+                      "finished_at": stage.get("completed_at"), "output": output})
+        audit.append({"timestamp": stage.get("started_at"), "actor": role, "event": "stage_started"})
+        audit.append({"timestamp": stage.get("completed_at"), "actor": role,
+                      "event": "stage_completed" if stage.get("output") is not None else "stage_failed"})
+    human = record.get("human_review")
+    if isinstance(human, dict):
+        steps.append({"agent": "human", "started_at": human.get("timestamp"), "finished_at": human.get("timestamp"),
+                      "output": {"decision": human.get("decision"), "reviewer": human.get("reviewer"),
+                                 "comment": human.get("comments")}})
+        audit.append({"timestamp": human.get("timestamp"), "actor": "human", "event": "decision_recorded"})
+    return {"workflow_id": record.get("workflow_id"), "feature": record.get("feature"),
+            "request": record.get("task"), "status": record.get("final_status") or record.get("status"),
+            "steps": steps, "audit_log": audit, "fallback_stages": fallbacks,
+            "final_result": final_result, "mutation_safety": mutation_safety,
+            "rag_provenance": _homs_rag_provenance(evidence),
+            "mcp_provenance": _homs_mcp_provenance(evidence),
+            "source_format": "homs-multi-agent-server/" + str(record.get("schema_version", "?"))}
+
+
+def is_finalised(path: Path) -> bool:
+    try:
+        record = read_json(path)
+    except ValueError:
+        return False
+    status = record.get("final_status") or record.get("status") if isinstance(record, dict) else None
+    return status in FINAL_STATUSES
 
 
 # --------------------------------------------------------------------------- #
@@ -138,6 +293,14 @@ def observe(workflow: Dict[str, Any], origin: str) -> Dict[str, Any]:
     planner, worker = last_output("planner"), last_output("worker")
     reviewer, human = last_output("reviewer"), last_output("human")
     audit = [e for e in workflow.get("audit_log") or [] if isinstance(e, dict)]
+    final = workflow.get("final_result")
+    final = final if isinstance(final, dict) else None
+    mutation_safety = workflow.get("mutation_safety")
+    mutation_safety = mutation_safety if isinstance(mutation_safety, dict) else {}
+    rag_provenance = workflow.get("rag_provenance")
+    rag_provenance = rag_provenance if isinstance(rag_provenance, dict) else None
+    mcp_provenance = workflow.get("mcp_provenance")
+    mcp_provenance = mcp_provenance if isinstance(mcp_provenance, dict) else None
     return {
         "origin": origin,
         "workflow_id": workflow.get("workflow_id") or workflow.get("id"),
@@ -152,10 +315,28 @@ def observe(workflow: Dict[str, Any], origin: str) -> Dict[str, Any]:
                    "evidence_used": [str(e) for e in _list(worker.get("evidence_used"))]},
         "reviewer": {"verdict": reviewer.get("verdict"), "risks": reviewer.get("risks"),
                      "recommendations": _list(reviewer.get("recommendations"))},
-        "human": {"decision": str(human.get("decision") or "").strip().lower() or None,
+        "human": {"decision": _decision(human.get("decision")),
                   "reviewer": human.get("reviewer"), "comment": human.get("comment")},
+        "final_result": {
+            "present": final is not None,
+            "status": final.get("status") if final else None,
+            "proposal": (final.get("proposal") or final.get("recommendation")) if final else None,
+            "review": (final.get("review") or final.get("reviewer")) if final else None,
+            "human_decision": _decision(final.get("human_decision")) if final else None,
+            "mutation_executed": final.get("mutation_executed") if final else None,
+        },
+        "mutation_safety": mutation_safety,
+        "rag_provenance": rag_provenance,
+        "mcp_provenance": mcp_provenance,
         "audit_log": audit,
+        "fallback_stages": list(workflow.get("fallback_stages") or []),
+        "source_format": workflow.get("source_format", "steps"),
     }
+
+
+def _decision(value: Any) -> Optional[str]:
+    text = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    return DECISION_ALIASES.get(text, text) or None
 
 
 # --------------------------------------------------------------------------- #
@@ -221,13 +402,15 @@ def check_workflow(obs: Dict[str, Any]) -> List[Dict[str, Any]]:
     problems = []
     if human["decision"] not in HUMAN_DECISIONS:
         problems.append(f"decision {human['decision']!r} not in {', '.join(HUMAN_DECISIONS)}")
-    if not human["reviewer"]:
-        problems.append("no reviewer name")
     if human["decision"] in DECISIONS_NEEDING_COMMENT and not human["comment"]:
-        problems.append(f"'{human['decision']}' needs a comment")
+        problems.append(f"'{human['decision']}' needs the correction details")
     results.append(check("MA6", "Human Review decision", not problems,
-                         "; ".join(problems) or f"{human['decision']} by {human['reviewer']}",
+                         "; ".join(problems) or f"{human['decision']} by {human['reviewer'] or 'unnamed reviewer'}",
                          subject=subject))
+    if human["decision"] in DECISIONS_SHOULD_HAVE_COMMENT:
+        results.append(check("MA6", "Human Review reason", bool(human["comment"]),
+                             "reason recorded" if human["comment"] else f"'{human['decision']}' has no reason",
+                             severity=ADVISORY, subject=subject))
 
     audit = obs["audit_log"]
     problems = []
@@ -247,10 +430,125 @@ def check_workflow(obs: Dict[str, Any]) -> List[Dict[str, Any]]:
     results.append(check("MA7", "Audit log", not problems,
                          "; ".join(problems) or f"{len(audit)} ordered entries", subject=subject))
 
-    expected = "rejected" if human["decision"] == "rejected" else "completed"
-    results.append(check("MA8", "Workflow status", obs["status"] == expected,
-                         f"status={obs['status']!r}, expected {expected!r}", severity=ADVISORY,
-                         subject=subject))
+    expected = {human["decision"]} | ({"completed"} if human["decision"] != "rejected" else set())
+    results.append(check("MA8", "Workflow status", obs["status"] in expected,
+                         f"status={obs['status']!r}, expected {' or '.join(sorted(map(repr, expected)))}",
+                         severity=ADVISORY, subject=subject))
+
+    fallbacks = obs["fallback_stages"]
+    results.append(check("MA9", "Live model", not fallbacks,
+                         f"deterministic fallback used by: {', '.join(fallbacks)}" if fallbacks
+                         else "no fallback recorded", severity=ADVISORY, subject=subject))
+
+    final = obs["final_result"]
+    problems = []
+    if final["present"]:
+        if not final["status"]:
+            problems.append("final result has no status")
+        elif final["status"] != obs["status"]:
+            problems.append(
+                f"final status {final['status']!r} does not match workflow status {obs['status']!r}"
+            )
+        if final["human_decision"] and final["human_decision"] != human["decision"]:
+            problems.append(
+                f"final human decision {final['human_decision']!r} does not match "
+                f"Human Review {human['decision']!r}"
+            )
+    final_detail = (
+        "optional final result not present"
+        if not final["present"]
+        else (
+            f"status={final['status']!r}, proposal "
+            f"{'present' if final['proposal'] is not None else 'absent'}, reviewer result "
+            f"{'present' if final['review'] is not None else 'absent'}"
+        )
+    )
+    results.append(check("MA10", "Final result", not problems,
+                         "; ".join(problems) or final_detail, subject=subject))
+
+    safety = obs["mutation_safety"]
+    safety_rules = (
+        ("worker_mutation_executed", False, "Worker mutation_executed"),
+        ("reviewer_mutation_verified_absent", True, "Reviewer mutation_verified_absent"),
+        ("provenance_mutation_allowed", False, "Provenance mutation_allowed"),
+        ("final_mutation_executed", False, "Final mutation_executed"),
+    )
+    present_safety, safety_problems = [], []
+    for field, safe_value, label in safety_rules:
+        value = safety.get(field)
+        if value is None:
+            continue
+        present_safety.append(f"{field}={value!r}")
+        if not isinstance(value, bool):
+            safety_problems.append(f"{label} is not boolean")
+        elif value is not safe_value:
+            safety_problems.append(f"{label}={value!r} indicates mutation is not safely absent")
+    results.append(check(
+        "MA11", "Mutation safety", not safety_problems,
+        "; ".join(safety_problems)
+        or (", ".join(present_safety) if present_safety else "optional mutation fields not present"),
+        subject=subject,
+    ))
+
+    rag = obs["rag_provenance"]
+    rag_problems = []
+    if rag is not None:
+        rag_status = str(rag.get("retrieval_status") or "").strip().lower()
+        if not rag_status:
+            rag_problems.append("retrieval status is missing")
+        if rag_status in {"answered", "available", "success", "succeeded"}:
+            citation_count = rag.get("citation_count") or 0
+            if citation_count == 0 or len(rag.get("sources") or []) != citation_count:
+                rag_problems.append("successful retrieval has no citation sources")
+        if rag.get("policy_is_advisory") is not True:
+            rag_problems.append("policy context is not explicitly advisory")
+        if rag.get("operational_rules_remain_authoritative") is not True:
+            rag_problems.append("operational evidence is not explicitly authoritative")
+    rag_detail = (
+        "optional RAG provenance not present"
+        if rag is None
+        else (
+            f"status={rag.get('retrieval_status')!r}, confidence={rag.get('confidence')!r}, "
+            f"citations={rag.get('citation_count', 0)}, sources={len(rag.get('sources') or [])}"
+        )
+    )
+    results.append(check("MA12", "RAG provenance", not rag_problems,
+                         "; ".join(rag_problems) or rag_detail,
+                         severity=ADVISORY, subject=subject))
+
+    mcp = obs["mcp_provenance"]
+    mcp_problems = []
+    if mcp is not None:
+        mcp_status = str(mcp.get("retrieval_status") or "").strip().lower()
+        consistency = str(mcp.get("consistency_status") or "").strip().lower()
+        if not mcp_status:
+            mcp_problems.append("retrieval status is missing")
+        if mcp_status in {"answered", "available", "success", "succeeded"}:
+            if not mcp.get("tool_name"):
+                mcp_problems.append("successful retrieval has no registered tool name")
+            if not mcp.get("source"):
+                mcp_problems.append("successful retrieval has no source")
+            if not consistency or consistency == "not_checked":
+                mcp_problems.append("successful retrieval was not checked against authoritative evidence")
+        if (any(term in consistency for term in ("mismatch", "inconsistent"))
+                or consistency.startswith("conflict")):
+            mcp_problems.append(f"consistency result indicates a mismatch: {consistency}")
+        if mcp.get("read_only") is False:
+            mcp_problems.append("MCP context is explicitly not read-only")
+        if mcp.get("mutation_allowed") is True:
+            mcp_problems.append("MCP context explicitly permits mutation")
+    mcp_detail = (
+        "optional MCP provenance not present"
+        if mcp is None
+        else (
+            f"status={mcp.get('retrieval_status')!r}, tool={mcp.get('tool_name')!r}, "
+            f"source={mcp.get('source')!r}, consistency={mcp.get('consistency_status')!r}, "
+            f"limitations={len(mcp.get('limitations') or [])}"
+        )
+    )
+    results.append(check("MA13", "MCP provenance", not mcp_problems,
+                         "; ".join(mcp_problems) or mcp_detail,
+                         severity=ADVISORY, subject=subject))
     return results
 
 
@@ -273,7 +571,7 @@ class MultiAgentReview:
     def run(self) -> Dict[str, Any]:
         sources = [str(p) for p in self.files] + [f"workflow:{i}" for i in self.ids]
         plan = {"evidence": sources, "checks": PLAN_CHECKS}
-        self.log(f"PLAN    {len(sources)} workflow(s), {len(PLAN_CHECKS)} checks each")
+        self.log(f"PLAN    {len(sources)} workflow(s), up to {len(PLAN_CHECKS)} checks each")
 
         observations, checks = [], []
         for path in self.files:
@@ -347,6 +645,10 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
                         help="Workflow history JSON exported by the Multi-Agent Server (repeatable)")
     parser.add_argument("--workflow-id", action="append", default=[],
                         help="Fetch GET /workflows/<id> from the Multi-Agent Server (repeatable)")
+    parser.add_argument("--workflow-dir", type=Path,
+                        help="Review every finalised workflow-*.json in this folder (e.g. reports/multi-agent)")
+    parser.add_argument("--latest", type=int, default=0,
+                        help="With --workflow-dir, review only the N most recent finalised workflows")
     parser.add_argument("--multi-agent-url",
                         default=os.environ.get("HOMS_MULTI_AGENT_URL", DEFAULT_MULTI_AGENT_URL))
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
@@ -358,8 +660,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     run_id = _run_id()
     try:
+        files = list(args.workflow)
+        if args.workflow_dir:
+            if not args.workflow_dir.is_dir():
+                raise ValueError(f"--workflow-dir {args.workflow_dir} is not a folder")
+            found = sorted(args.workflow_dir.glob("workflow-*.json"), key=lambda p: p.stat().st_mtime)
+            final = [p for p in found if is_finalised(p)]
+            if args.latest > 0:
+                final = final[-args.latest:]
+            print(f"PLAN    {args.workflow_dir}: {len(final)} finalised of {len(found)} workflow file(s)")
+            files += final
         review = MultiAgentReview(
-            generate=model_from_args(args), files=args.workflow, workflow_ids=args.workflow_id,
+            generate=model_from_args(args), files=files, workflow_ids=args.workflow_id,
             client=MultiAgentClient(args.multi_agent_url, args.timeout) if args.workflow_id else None)
         result = review.run()
         logs_dir = default_logs_dir(args)
