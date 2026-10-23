@@ -7,9 +7,9 @@ import sys
 from pathlib import Path
 
 try:
-    from database.database import drop_all_tables
+    from database.database import connect, drop_all_tables
 except ModuleNotFoundError:
-    from database import drop_all_tables
+    from database import connect, drop_all_tables
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_DB = Path(__file__).resolve().parent / "patients.db"
@@ -22,7 +22,7 @@ MIN_RECORDS = 10
 
 def build(db_path: Path) -> sqlite3.Connection:
     # Apply schema.sql then seed_data.sql to a fresh database
-    conn = sqlite3.connect(db_path)
+    conn = connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON")
 
     # Clear all existing tables before re-creation

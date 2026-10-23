@@ -61,7 +61,7 @@ def ensure_database_ready():
         return
 
     try:
-        conn = sqlite3.connect(db_path)
+        conn = database.connect(db_path)
         table_names = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('patients', 'admissions')"
         ).fetchall()

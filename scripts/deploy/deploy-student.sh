@@ -401,7 +401,7 @@ wait_for_app_healthy() {
 }
 
 case "$STUDENT" in
-  1) DATABASE_ENV=("PORT=$DATABASE_PORT" "HOST=0.0.0.0" "FLASK_DEBUG=0" "DB_PATH=/data/patients.db") ;;
+  1) DATABASE_ENV=("PORT=$DATABASE_PORT" "HOST=0.0.0.0" "FLASK_DEBUG=0" "DB_PATH=/data/patients.db" "STUDENT1_SQLITE_NOLOCK=true") ;;
   2) DATABASE_ENV=("PORT=$DATABASE_PORT" "DATABASE_PATH=/data/clinical_staff.db") ;;
   3) DATABASE_ENV=("PORT=$DATABASE_PORT" "STUDENT3_DATABASE_PATH=/data/pharmacy.db") ;;
   4) DATABASE_ENV=("PORT=$DATABASE_PORT" "FLASK_DEBUG=0" "DB_PATH=/data/rooms.db") ;;

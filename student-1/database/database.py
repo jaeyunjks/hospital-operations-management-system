@@ -3,11 +3,26 @@
 
 import os
 import sqlite3
+import threading
 from pathlib import Path
 
 from flask import g
 
 DB_PATH = Path(os.getenv("DB_PATH", Path(__file__).resolve().parent / "patients.db"))
+
+# Azure Files (SMB) cannot complete SQLite's byte-range locking, so the cloud
+# deployment sets STUDENT1_SQLITE_NOLOCK and this process serialises every
+# database request itself. Local and Docker runs keep SQLite's normal locking.
+NOLOCK = os.getenv("STUDENT1_SQLITE_NOLOCK", "").strip().lower() in {"1", "true", "yes", "on"}
+BUSY_TIMEOUT_SECONDS = 30
+_nolock_lock = threading.RLock()
+
+# Open a connection, in nolock mode when running on Azure Files
+def connect(path) -> sqlite3.Connection:
+    if NOLOCK:
+        uri = Path(path).resolve().as_uri() + "?nolock=1"
+        return sqlite3.connect(uri, uri=True, timeout=BUSY_TIMEOUT_SECONDS)
+    return sqlite3.connect(path, timeout=BUSY_TIMEOUT_SECONDS)
 
 # Data Error
 class DataError(Exception):
@@ -20,7 +35,14 @@ class DataError(Exception):
 # Return the requested database connection, creating it if necessary
 def get_db() -> sqlite3.Connection:
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
+        if NOLOCK:
+            _nolock_lock.acquire()
+        try:
+            g.db = connect(DB_PATH)
+        except Exception:
+            if NOLOCK:
+                _nolock_lock.release()
+            raise
         g.db.row_factory = sqlite3.Row
     return g.db
 
@@ -29,6 +51,8 @@ def close_db(e=None) -> None:
     db = g.pop("db", None)
     if db is not None:
         db.close()
+        if NOLOCK:
+            _nolock_lock.release()
 
 # Run a SELECT and return the results as a list of dictionaries
 def query_db(query: str, arguments=(), one=False):
