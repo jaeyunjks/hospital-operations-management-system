@@ -49,6 +49,7 @@ if BACKEND_DIR not in sys.path:
 
 import auth  # noqa: E402
 from routes import ai_summary as ai_module  # noqa: E402
+from services import admission_data  # noqa: E402
 
 
 # Seed-data users we switch between via auth.CURRENT_USER.
@@ -139,6 +140,8 @@ def db_mock(monkeypatch):
     # create_ai_summary echoes back the payload plus a generated id by default.
     mock.create_ai_summary.side_effect = lambda payload: {"summary_id": 1, **payload}
     monkeypatch.setattr(ai_module, "db", mock)
+    # The admission-scoped list_* reads now live in services.admission_data.
+    monkeypatch.setattr(admission_data, "db", mock)
     return mock
 
 

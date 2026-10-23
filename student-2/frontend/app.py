@@ -42,6 +42,7 @@ This frontend binds port 3200; the backend it calls is on 5200.
 """
 
 import os
+import re
 
 import requests
 from flask import (
@@ -76,6 +77,9 @@ BACKEND_TIMEOUT = 40
 # The model-backed policy answer is slow, so it gets much more time.
 CARE_TASKS_TIMEOUT = 25
 POLICY_QUESTION_TIMEOUT = 120
+# Discharge review: every call to the backend's /api/multi-agent routes. The
+# agents run in the background, so each call only starts or reads a review.
+DISCHARGE_REVIEW_TIMEOUT = 25
 
 # The only roles this feature serves. Anything else falls back to the first.
 CLINICAL_ROLES = ("doctor", "nurse", "specialist")
@@ -509,6 +513,145 @@ def ai_policy_question():
         _, message = _error_details(data)
         return _fragment(template, status, message=message)
     return _error_fragment(template, data)
+
+
+# ------------------------------------------------------------
+# Discharge review (backend /api/multi-agent routes)
+# One template, one `state` variable:
+#     start | progress | review | disabled | unavailable | forbidden | failed | error
+# The backend does all the checking and decides the review's status; this side
+# only turns its words into a state and hands the data over. Data per state:
+#     start                 admission_id  (the one asked for - no review yet)
+#     progress, review,
+#     failed                workflow, logged  (logged is True/False only on a
+#                           decision reply, else None)
+#     disabled, unavailable,
+#     forbidden             message
+#     error                 code, message
+# Shapes NOT in the recorded replies (taken from the backend route code):
+#     start (the {"status": "none"} reply), failed, review after a decision
+#     other than "approve", and every message state (disabled, unavailable,
+#     forbidden, error: {"status", "error": {"code", "message"}}).
+# ------------------------------------------------------------
+_DISCHARGE_TEMPLATE = "partials/discharge_review.html"
+
+# The workflow's own status word -> fragment state. Any other word (including
+# the backend's "unknown") is shown as an error, not guessed at.
+_DISCHARGE_STATE_BY_STATUS = {
+    "in_progress": "progress",
+    "awaiting_human_review": "review",
+    "approved": "review",
+    "corrected": "review",
+    "rejected": "review",
+    "partially_accepted": "review",
+    "failed": "failed",
+}
+
+# A workflow id must look like a UUID before it is put into a backend path.
+_WORKFLOW_ID = re.compile(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}")
+_ERROR_BAD_WORKFLOW_ID = "That discharge review id is not valid."
+
+
+def _discharge_message(data):
+    """The message states, for any reply that is not a usable review."""
+    code, message = _error_details(data)
+    status = data.get("status") if isinstance(data, dict) else None
+    if status in ("disabled", "unavailable"):
+        return _fragment(_DISCHARGE_TEMPLATE, status, message=message)
+    if code == "forbidden":
+        return _fragment(_DISCHARGE_TEMPLATE, "forbidden", message=message)
+    return _error_fragment(_DISCHARGE_TEMPLATE, data, unreachable=not isinstance(data, dict))
+
+
+def _discharge_reply(data, error):
+    """Progress, review, failed or a message state, from a workflow reply."""
+    workflow = data.get("workflow") if isinstance(data, dict) else None
+    if not isinstance(data, dict) or error or data.get("status") != "ok" or not isinstance(workflow, dict):
+        return _discharge_message(data)
+
+    status = workflow.get("status")
+    state = _DISCHARGE_STATE_BY_STATUS.get(status) if isinstance(status, str) else None
+    if state is None:
+        return _error_fragment(_DISCHARGE_TEMPLATE, data)
+
+    logged = data.get("logged")
+    return _fragment(
+        _DISCHARGE_TEMPLATE,
+        state,
+        workflow=workflow,
+        logged=logged if isinstance(logged, bool) else None,
+    )
+
+
+@app.get("/ai/discharge-review")
+def ai_discharge_review():
+    """
+    The latest discharge review of one admission.
+    Query field: admission_id.
+    """
+    admission_id = _id_field(request.args.get("admission_id"))
+    data, error = _backend(
+        "GET",
+        "/api/multi-agent/latest",
+        timeout=DISCHARGE_REVIEW_TIMEOUT,
+        params={"admission_id": admission_id},
+    )
+    # "none": no review yet, so offer to start one.
+    if isinstance(data, dict) and data.get("status") == "none" and not error:
+        return _fragment(_DISCHARGE_TEMPLATE, "start", admission_id=admission_id)
+    return _discharge_reply(data, error)
+
+
+@app.post("/ai/discharge-review/start")
+def ai_discharge_review_start():
+    """
+    Start a discharge review. Form field: admission_id.
+    """
+    data, error = backend_post(
+        "/api/multi-agent/start",
+        json_body={"admission_id": _id_field(request.form.get("admission_id"))},
+        timeout=DISCHARGE_REVIEW_TIMEOUT,
+    )
+    return _discharge_reply(data, error)
+
+
+@app.get("/ai/discharge-review/<workflow_id>")
+def ai_discharge_review_progress(workflow_id):
+    """
+    Progress of one review: progress while it runs, review when it is ready,
+    failed or a message otherwise.
+    """
+    if not _WORKFLOW_ID.fullmatch(workflow_id):
+        return _fragment(
+            _DISCHARGE_TEMPLATE, "error", code=None, message=_ERROR_BAD_WORKFLOW_ID
+        )
+    data, error = _backend(
+        "GET",
+        "/api/multi-agent/workflows/{}".format(workflow_id),
+        timeout=DISCHARGE_REVIEW_TIMEOUT,
+    )
+    return _discharge_reply(data, error)
+
+
+@app.post("/ai/discharge-review/<workflow_id>/decision")
+def ai_discharge_review_decision(workflow_id):
+    """
+    Record the doctor's decision on one review.
+    Form fields: decision, comment (the backend checks both).
+    """
+    if not _WORKFLOW_ID.fullmatch(workflow_id):
+        return _fragment(
+            _DISCHARGE_TEMPLATE, "error", code=None, message=_ERROR_BAD_WORKFLOW_ID
+        )
+    data, error = backend_post(
+        "/api/multi-agent/workflows/{}/review".format(workflow_id),
+        json_body={
+            "decision": request.form.get("decision", ""),
+            "comment": request.form.get("comment", ""),
+        },
+        timeout=DISCHARGE_REVIEW_TIMEOUT,
+    )
+    return _discharge_reply(data, error)
 
 
 # ------------------------------------------------------------

@@ -1,0 +1,30 @@
+{#
+  discharge_review.html - HTMX fragment: picks the discharge readiness piece for a state.
+  Rendered by the four /ai/discharge-review routes (app.py). Fragment only, no page chrome.
+  app.py names this one template and sends one `state`; the pieces are separate files.
+
+  Variables (passed through to the piece, see each piece for detail):
+    state         start | progress | review | disabled | unavailable | forbidden | failed | error
+    admission_id  start only
+    workflow      progress, review, failed
+    logged        review only: true or false after a decision, otherwise none
+    message, code disabled, unavailable, forbidden, error
+
+  state          piece
+  start          multi_agent_start.html
+  progress       multi_agent_progress.html
+  review         multi_agent_review.html: the decision form while awaiting review, the same
+                 result read-only once decided (it shows the "recorded" banner itself when
+                 `logged` is set)
+  anything else  multi_agent_message.html (it shows an unknown state as error)
+#}
+
+{% if state == 'start' %}
+  {% include 'partials/multi_agent_start.html' %}
+{% elif state == 'progress' %}
+  {% include 'partials/multi_agent_progress.html' %}
+{% elif state == 'review' %}
+  {% include 'partials/multi_agent_review.html' %}
+{% else %}
+  {% include 'partials/multi_agent_message.html' %}
+{% endif %}

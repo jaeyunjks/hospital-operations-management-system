@@ -1,0 +1,49 @@
+{#
+  multi_agent_start.html - HTMX fragment: the button that starts a discharge readiness review.
+  Rendered by GET /ai/discharge-review (app.py ai_discharge_review) when the admission has no
+  review yet. Fragment only, no page chrome.
+
+  Variables:
+    state         start (this piece is only rendered for that state)
+    admission_id  the admission the page asked about; sent back as a hidden field.
+                  Without one the field is empty and the backend rejects the start.
+
+  The button posts to /ai/discharge-review/start and the answer (progress, or a message)
+  replaces this whole piece, so the page needs no id for it. All text is autoescaped by
+  Jinja. Nothing here uses |safe.
+#}
+
+{# Container: aria-live so screen readers announce whatever lands here. #}
+<div class="ai-panel discharge-review discharge-review--start" aria-live="polite">
+  <div class="ai-panel__header">
+    {# Origin marker: required on every AI surface. Nothing is generated yet, so it
+       reads "AI review" here; the finished review carries "AI-generated". #}
+    <span class="ai-label">
+      <span class="ai-label__dot"></span>AI review
+    </span>
+    <h2 class="ai-panel__title">
+      Discharge readiness{% if admission_id is defined and admission_id is not none and admission_id != '' %}, admission {{ admission_id }}{% endif %}
+    </h2>
+  </div>
+
+  <div class="ai-panel__body">
+    <form class="stack"
+          hx-post="/ai/discharge-review/start"
+          hx-target="closest .ai-panel"
+          hx-swap="outerHTML"
+          hx-disabled-elt="find button">
+      <input type="hidden" name="admission_id"
+             value="{{ admission_id if (admission_id is defined and admission_id is not none) else '' }}">
+
+      {# Advisory label: stated before the button so it is read first. #}
+      <p class="ai-disclaimer">Advisory only. The assigned doctor decides.</p>
+      <p class="ai-disclaimer">A run can take a minute or two.</p>
+
+      <div class="row">
+        <button class="btn-secondary" type="submit">Check discharge readiness</button>
+        {# Shown only while this form's request is running. #}
+        <span class="htmx-indicator u-label">Starting check…</span>
+      </div>
+    </form>
+  </div>
+</div>

@@ -1,6 +1,6 @@
 /* ai-panel.css - care tasks and policy question panel.
-   Styles only the classes added for patient_summary.html, mcp_result.html and
-   rag_answer.html. Shared components (.panel, .alert, .status, .table, .ai-panel,
+   Styles only the classes added for patient_summary.html, mcp_result.html,
+   rag_answer.html and the multi_agent_*.html pieces. Shared components (.panel, .alert, .status, .table, .ai-panel,
    .textarea, buttons) keep their own styles; this file only places them.
    Variables are consumed, never declared. No radius, shadow, gradient or
    transition on data. Focus outlines are left to the shared :focus-visible rule. */
@@ -14,7 +14,8 @@
    serif display face the bare h2/h3 rule would give. */
 .ai-tools .panel__title,
 .ai-tools .section-header__title,
-.rag-answer .ai-panel__title {
+.rag-answer .ai-panel__title,
+.discharge-review .ai-panel__title {
   font-family: var(--font-ui);
   letter-spacing: normal;
   line-height: var(--leading-ui-tight);
@@ -47,7 +48,8 @@
 /* ---------- Fragment containers ---------- */
 
 .mcp-result,
-.rag-answer { min-width: 0; }
+.rag-answer,
+.discharge-review { min-width: 0; }
 
 /* ---------- Care tasks table (mcp_result.html) ---------- */
 
@@ -126,17 +128,72 @@
   white-space: nowrap;
 }
 
-/* ---------- Notices for states with no answer (rag_answer.html) ---------- */
+/* ---------- Banners with a status dot (rag_answer.html, multi_agent_message.html) ---------- */
 
-/* .status is nowrap by default; a notice has to wrap on narrow screens, with the
+/* .status is nowrap by default; a banner has to wrap on narrow screens, with the
    dot kept level with the first line. */
-.rag-notice .status {
+.alert .status {
   align-items: flex-start;
   white-space: normal;
   font-size: var(--size-ui-sm);
   line-height: var(--leading-ui-tight);
 }
 
-.rag-notice .status__dot {
+.alert .status__dot {
   margin-top: calc((var(--leading-ui-tight) * 1em - 6px) / 2);
 }
+
+/* ---------- Discharge readiness (multi_agent_*.html) ---------- */
+
+/* Backend error code under a banner title: data, so mono. */
+.alert__code {
+  margin-top: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--size-data);
+  color: var(--color-text-data);
+  overflow-wrap: anywhere;
+}
+
+/* One row per agent stage: name with its dot on the left, the word on the right.
+   Capped at the prose width so the word stays near the name on a wide panel. */
+.stage-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.stage-list__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: var(--prose-max);
+}
+
+.stage-list__state { margin-left: auto; }
+
+/* The review with its decision form (multi_agent_review.html). The comment box fills
+   the panel wherever the page places it. */
+.discharge-review--review .textarea { width: 100%; }
+
+/* One-line result above the checks. */
+.review-result {
+  font-size: var(--size-ui-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text-primary);
+}
+
+/* Recommendation, risks, decision and comment: prose in the UI face. pre-line keeps
+   the comment's own line breaks. */
+.review-text {
+  max-width: var(--prose-max);
+  font-size: var(--size-ui);
+  line-height: var(--leading-ui);
+  color: var(--color-text-secondary);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+/* Risks keep native bullets, so the list needs the indent the reset removed. */
+.review-risks { padding-left: var(--space-5); }
+
+.review-risks li + li { margin-top: var(--space-2); }

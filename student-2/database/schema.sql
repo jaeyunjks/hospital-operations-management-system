@@ -198,6 +198,17 @@ CREATE INDEX idx_surgery_requests_doctor    ON surgery_requests(doctor_id);
 -- of them. There is deliberately no cross-admission summary; a patient
 -- with several past admissions only ever gets summarised for the one
 -- they are currently in.
+--
+-- summary_scope has four values: 'clinical', 'consultation' and
+-- 'care_tasks' summarise one part of the stay; 'discharge_readiness' is
+-- the AI discharge readiness review.
+--
+-- review_status records the doctor's decision on the AI output:
+--   pending            no decision yet
+--   accepted           Approve
+--   edited             Correct
+--   partially_accepted Partly Accept
+--   rejected           Reject
 -- ------------------------------------------------------------
 CREATE TABLE ai_summaries (
     summary_id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -213,14 +224,14 @@ CREATE TABLE ai_summaries (
     source_documents           TEXT NOT NULL DEFAULT '[]'  -- JSON list of the policy document names a summary drew from; '[]' when none (every R0 row)
                                   CHECK (json_valid(source_documents)),
     summary_scope              TEXT NOT NULL DEFAULT 'clinical' 
-                                    CHECK (summary_scope IN ('clinical', 'consultation', 'care_tasks')), 
+                                    CHECK (summary_scope IN ('clinical', 'consultation', 'care_tasks', 'discharge_readiness')),
 
     generated_at                TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     -- Human review (this is the "human authority" control from the architecture doc)
     reviewed_by_staff_id      INTEGER,            -- from Staff & Shift service, NULL until someone reviews it
     review_status               TEXT NOT NULL DEFAULT 'pending'
-                                  CHECK (review_status IN ('pending', 'accepted', 'edited', 'rejected'))
+                                  CHECK (review_status IN ('pending', 'accepted', 'edited', 'partially_accepted', 'rejected'))
 );
 
 CREATE INDEX idx_ai_summaries_admission ON ai_summaries(admission_id);

@@ -1,0 +1,217 @@
+{#
+  multi_agent_review.html - HTMX fragment: the finished discharge readiness review, where the
+  assigned doctor decides. Rendered by the ai_discharge_review* routes (app.py) for the review
+  state, through discharge_review.html. Fragment only, no page chrome.
+
+  Variables:
+    state     review (this piece is only rendered for that state)
+    workflow  the backend workflow, as sent. Used here:
+                workflow_id, admission_id
+                status         awaiting_human_review shows the decision form;
+                               approved, corrected, rejected or partially_accepted
+                               shows the same result read-only; failed or anything
+                               else is shown through multi_agent_message.html
+                outcome        ready | not_ready (none: no result line)
+                checks         list of {id, label, passed}
+                gap            {current, target}
+                recommendation {text, risks}  (may be none)
+                stages         list of {name, done, source}
+                decision       {decision, comment} once decided, else none
+    logged    true or false only on the reply to a decision, otherwise none. When it is set
+              the "Decision recorded" banner is shown at the top of the panel.
+
+  Awaiting review: the form posts to /ai/discharge-review/<workflow_id>/decision and the
+  answer replaces this whole piece. The four buttons send decision = approve | correct |
+  partially_accept | reject. Approve and Reject are always both there. The comment box is
+  marked required so the browser stops an empty Correct; the other three buttons carry
+  formnovalidate, so for them it stays optional.
+
+  The AI is advisory only: nothing here discharges a patient. All text is autoescaped by
+  Jinja. Nothing here uses |safe.
+#}
+
+{% set wf = workflow if workflow is mapping else {} %}
+{% set status = wf.status if wf.status is string else none %}
+{% set awaiting = status == 'awaiting_human_review' %}
+{% set finished = status in ['approved', 'corrected', 'rejected', 'partially_accepted'] %}
+{% set workflow_id = wf.workflow_id if (wf.workflow_id is string and wf.workflow_id) else none %}
+
+{% if not (awaiting or finished) %}
+
+  {# Failed shows through the message piece; any other status is not a review to show. #}
+  {% with state=('failed' if status == 'failed' else 'error'), code=none, message=none %}
+    {% include 'partials/multi_agent_message.html' %}
+  {% endwith %}
+
+{% elif awaiting and workflow_id is none %}
+
+  {# A decision cannot be posted without the id, so show a message, not a dead form. #}
+  {% with state='error', code=none, message=none %}
+    {% include 'partials/multi_agent_message.html' %}
+  {% endwith %}
+
+{% else %}
+
+  {% set outcome = wf.outcome if wf.outcome in ['ready', 'not_ready'] else none %}
+  {% set checks = (wf.checks | selectattr('passed', 'defined') | list) if (wf.checks is sequence and wf.checks is not string) else [] %}
+  {% set blocked = checks | rejectattr('passed') | list | length %}
+  {% set gap = wf.gap if wf.gap is mapping else none %}
+  {% set rec = wf.recommendation if wf.recommendation is mapping else none %}
+  {% set rec_text = rec.text if (rec and rec.text is string and rec.text | trim) else none %}
+  {% set risks = (rec.risks | select('string') | list) if (rec and rec.risks is sequence and rec.risks is not string) else [] %}
+  {% set stages = wf.stages if (wf.stages is sequence and wf.stages is not string) else [] %}
+  {% set decided = wf.decision if wf.decision is mapping else none %}
+  {% set admission_id = wf.admission_id if wf.admission_id else none %}
+
+  {# Container: aria-live so screen readers announce whatever lands here. #}
+  <div class="ai-panel discharge-review discharge-review--review" aria-live="polite">
+    <div class="ai-panel__header">
+      {# Origin marker: required on every AI surface. #}
+      <span class="ai-label">
+        <span class="ai-label__dot"></span>AI-generated
+      </span>
+      <h2 class="ai-panel__title">
+        Discharge readiness{% if admission_id is not none %}, admission {{ admission_id }}{% endif %}
+      </h2>
+    </div>
+
+    <div class="ai-panel__body">
+      <div class="stack">
+
+        {# Only on the reply to a decision: confirms it, and says if the log was not saved. #}
+        {% if logged is boolean %}
+          {% with state='recorded' %}
+            {% include 'partials/multi_agent_message.html' %}
+          {% endwith %}
+        {% endif %}
+
+        {# Advisory label: stated before the result so it is read first. #}
+        <p class="ai-disclaimer">Advisory only. The assigned doctor decides.</p>
+
+        {# One-line result. #}
+        <p class="review-result">
+          {% if outcome == 'ready' %}
+            Ready for review
+          {% elif outcome == 'not_ready' %}
+            Not ready, <span class="u-mono">{{ blocked }}</span> item{{ 's' if blocked != 1 }} to review
+          {% else %}
+            Result not available
+          {% endif %}
+        </p>
+
+        {# The three checks: a dot and a word each. #}
+        {% if checks %}
+          <div class="stack stack--sm">
+            <p class="u-label">Checks</p>
+            <ul class="stage-list" role="list" aria-label="Checks">
+              {% for check in checks if check is mapping %}
+                <li class="stage-list__item">
+                  <span>{{ check.label }}</span>
+                  <span class="status {{ 'status--success' if check.passed is true else 'status--danger' }} stage-list__state">
+                    <span class="status__dot"></span><span>{{ 'Verified' if check.passed is true else 'Blocked' }}</span>
+                  </span>
+                </li>
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+
+        {# The Reviewer's recommendation. Plain text, escaped. #}
+        <div class="stack stack--sm">
+          <p class="u-label">Reviewer recommendation</p>
+          {% if rec_text %}
+            <p class="review-text">{{ rec_text }}</p>
+          {% else %}
+            <p class="review-text">No recommendation</p>
+          {% endif %}
+        </div>
+
+        <div class="stack stack--sm">
+          <p class="u-label">Risks</p>
+          {% if risks %}
+            <ul class="review-risks">
+              {% for risk in risks %}
+                <li class="review-text">{{ risk }}</li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="review-text">No risks listed</p>
+          {% endif %}
+        </div>
+
+        {# Basis line: the counts the result rests on, then the source of each stage. #}
+        <div class="stack stack--sm">
+          <p class="ai-basis">
+            Basis:
+            {% if gap and gap.current is number and gap.target is number %}
+              <span class="u-mono">{{ gap.current }}</span> of <span class="u-mono">{{ gap.target }}</span> checks passed
+            {% else %}
+              no check results
+            {% endif %}
+            {% if admission_id is not none %}for admission <span class="u-mono">{{ admission_id }}</span>{% endif %}
+          </p>
+          {% if stages %}
+            <ul class="stage-list" role="list" aria-label="Source by stage">
+              {% for stage in stages if stage is mapping %}
+                <li class="stage-list__item">
+                  <span>{{ stage.name | capitalize }}</span>
+                  <span class="stage-list__state u-mono">{{ stage.source if (stage.source is string and stage.source) else '—' }}</span>
+                </li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        </div>
+
+        {% if awaiting %}
+
+          {# The decision. 1000 is the backend's comment limit; the backend still checks it. #}
+          <form class="stack"
+                hx-post="/ai/discharge-review/{{ workflow_id | urlencode }}/decision"
+                hx-target="closest .ai-panel"
+                hx-swap="outerHTML"
+                hx-disabled-elt="find button">
+            <label class="field">
+              <span class="field__label">Comment</span>
+              <textarea class="textarea"
+                        name="comment"
+                        rows="3"
+                        maxlength="1000"
+                        required
+                        aria-describedby="discharge-review-comment-hint"></textarea>
+              <span class="field__hint" id="discharge-review-comment-hint">Required for Correct review. Optional for the other decisions</span>
+            </label>
+
+            <div class="row row--wrap">
+              <button class="btn-primary" type="submit" name="decision" value="approve" formnovalidate>Approve review</button>
+              <button class="btn-secondary" type="submit" name="decision" value="correct">Correct review</button>
+              <button class="btn-secondary" type="submit" name="decision" value="partially_accept" formnovalidate>Partly accept review</button>
+              <button class="btn-danger" type="submit" name="decision" value="reject" formnovalidate>Reject review</button>
+              {# Shown only while this form's request is running. #}
+              <span class="htmx-indicator u-label">Recording…</span>
+            </div>
+          </form>
+
+        {% else %}
+
+          {# Finished: read-only, no buttons. #}
+          <div class="stack stack--sm">
+            <p class="u-label">Doctor's decision</p>
+            {% if decided and decided.decision is string and decided.decision %}
+              <p class="review-text">{{ decided.decision | replace('_', ' ') | capitalize }}</p>
+              {% if decided.comment is string and decided.comment | trim %}
+                <p class="review-text">{{ decided.comment }}</p>
+              {% else %}
+                <p class="review-text">No comment</p>
+              {% endif %}
+            {% else %}
+              <p class="review-text">No decision shown</p>
+            {% endif %}
+          </div>
+
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+
+{% endif %}

@@ -27,11 +27,17 @@ helper raises AdmissionServiceError - callers are expected to catch it.
 The Patient & Admission Management service is part of the shared Compose
 stack. This module therefore validates admissions through its HTTP API rather
 than reading any other feature's database directly.
+
+When the USE_EXTERNAL_STUBS master switch (external_services) is on, the helper
+reports every admission as 'Active' and makes no HTTP request, so CI can run
+with only this service's own containers.
 """
 
 import os
 
 import requests
+
+from services import external_services
 
 # Base URL of the Patient & Admission Management service. Env-overridable for
 # Docker/deployment; localhost default for local dev.
@@ -81,7 +87,11 @@ class AdmissionNotActiveError(Exception):
 def _fetch_admission_status(admission_id):
     """
     Return one admission's admission_status string.
+
+    With USE_EXTERNAL_STUBS on, returns 'Active' without any HTTP request.
     """
+    if external_services._use_stubs():
+        return ACTIVE_STATUS
 
     url = f"{BASE_URL}/admissions/{admission_id}"
     try:
