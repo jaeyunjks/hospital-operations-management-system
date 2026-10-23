@@ -379,6 +379,26 @@
                 <div class="ai-tools__result" id="policy-question-result" aria-live="polite"></div>
               </section>
 
+              {# ---- Discharge readiness ---- #}
+              {#
+                Loads itself: the result area asks GET /ai/discharge-review for the
+                latest review of this admission as soon as the page loads, and the
+                backend's answer picks the piece (start button, progress, review or a
+                banner). The pieces swap themselves from there; this container never
+                sets hx-target, and must keep a plain "load" trigger (never "every").
+                  -> partials/discharge_review.html
+              #}
+              <section class="ai-tools__section" aria-labelledby="discharge-readiness-title">
+                <h3 class="section-header__title" id="discharge-readiness-title">Multi-Agent: Discharge readiness</h3>
+
+                <div class="ai-tools__result"
+                     id="discharge-readiness-result"
+                     aria-live="polite"
+                     hx-get="/ai/discharge-review?admission_id={{ (admission_id if admission_id is not none else '') | string | urlencode }}"
+                     hx-trigger="load"
+                     hx-swap="innerHTML"></div>
+              </section>
+
             </div>
           </div>
 

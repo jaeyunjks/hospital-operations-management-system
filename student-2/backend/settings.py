@@ -1,5 +1,5 @@
 """
-settings.py - Release 1 settings for the MCP and RAG integrations.
+settings.py - Release 2 settings for the MCP, RAG and Multi-Agent integrations.
 
 Every setting is a small function that reads the environment each time it is
 called, so tests can switch values (e.g. monkeypatch MCP_ENABLED) mid-run.
@@ -7,6 +7,7 @@ Nothing is read at import time.
 
 The names and defaults match Student 3 (services/mcp_client.py) and Student 5
 (config.py) so all backends are configured the same way in docker-compose.
+The MULTI_AGENT_* names are shared with Students 3 and 4.
 """
 
 import math
@@ -19,6 +20,9 @@ DEFAULT_MCP_SERVER_URL = "http://127.0.0.1:8000/mcp"
 DEFAULT_MCP_TIMEOUT = 15.0
 DEFAULT_RAG_SERVER_URL = "http://127.0.0.1:8100"
 DEFAULT_RAG_TIMEOUT = 100.0
+# The Multi-Agent Server runs on the host PC, outside Docker, on port 8200.
+DEFAULT_MULTI_AGENT_SERVER_URL = "http://127.0.0.1:8200"
+DEFAULT_MULTI_AGENT_TIMEOUT = 15.0
 
 # Values (compared in lower case) that switch a feature on.
 _TRUE_VALUES = {"1", "true", "yes", "on"}
@@ -81,3 +85,21 @@ def RAG_SERVER_URL():
 def RAG_TIMEOUT():
     """Per-request RAG deadline in seconds."""
     return _env_timeout("RAG_TIMEOUT", DEFAULT_RAG_TIMEOUT)
+
+
+# ------------------------------------------------------------
+# Multi-Agent (Multi-Agent Server)
+# ------------------------------------------------------------
+def MULTI_AGENT_ENABLED():
+    """Whether calls to the Multi-Agent Server are allowed (default: off)."""
+    return _env_flag("MULTI_AGENT_ENABLED")
+
+
+def MULTI_AGENT_SERVER_URL():
+    """Multi-Agent Server base URL, without a trailing slash."""
+    return _env_url("MULTI_AGENT_SERVER_URL", DEFAULT_MULTI_AGENT_SERVER_URL)
+
+
+def MULTI_AGENT_TIMEOUT():
+    """Per-request Multi-Agent deadline in seconds."""
+    return _env_timeout("MULTI_AGENT_TIMEOUT", DEFAULT_MULTI_AGENT_TIMEOUT)

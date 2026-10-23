@@ -33,6 +33,7 @@ BLUEPRINTS = [
     ("ai_summary",       "ai_summary_bp",       "/api/ai"),
     ("mcp_routes",       "mcp_bp",              "/api/mcp"),
     ("rag_routes",       "rag_bp",              "/api/rag"),
+    ("multi_agent_routes", "multi_agent_bp",    "/api/multi-agent"),
 ]
 
 

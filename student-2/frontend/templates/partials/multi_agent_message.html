@@ -1,0 +1,73 @@
+{#
+  multi_agent_message.html - HTMX fragment: one banner for every discharge readiness outcome
+  that has no review to show. Rendered by the ai_discharge_review* routes (app.py) for
+  disabled, unavailable, forbidden, failed and error. Fragment only, no page chrome.
+
+  Variables:
+    state     disabled | unavailable | forbidden | failed | error | recorded
+              (anything else shows as error)
+              "recorded" is not sent by app.py: the review piece includes this one with
+              state set to 'recorded' once the doctor's decision is saved.
+    message   disabled, unavailable, forbidden, error: the backend's own text. May be missing.
+    code      error only: the backend's error code. Missing for an unusable workflow id.
+    workflow  failed, recorded: the backend workflow. Used here: admission_id (title) and,
+              for recorded, decision.decision.
+    logged    recorded only: true or false. false means the review log was not saved.
+
+  Wording is fixed per state. The backend's message is added as a second line, never
+  used as the title. All text is autoescaped by Jinja. Nothing here uses |safe.
+#}
+
+{# One row per state: banner colour, dot and title. Colour is never the only signal:
+   the title always says what happened. #}
+{% set banners = {
+  'disabled':    {'tone': '',              'dot': 'status--pending', 'title': 'Discharge readiness check is switched off'},
+  'unavailable': {'tone': 'alert--warning', 'dot': 'status--warning', 'title': 'Discharge readiness check is unavailable'},
+  'forbidden':   {'tone': 'alert--info',    'dot': 'status--info',    'title': 'Discharge readiness check is limited to the assigned doctor'},
+  'failed':      {'tone': 'alert--danger',  'dot': 'status--danger',  'title': 'Discharge readiness check failed'},
+  'error':       {'tone': 'alert--danger',  'dot': 'status--danger',  'title': 'Discharge readiness check returned an error'},
+  'recorded':    {'tone': 'alert--success', 'dot': 'status--success', 'title': 'Decision recorded'},
+} %}
+
+{# Always one of six known values. #}
+{% set shown = state if state in banners else 'error' %}
+{% set banner = banners[shown] %}
+
+{% set has_workflow = workflow is mapping %}
+{% set admission_id = workflow.admission_id if (has_workflow and workflow.admission_id) else none %}
+{% set decision = workflow.decision.decision if (has_workflow and workflow.decision is mapping) else none %}
+
+{# Recorded, but the review log was not saved: the decision stands, so warning not danger. #}
+{% set unlogged = shown == 'recorded' and logged is false %}
+{% if unlogged %}
+  {% set banner = {'tone': 'alert--warning', 'dot': 'status--warning', 'title': banner.title} %}
+{% endif %}
+
+{# Name the identifier where the backend gave one. #}
+{% set scope = (', admission ' ~ admission_id) if (shown in ['failed', 'recorded'] and admission_id is not none) else '' %}
+
+{# Container: aria-live so screen readers announce whatever lands here. #}
+<div class="alert {{ banner.tone }} discharge-review discharge-review--message" aria-live="polite">
+  <div>
+    <span class="status {{ banner.dot }}">
+      <span class="status__dot"></span>
+      <span class="alert__title">{{ banner.title }}{{ scope }}</span>
+    </span>
+
+    {% if shown in ['disabled', 'unavailable', 'forbidden', 'error'] and message is string and message | trim %}
+      <p class="alert__body">{{ message }}</p>
+    {% endif %}
+
+    {% if shown == 'error' and code is string and code %}
+      <p class="alert__code">{{ code }}</p>
+    {% endif %}
+
+    {% if shown == 'recorded' and decision is string and decision %}
+      <p class="alert__body">Decision: {{ decision | replace('_', ' ') | capitalize }}</p>
+    {% endif %}
+
+    {% if unlogged %}
+      <p class="alert__body">The review log was not saved</p>
+    {% endif %}
+  </div>
+</div>

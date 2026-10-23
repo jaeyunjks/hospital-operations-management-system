@@ -1,0 +1,76 @@
+{#
+  multi_agent_progress.html - HTMX fragment: a discharge readiness review that is still running.
+  Rendered by POST /ai/discharge-review/start, GET /ai/discharge-review and
+  GET /ai/discharge-review/<workflow_id> (app.py) for the progress state. Fragment only.
+
+  Variables:
+    state     progress (this piece is only rendered for that state)
+    workflow  the backend workflow, as sent. Used here:
+                workflow_id    needed to ask again; without a usable one the piece
+                               shows the error message instead of waiting forever
+                admission_id   shown in the title, may be missing
+                stages         list of {name, done, source}: planner, worker, reviewer
+    logged    not used here
+
+  Refreshing: the piece asks for itself again 3 seconds after it loads and swaps the
+  answer in over itself. If the answer is another piece (review, failed, a message) it
+  has no refresh of its own, so the refreshing stops by itself. If the answer is this
+  piece again, the cycle repeats. All text is autoescaped by Jinja. Nothing here uses |safe.
+#}
+
+{% set workflow_id = workflow.workflow_id if (workflow is mapping and workflow.workflow_id is string and workflow.workflow_id) else none %}
+{% set stages = workflow.stages if (workflow is mapping and workflow.stages is sequence and workflow.stages is not string) else [] %}
+{% set admission_id = workflow.admission_id if (workflow is mapping and workflow.admission_id) else none %}
+
+{% if workflow_id is none %}
+
+  {# Nothing to ask again with, so show a message rather than a piece that never changes. #}
+  {% with state='error', code=none, message=none %}
+    {% include 'partials/multi_agent_message.html' %}
+  {% endwith %}
+
+{% else %}
+
+  {# Container: aria-live so screen readers announce whatever lands here.
+     The refresh sits on the container itself, so no page id is needed. #}
+  <div class="ai-panel discharge-review discharge-review--progress"
+       aria-live="polite"
+       hx-get="/ai/discharge-review/{{ workflow_id | urlencode }}"
+       hx-trigger="load delay:3s"
+       hx-swap="outerHTML">
+    <div class="ai-panel__header">
+      {# Origin marker: required on every AI surface. #}
+      <span class="ai-label">
+        <span class="ai-label__dot"></span>AI review
+      </span>
+      <h2 class="ai-panel__title">
+        Discharge readiness{% if admission_id is not none %}, admission {{ admission_id }}{% endif %}
+      </h2>
+    </div>
+
+    <div class="ai-panel__body">
+      <div class="stack">
+        <p>Planner, Worker and Reviewer are working</p>
+
+        {% if stages %}
+          {# role="list" keeps the list semantics with the bullets reset. #}
+          <ul class="stage-list" role="list">
+            {% for stage in stages if stage is mapping %}
+              {% set done = stage.done is true %}
+              <li class="stage-list__item">
+                {# Done: filled green dot. Working: hollow dot. The word is always shown too. #}
+                <span class="status {{ 'status--success' if done else 'status--pending' }}">
+                  <span class="status__dot"></span><span>{{ stage.name | capitalize }}</span>
+                </span>
+                <span class="stage-list__state u-label">{{ 'done' if done else 'working' }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+
+        <p class="ai-disclaimer">Advisory only. The assigned doctor decides.</p>
+      </div>
+    </div>
+  </div>
+
+{% endif %}

@@ -26,6 +26,9 @@ Scenarios (>= 1 test per listed edge case, plus branch variations):
      non-JSON body, JSON without admission_status, and empty-string status.
   6. Extra checks: the correct URL/timeout are used; 'active' lowercase is NOT
      treated as active (case-sensitive); the error carries status_code.
+  7. USE_EXTERNAL_STUBS master switch: on -> every admission is Active and no
+     request is made; off/unset -> exactly the behaviour above; the value is
+     parsed by external_services._use_stubs() (so " TRUE " is on, "1" is not).
 """
 
 import os
@@ -68,6 +71,16 @@ class _FakeResponse:
             # requests raises ValueError (json.JSONDecodeError subclasses it).
             raise ValueError("no JSON object could be decoded")
         return self._json_body
+
+
+@pytest.fixture(autouse=True)
+def stubs_switch_unset(monkeypatch):
+    """
+    Start every test with USE_EXTERNAL_STUBS unset, so a CI or container
+    environment that turns the master switch on cannot short-circuit the
+    HTTP-path tests below.
+    """
+    monkeypatch.delenv("USE_EXTERNAL_STUBS", raising=False)
 
 
 @pytest.fixture
@@ -268,3 +281,86 @@ def test_admission_id_is_interpolated_into_the_url(mock_get):
     mock_get.return_value = _ok("Active")
     cancel_if_inactive(2024)
     assert mock_get.call_args.args[0].endswith("/admissions/2024")
+
+
+# ==========================================================================
+# 7. USE_EXTERNAL_STUBS master switch.
+# ==========================================================================
+def test_switch_on_makes_no_request_and_counts_as_active(monkeypatch, mock_get):
+    """
+    With USE_EXTERNAL_STUBS=true the shared helper must answer 'Active' itself:
+    creation is allowed, no auto-cancel is asked for, and requests.get is never
+    called - even though it is rigged to fail if it were.
+    """
+    monkeypatch.setenv("USE_EXTERNAL_STUBS", "true")
+    mock_get.side_effect = requests.ConnectionError("service not running")
+
+    assert av._fetch_admission_status(123) == "Active"
+    assert require_active_for_create(123) is None
+    assert cancel_if_inactive(123) is False
+    mock_get.assert_not_called()
+
+
+def test_switch_is_read_from_the_existing_external_services_function(monkeypatch, mock_get):
+    """
+    admission_validation must reuse external_services._use_stubs() rather than
+    parse the environment itself: forcing that function to True (with the
+    variable unset) is enough to bypass the HTTP call.
+    """
+    monkeypatch.setattr(av.external_services, "_use_stubs", lambda: True)
+
+    assert require_active_for_create(5) is None
+    mock_get.assert_not_called()
+
+
+@pytest.mark.parametrize("value", [None, "false", "", "0"])
+def test_switch_off_behaves_as_before(monkeypatch, mock_get, value):
+    """
+    Unset, 'false', empty and '0' all mean off: the HTTP request is made with
+    the usual URL and timeout, and a non-active status still blocks creation.
+    """
+    if value is not None:
+        monkeypatch.setenv("USE_EXTERNAL_STUBS", value)
+    mock_get.return_value = _ok("Pending")
+
+    with pytest.raises(AdmissionNotActiveError) as excinfo:
+        require_active_for_create(42)
+
+    assert excinfo.value.admission_status == "Pending"
+    mock_get.assert_called_once()
+    assert mock_get.call_args.args[0] == f"{av.BASE_URL}/admissions/42"
+    assert mock_get.call_args.kwargs["timeout"] == av.TIMEOUT
+
+
+def test_switch_off_still_surfaces_api_failure(monkeypatch, mock_get):
+    """Off means the unreachable-service error is raised exactly as today."""
+    monkeypatch.setenv("USE_EXTERNAL_STUBS", "false")
+    mock_get.side_effect = requests.Timeout("read timed out")
+
+    with pytest.raises(AdmissionServiceError):
+        cancel_if_inactive(1)
+
+
+@pytest.mark.parametrize("value", [" TRUE ", "True", "TRUE", "\ttrue\n"])
+def test_switch_value_is_trimmed_and_case_insensitive(monkeypatch, mock_get, value):
+    """
+    The existing switch strips whitespace and lower-cases before comparing to
+    'true', so ' TRUE ' is ON here too: no request, admission is Active.
+    """
+    monkeypatch.setenv("USE_EXTERNAL_STUBS", value)
+
+    assert cancel_if_inactive(7) is False
+    mock_get.assert_not_called()
+
+
+@pytest.mark.parametrize("value", ["1", "yes", "on", "truee"])
+def test_switch_only_accepts_true_like_the_existing_switch(monkeypatch, mock_get, value):
+    """
+    The existing switch is stricter than the MCP/RAG flags: only 'true' counts.
+    '1', 'yes' and 'on' are OFF, so the normal HTTP path runs.
+    """
+    monkeypatch.setenv("USE_EXTERNAL_STUBS", value)
+    mock_get.return_value = _ok("Active")
+
+    assert require_active_for_create(8) is None
+    mock_get.assert_called_once()

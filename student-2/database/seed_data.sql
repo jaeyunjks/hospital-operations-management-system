@@ -76,14 +76,14 @@ VALUES
 -- Nursing tasks for James Wilson (id 7), some for Aisha Khan (id 8).
 -- All raised by Dr Chen (doctor_id 1), except task_id 11 which Dr Nair
 -- (doctor_id 2) raised on his own record (record_id 2, admission 6).
--- task_id 2 and 5 and 8 are completed.
+-- task_id 1, 2, 3, 5, 6, 8, 11 and 12 are completed.
 -- ------------------------------------------------------------
 INSERT INTO care_tasks
     (task_id, clinical_record_id, doctor_id, assigned_nurse_id, task_description, notes, status, due_at, completed_at, cancelled_by)
 VALUES
     (1, 1, 1, 7, 'Administer IV ceftriaxone 1g and record response.', 'First dose given, no reaction.', 'completed', '2026-08-24 10:00:00', '2026-08-24 10:05:00', NULL),
-    (2, 1, 1, 7, 'Record vital signs every 4 hours.', 'Ongoing - obs stable overnight, fever trending down.', 'acknowledged', '2026-08-24 12:00:00', NULL, NULL),
-    (3, 10, 1, 7, 'Switch antibiotic administration to oral and confirm patient tolerating.', NULL, 'pending', '2026-08-26 12:00:00', NULL, NULL),
+    (2, 1, 1, 7, 'Record vital signs every 4 hours.', 'Ongoing - obs stable overnight, fever trending down.', 'completed', '2026-08-24 12:00:00', '2026-08-27 08:00:00', NULL),
+    (3, 10, 1, 7, 'Switch antibiotic administration to oral and confirm patient tolerating.', NULL, 'completed', '2026-08-26 12:00:00', '2026-08-26 12:20:00', NULL),
     (4, 3, 1, 8, 'Keep patient nil by mouth and maintain IV fluids pre-theatre.', 'NBM signage in place, 1L Hartmann running.', 'acknowledged', '2026-08-26 16:00:00', NULL, NULL),
     (5, 6, 1, 7, 'Remove abdominal dressing on post-op day 3 and inspect wounds.', 'Wounds clean and dry, no signs of infection. Left exposed.', 'completed', '2026-08-25 09:00:00', '2026-08-25 09:20:00', NULL),
     (6, 6, 1, 7, 'Encourage mobilisation three times daily and document distance.', 'Task closed administratively after discharge.', 'completed', '2026-08-24 09:00:00', '2026-08-29 10:00:00', NULL),

@@ -46,6 +46,12 @@ from flask import Blueprint, jsonify, request
 from auth import AuthError, get_current_user, require_role
 from services import database_client as db
 from services import ollama_client
+from services.admission_data import (
+    care_tasks_for_admission,
+    clinical_records_for_admission,
+    consultations_for_admission,
+    patient_id_for_admission,
+)
 
 ai_summary_bp = Blueprint("ai_summary", __name__)
 
@@ -103,44 +109,13 @@ def _as_int(value):
 
 
 # ============================================================
-# Data gathering - all admission-scoped, all filtered locally so a previous
-# admission's rows can never enter the text we send to the model.
-# ============================================================
-def _clinical_records_for_admission(admission_id):
-    """
-    Every clinical_records row for this admission and no other. Mirrors
-    clinical_records._records_for_admission - the admission-scoped GET.
-    """
-    wanted = _as_int(admission_id)
-    rows = db.list_clinical_records() or []
-    return [r for r in rows if r.get("admission_id") == wanted]
-
-
-def _consultations_for_admission(admission_id):
-    """Every consultation_requests row for this admission and no other."""
-    wanted = _as_int(admission_id)
-    rows = db.list_consultation_requests() or []
-    return [c for c in rows if c.get("admission_id") == wanted]
-
-
-def _care_tasks_for_admission(admission_id):
-    """
-    care_tasks link to an admission only via clinical_record_id, so resolve the
-    admission's record ids first, then the tasks hanging off them.
-    """
-    record_ids = {r.get("record_id") for r in _clinical_records_for_admission(admission_id)}
-    tasks = db.list_care_tasks() or []
-    return [t for t in tasks if t.get("clinical_record_id") in record_ids]
-
-
-# ============================================================
 # Access + text building, one function per scope. Each returns
 #   (records_text, patient_id)  on success
 # or raises AuthError if the caller has no connection to the admission.
 # ============================================================
 def _gather_clinical(admission_id, user_id):
     """Doctor: clinical records for the admission where they are the assigned doctor."""
-    records = _clinical_records_for_admission(admission_id)
+    records = clinical_records_for_admission(admission_id)
     mine = [r for r in records if r.get("doctor_id") == user_id]
     if not mine:
         raise AuthError(
@@ -163,7 +138,7 @@ def _gather_clinical(admission_id, user_id):
 
 def _gather_consultation(admission_id, user_id):
     """Specialist: consultation reason(s) for the admission addressed to them."""
-    consults = _consultations_for_admission(admission_id)
+    consults = consultations_for_admission(admission_id)
     mine = [c for c in consults if c.get("specialist_id") == user_id]
     if not mine:
         raise AuthError(
@@ -180,7 +155,7 @@ def _gather_care_tasks(admission_id, user_id):
     Nurse: ONLY the care tasks on this admission that are assigned to this nurse.
     The nurse never sees the clinical record content itself.
     """
-    tasks = _care_tasks_for_admission(admission_id)
+    tasks = care_tasks_for_admission(admission_id)
     mine = [t for t in tasks if t.get("assigned_nurse_id") == user_id]
     if not mine:
         raise AuthError(
@@ -198,8 +173,7 @@ def _gather_care_tasks(admission_id, user_id):
             )
         )
     # patient_id isn't on care_tasks; take it from the admission's records.
-    records = _clinical_records_for_admission(admission_id)
-    patient_id = records[0].get("patient_id") if records else None
+    patient_id = patient_id_for_admission(admission_id)
     return "\n".join(parts), patient_id
 
 
@@ -366,13 +340,13 @@ def _may_review(summary, role, user_id):
     # 2. Assignment relationship to the same admission, by role.
     try:
         if role == "doctor":
-            records = _clinical_records_for_admission(admission_id)
+            records = clinical_records_for_admission(admission_id)
             return any(r.get("doctor_id") == user_id for r in records)
         if role == "specialist":
-            consults = _consultations_for_admission(admission_id)
+            consults = consultations_for_admission(admission_id)
             return any(c.get("specialist_id") == user_id for c in consults)
         if role == "nurse":
-            tasks = _care_tasks_for_admission(admission_id)
+            tasks = care_tasks_for_admission(admission_id)
             return any(t.get("assigned_nurse_id") == user_id for t in tasks)
     except db.DatabaseClientError:
         # Can't confirm a relationship -> treat as not permitted (fail safe).
