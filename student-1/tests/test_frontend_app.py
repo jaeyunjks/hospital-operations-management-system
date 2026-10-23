@@ -805,3 +805,17 @@ def test_partial_acceptance_redirects_to_follow_up_workflow(client, monkeypatch)
 
     assert result.status_code == 302
     assert "workflow_id=next-id" in result.location
+
+
+def test_health_reports_backend_and_database(client, monkeypatch):
+    monkeypatch.setattr(frontend_app, "_api_get", lambda path, **kw: {"ok": True})
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.get_json()["database_service"]["status"] == "ok"
+
+
+def test_health_degraded_when_backend_unreachable(client, monkeypatch):
+    monkeypatch.setattr(frontend_app, "_api_get", lambda path, **kw: None)
+    response = client.get("/health")
+    assert response.status_code == 503
+    assert response.get_json()["status"] == "degraded"

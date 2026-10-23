@@ -338,6 +338,19 @@ def build_search_results(search_text, status_filter, snapshot, emergency_only=Fa
     return results
 
 
+@app.get("/health")
+def health():
+    backend_ok = _api_get("/health") is not None
+    database_ok = backend_ok and _api_get("/api/patients") is not None
+    healthy = backend_ok and database_ok
+    return {
+        "status": "ok" if healthy else "degraded",
+        "service": "student-1-frontend",
+        "backend_service": {"status": "ok" if backend_ok else "unavailable"},
+        "database_service": {"status": "ok" if database_ok else "unavailable"},
+    }, (200 if healthy else 503)
+
+
 @app.route("/")
 def census_page():
     snapshot = get_seed_snapshot()
