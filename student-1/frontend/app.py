@@ -27,6 +27,7 @@ NAV_ITEMS = [
     {"id": "census", "label": "Census", "href": "/"},
     {"id": "intake", "label": "Intake", "href": "/intake"},
     {"id": "search", "label": "Search", "href": "/search"},
+    {"id": "scheduling-review", "label": "Scheduling review", "href": "/admission-scheduling-review"},
 ]
 
 MERGE_FIELD_GROUPS = {
@@ -442,6 +443,153 @@ def rag_guidance_partial():
         "partials/rag_guidance_result.html", result=None,
         question=question, error_kind=error_kind,
     )
+
+
+def _multi_agent_error(response):
+    try:
+        payload = response.json()
+    except ValueError:
+        return "The Multi-Agent service returned an unreadable response."
+    data = payload.get("data", {}) if isinstance(payload, dict) else {}
+    if isinstance(data, dict):
+        error = data.get("error")
+        messages = {
+            "multi_agent_disabled": "Multi-Agent review is disabled.",
+            "multi_agent_unavailable": "The Multi-Agent service is unavailable.",
+            "multi_agent_timeout": "The Multi-Agent service timed out.",
+            "multi_agent_invalid_response": "The Multi-Agent service returned an invalid response.",
+            "multi_agent_workflow_conflict": "This workflow is not waiting for a human decision.",
+        }
+        return messages.get(error, error or "The Multi-Agent service is unavailable.")
+    return "The Multi-Agent service is unavailable."
+
+
+@app.route("/admission-scheduling-review", methods=["GET", "POST"])
+def admission_scheduling_review_page():
+    workflow = None
+    workflow_error = request.args.get("error")
+    notice = request.args.get("notice")
+    workflow_id = request.args.get("workflow_id")
+    form_values = {
+        "date": request.form.get("date", (date.today() + timedelta(days=1)).isoformat()),
+        "duration_choice": request.form.get("duration_choice", "60"),
+        "duration_custom": request.form.get("duration_custom", ""),
+    }
+    duration_minutes = (
+        form_values["duration_custom"]
+        if form_values["duration_choice"] == "custom"
+        else form_values["duration_choice"]
+    )
+
+    if request.method == "POST":
+        try:
+            response = requests.post(
+                f"{BACKEND_URL}/api/multi-agent/admission-scheduling",
+                json={
+                    "date": form_values["date"],
+                    "duration_minutes": duration_minutes,
+                },
+                headers=_identity_headers(),
+                timeout=10,
+            )
+        except requests.Timeout:
+            workflow_error = "The scheduling review request timed out."
+        except requests.RequestException:
+            workflow_error = "The scheduling review service is unavailable."
+        else:
+            if response.status_code == 202:
+                try:
+                    payload = response.json()
+                    workflow_id = payload["data"]["workflow_id"]
+                except (ValueError, KeyError, TypeError):
+                    workflow_error = "The scheduling review returned an invalid response."
+                else:
+                    return redirect(url_for(
+                        "admission_scheduling_review_page",
+                        workflow_id=workflow_id,
+                    ))
+            else:
+                workflow_error = _multi_agent_error(response)
+
+    if request.method == "GET" and workflow_id:
+        try:
+            response = requests.get(
+                f"{BACKEND_URL}/api/multi-agent/admission-scheduling/{workflow_id}",
+                headers=_identity_headers(),
+                timeout=10,
+            )
+        except requests.Timeout:
+            workflow_error = "Loading the scheduling review timed out."
+        except requests.RequestException:
+            workflow_error = "The scheduling review service is unavailable."
+        else:
+            if response.ok:
+                try:
+                    payload = response.json()
+                    workflow = payload.get("data") if isinstance(payload, dict) else None
+                except ValueError:
+                    workflow_error = "The scheduling review returned an invalid response."
+            else:
+                workflow_error = _multi_agent_error(response)
+
+    return render_template(
+        "admission_scheduling_review.html",
+        active_page="scheduling-review",
+        nav=NAV_ITEMS,
+        identity=current_identity(),
+        page_title="Admission scheduling review",
+        page_context="Patient & Admissions / Scheduling review",
+        form_values=form_values,
+        workflow=workflow,
+        workflow_id=workflow_id,
+        workflow_error=workflow_error,
+        notice=notice,
+    )
+
+
+@app.post("/admission-scheduling-review/<workflow_id>/review")
+def submit_admission_scheduling_review(workflow_id):
+    try:
+        response = requests.post(
+            f"{BACKEND_URL}/api/multi-agent/admission-scheduling/{workflow_id}/review",
+            json={
+                "decision": request.form.get("decision", ""),
+                "comment": request.form.get("comment", ""),
+            },
+            headers=_identity_headers(),
+            timeout=10,
+        )
+    except requests.Timeout:
+        error = "Recording the human review timed out."
+    except requests.RequestException:
+        error = "The scheduling review service is unavailable."
+    else:
+        if response.ok:
+            next_id = None
+            if request.form.get("decision") == "partially_accept":
+                try:
+                    next_id = response.json()["data"].get("next_workflow_id")
+                except (ValueError, KeyError, TypeError, AttributeError):
+                    next_id = None
+            if next_id:
+                return redirect(url_for(
+                    "admission_scheduling_review_page", workflow_id=next_id
+                ))
+            notice = (
+                "No further times remain to review."
+                if request.form.get("decision") == "partially_accept" else None
+            )
+            return redirect(url_for(
+                "admission_scheduling_review_page",
+                workflow_id=workflow_id,
+                notice=notice,
+            ))
+        error = _multi_agent_error(response)
+    return redirect(url_for(
+        "admission_scheduling_review_page",
+        workflow_id=workflow_id,
+        error=error,
+    ))
 
 
 @app.route("/export")

@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block content %}
+<header class="page-header">
+  <div class="context-line">{{ page_context }}</div>
+  <div class="header-row">
+    <div>
+      <h1>{{ page_title }}</h1>
+      <p>Review candidate times against recorded admissions. This is not a capacity check or booking.</p>
+    </div>
+  </div>
+</header>
+
+{% if workflow_error %}
+<div class="banner banner-risk" role="alert">{{ workflow_error }}</div>
+{% endif %}
+{% if notice %}
+<div class="banner">{{ notice }}</div>
+{% endif %}
+
+{% if not workflow_id %}
+<section class="panel scheduling-panel">
+  <div class="panel-header"><div><span class="eyebrow">Read-only proposal</span><h2>Choose a day and admission length</h2></div></div>
+  <p>Student-1 checks only for overlap with recorded Pending or Active admissions. It does not have authoritative future capacity data.</p>
+  <form class="form-grid" method="post">
+    <div class="field-group">
+      <label for="schedule-date">Date</label>
+      <input id="schedule-date" name="date" type="date" value="{{ form_values.date }}" required />
+    </div>
+    <div class="field-group">
+      <label for="duration-choice">Duration</label>
+      <select id="duration-choice" name="duration_choice" required>
+        {% for d in (15, 30, 45, 60) %}<option value="{{ d }}" {% if form_values.duration_choice == d|string %}selected{% endif %}>{{ d }} minutes</option>{% endfor %}
+        <option value="custom" {% if form_values.duration_choice == 'custom' %}selected{% endif %}>60+ (enter minutes)</option>
+      </select>
+      <input id="duration-custom" name="duration_custom" type="number" min="75" max="480" step="15" value="{{ form_values.duration_custom }}" placeholder="Minutes (multiple of 15, 75–480)" {% if form_values.duration_choice != 'custom' %}hidden{% endif %} />
+    </div>
+    <p class="field-group wide muted">Candidate starts are hourly within assumed clinic hours of 08:00–18:00, and each must finish by 18:00. Past times are excluded. Three conflict-free times are reviewed first; choosing “Partially accept” afterwards sends three others for review.</p>
+    <div class="field-group wide submit-row">
+      <button class="btn btn-primary" type="submit">Request Multi-Agent review</button>
+    </div>
+  </form>
+  <script>
+    (function () {
+      var choice = document.getElementById('duration-choice');
+      var custom = document.getElementById('duration-custom');
+      function sync() {
+        var isCustom = choice.value === 'custom';
+        custom.hidden = !isCustom;
+        custom.required = isCustom;
+      }
+      choice.addEventListener('change', sync);
+      sync();
+    })();
+  </script>
+</section>
+{% elif not workflow %}
+<section class="panel scheduling-panel">
+  <p>The workflow could not be loaded.</p>
+  <a class="btn btn-secondary" href="{{ url_for('admission_scheduling_review_page') }}">Start another review</a>
+</section>
+{% endif %}
+
+{% if workflow %}
+<section class="panel scheduling-panel">
+  <div class="panel-header">
+    <div><span class="eyebrow">Workflow {{ workflow.workflow_id }}</span><h2>Status: {{ workflow.status|replace('_', ' ')|title }}</h2></div>
+    {% if workflow.status == 'in_progress' %}
+    <a class="btn btn-secondary" href="{{ url_for('admission_scheduling_review_page', workflow_id=workflow.workflow_id) }}">Refresh status</a>
+    {% endif %}
+  </div>
+  {% if workflow.status == 'in_progress' %}
+  <p class="banner">The Planner, Worker and Reviewer are running. With live models this can take 1–2 minutes (longer on the first run). This page refreshes automatically every 3 seconds until the human review step is ready.</p>
+  <script>setTimeout(function () { window.location.reload(); }, 3000);</script>
+  {% endif %}
+  <p><strong>Task:</strong> {{ workflow.task }}</p>
+  {% set evidence = workflow.submitted_evidence or {} %}
+  {% if evidence.options %}
+  <h3>Candidate options</h3>
+  <p>Showing {{ evidence.candidate_times_included }} of {{ evidence.candidate_times_found }} possible start times.{% if evidence.previously_reviewed_times %} {{ evidence.previously_reviewed_times|length }} earlier time(s) were already reviewed.{% endif %}</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Time</th><th>Recorded overlap</th><th>Schedule evidence</th></tr></thead>
+      <tbody>
+        {% for option in evidence.options %}
+        <tr>
+          <td>{{ option.label }}</td>
+          <td>{{ 'Yes' if option.attributes.has_recorded_admission_overlap else 'No' }}</td>
+          <td>{{ 'Complete' if option.attributes.schedule_evidence_complete else 'Incomplete' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  <p class="banner banner-risk">No capacity source is available. A conflict-free time is not a confirmed slot. This workflow never creates or changes an admission.</p>
+</section>
+
+{% for stage_name in ['planner', 'worker', 'reviewer'] %}
+  {% set stage = workflow[stage_name] %}
+  {% if stage and stage.output %}
+  <section class="panel scheduling-panel">
+    <div class="panel-header"><div><span class="eyebrow">Multi-Agent stage</span><h2>{{ stage_name|title }}</h2></div></div>
+    {% if stage_name == 'worker' %}
+      {% set proposal = stage.output.proposed_solution or {} %}
+      <p><strong>Proposal:</strong> {{ proposal.selected_option or 'No eligible option' }}</p>
+      {% if proposal.reasoning %}<ul>{% for reason in proposal.reasoning %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
+      {% if stage.output.limitations %}<h3>Limitations</h3><ul>{% for limitation in stage.output.limitations %}<li>{{ limitation }}</li>{% endfor %}</ul>{% endif %}
+      <p><strong>Mutation executed:</strong> {{ stage.output.mutation_executed }}</p>
+    {% elif stage_name == 'reviewer' %}
+      <p><strong>Recommendation:</strong> {{ stage.output.recommendation }}</p>
+      {% if stage.output.risks %}<h3>Reviewer risks</h3><ul>{% for risk in stage.output.risks %}<li>{{ risk }}</li>{% endfor %}</ul>{% endif %}
+      {% if stage.output.unsupported_claims %}<h3>Unsupported claims</h3><ul>{% for claim in stage.output.unsupported_claims %}<li>{{ claim }}</li>{% endfor %}</ul>{% endif %}
+      <p><strong>Human approval required:</strong> {{ stage.output.human_approval_required }}</p>
+    {% else %}
+      <p><strong>Goal:</strong> {{ stage.output.goal }}</p>
+      {% if stage.output.planned_steps %}<ol>{% for step in stage.output.planned_steps %}<li>{{ step }}</li>{% endfor %}</ol>{% endif %}
+    {% endif %}
+  </section>
+  {% endif %}
+{% endfor %}
+
+{% if workflow.status == 'awaiting_human_review' %}
+<section class="panel scheduling-panel">
+  <div class="panel-header"><div><span class="eyebrow">Required human decision</span><h2>Review this proposal</h2></div></div>
+  <p>Recording a decision does not book a time or modify an admission.</p>
+  <form class="form-grid" method="post" action="{{ url_for('submit_admission_scheduling_review', workflow_id=workflow.workflow_id) }}">
+    <div class="field-group">
+      <label for="review-decision">Decision</label>
+      <select id="review-decision" name="decision" required>
+        <option value="approve">Approve proposal</option>
+        <option value="correct">Correct proposal</option>
+        <option value="partially_accept">Partially accept (review 3 other times)</option>
+        <option value="reject">Reject proposal</option>
+      </select>
+    </div>
+    <div class="field-group wide">
+      <label for="review-comment">Review comment or correction (required for correction)</label>
+      <textarea id="review-comment" name="comment" rows="3" maxlength="10000"></textarea>
+    </div>
+    <div class="field-group wide submit-row"><button class="btn btn-primary" type="submit">Record human review</button></div>
+  </form>
+</section>
+{% elif workflow.final_result %}
+<section class="panel scheduling-panel">
+  <div class="panel-header"><div><span class="eyebrow">Recorded human review</span><h2>{{ workflow.status|replace('_', ' ')|title }}</h2></div></div>
+  {% if workflow.final_result.error %}
+  <p role="alert">{{ workflow.final_result.error }}</p>
+  {% else %}
+  <p>{{ workflow.final_result.human_comments_or_correction or 'No comment recorded.' }}</p>
+  {% endif %}
+  <p>This is a review record only. No admission was created or changed.</p>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

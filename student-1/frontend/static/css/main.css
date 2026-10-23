@@ -1399,3 +1399,20 @@ tbody tr:hover {
     gap: 8px;
   }
 }
+
+.scheduling-panel > p:not(.banner),
+.scheduling-panel > h3,
+.scheduling-panel > ul,
+.scheduling-panel > ol {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.scheduling-panel > ul,
+.scheduling-panel > ol {
+  padding-left: 40px;
+}
+
+.scheduling-panel > h3 {
+  margin-top: 16px;
+}

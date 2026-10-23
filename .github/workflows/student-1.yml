@@ -21,6 +21,8 @@ env:
   STUDENT1_MCP_ENABLED: "false"
   RAG_ENABLED: "false"
   STUDENT1_RAG_ENABLED: "false"
+  MULTI_AGENT_ENABLED: "false"
+  STUDENT1_MULTI_AGENT_ENABLED: "false"
 
 jobs:
   validate:
@@ -85,3 +87,23 @@ jobs:
           curl --fail --show-error http://localhost:6100/health
           curl --fail --show-error http://localhost:5100/health
           curl --fail --show-error http://localhost:3100/
+
+      - name: Post-commit endpoint tests (emergency admission and patient merge)
+        env:
+          STUDENT1_BACKEND_URL: http://localhost:5100
+        run: |
+          set -e
+          trap 'docker compose down --volumes --remove-orphans' EXIT
+          docker compose up -d --build --wait \
+            student-1-database student-1-backend
+          python3 -m pip install --quiet pytest
+          python3 -m pytest -v student-1/tests/test_endpoints_ci.py \
+            --junitxml=test-results/student-1-endpoints.xml 2>&1 | tee /tmp/s1-endpoint-tests.txt
+          test "${PIPESTATUS[0]}" -eq 0
+
+      - name: Upload the endpoint-test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-1-junit
+          path: test-results/student-1-endpoints.xml

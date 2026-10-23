@@ -1,0 +1,589 @@
+{
+  "schema_version": 1,
+  "release": "R2",
+  "mode": "multi-agent",
+  "run_id": "20261022T234016.838978Z",
+  "model": "llama3.1:8b",
+  "ollama_url": "http://127.0.0.1:11434",
+  "multi_agent_url": "http://127.0.0.1:8200",
+  "plan": {
+    "evidence": [
+      "workflow:bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658",
+      "workflow:ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    ],
+    "checks": [
+      "MA1 stages run Planner -> Worker -> Reviewer -> Human Review",
+      "MA2 Planner defines the plan and the required evidence",
+      "MA3 Worker returns a result and cites the evidence it used",
+      "MA4 Worker covers every piece of evidence the Planner required (advisory)",
+      "MA5 Reviewer gives a verdict, risks and recommendations",
+      "MA6 Human Review records a valid decision, with correction details for 'corrected'",
+      "MA6 Rejections and partial acceptances explain why (advisory)",
+      "MA7 Audit log is ordered and covers every actor",
+      "MA8 Workflow status matches the human decision (advisory)",
+      "MA9 Agents ran on the live model, not the deterministic fallback (advisory)",
+      "MA10 Final result agrees with the persisted workflow outcome when present",
+      "MA11 Explicit mutation-safety fields prohibit and deny operational mutation",
+      "MA12 RAG provenance is grounded, advisory and separated from operational facts (advisory)",
+      "MA13 MCP provenance identifies controlled retrieval and backend consistency (advisory)"
+    ]
+  },
+  "observations": [
+    {
+      "origin": "workflow:bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658",
+      "workflow_id": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658",
+      "feature": null,
+      "request": "Review the listed admission time options against the hard constraints. Conflict-free means no overlap with recorded admissions, not confirmed capacity. Do not make any record changes.",
+      "status": "approved",
+      "stages": [
+        "planner",
+        "worker",
+        "reviewer",
+        "human"
+      ],
+      "step_times": [
+        [
+          "2026-10-22T23:39:58.923Z",
+          "2026-10-22T23:39:58.923Z"
+        ],
+        [
+          "2026-10-22T23:39:58.923Z",
+          "2026-10-22T23:39:58.924Z"
+        ],
+        [
+          "2026-10-22T23:39:58.924Z",
+          "2026-10-22T23:39:58.924Z"
+        ],
+        [
+          "2026-10-22T23:39:58.956Z",
+          "2026-10-22T23:39:58.956Z"
+        ]
+      ],
+      "planner": {
+        "plan": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "required_evidence": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ]
+      },
+      "worker": {
+        "result": "proposal_ready: 08:00-09:00",
+        "evidence_used": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ]
+      },
+      "reviewer": {
+        "verdict": "validated_with_risks",
+        "risks": [
+          "Student-1 has no authoritative future slot-capacity source. A conflict-free option is not a confirmed booking or capacity guarantee.",
+          "5 recorded admission(s) have no end time and start on another date; they were not compared."
+        ],
+        "recommendations": [
+          "The proposal is evidence-consistent, but identified risks require human review."
+        ]
+      },
+      "human": {
+        "decision": "approved",
+        "reviewer": null,
+        "comment": "Reviewed options; approved."
+      },
+      "final_result": {
+        "present": true,
+        "status": "approved",
+        "proposal": {
+          "selected_option_id": "slot-1",
+          "selected_option": "08:00-09:00",
+          "metric_delta": 1,
+          "projected_value": 1,
+          "reasoning": [
+            "Passed hard constraint: no_recorded_admission_overlap",
+            "Passed hard constraint: complete_schedule_evidence",
+            "No supplied option-specific risk indicator was identified."
+          ]
+        },
+        "review": {
+          "review_status": "validated_with_risks",
+          "validated_findings": [],
+          "validated_evidence_refs": [
+            {
+              "source": "worker_output",
+              "path": "proposed_solution.projected_value",
+              "value": 1
+            }
+          ],
+          "risks": [
+            "Student-1 has no authoritative future slot-capacity source. A conflict-free option is not a confirmed booking or capacity guarantee.",
+            "5 recorded admission(s) have no end time and start on another date; they were not compared."
+          ],
+          "unsupported_claims": [],
+          "recommended_option_id": "slot-1",
+          "recommendation": "The proposal is evidence-consistent, but identified risks require human review.",
+          "human_approval_required": true,
+          "mutation_verified_absent": true
+        },
+        "human_decision": "approved",
+        "mutation_executed": false
+      },
+      "mutation_safety": {
+        "worker_mutation_executed": false,
+        "reviewer_mutation_verified_absent": true,
+        "provenance_mutation_allowed": null,
+        "final_mutation_executed": false
+      },
+      "rag_provenance": null,
+      "mcp_provenance": null,
+      "audit_log": [
+        {
+          "timestamp": "2026-10-22T23:39:58.923Z",
+          "actor": "planner",
+          "event": "stage_started"
+        },
+        {
+          "timestamp": "2026-10-22T23:39:58.923Z",
+          "actor": "planner",
+          "event": "stage_completed"
+        },
+        {
+          "timestamp": "2026-10-22T23:39:58.923Z",
+          "actor": "worker",
+          "event": "stage_started"
+        },
+        {
+          "timestamp": "2026-10-22T23:39:58.924Z",
+          "actor": "worker",
+          "event": "stage_completed"
+        },
+        {
+          "timestamp": "2026-10-22T23:39:58.924Z",
+          "actor": "reviewer",
+          "event": "stage_started"
+        },
+        {
+          "timestamp": "2026-10-22T23:39:58.924Z",
+          "actor": "reviewer",
+          "event": "stage_completed"
+        },
+        {
+          "timestamp": "2026-10-22T23:39:58.956Z",
+          "actor": "human",
+          "event": "decision_recorded"
+        }
+      ],
+      "fallback_stages": [
+        "planner",
+        "worker",
+        "reviewer"
+      ],
+      "source_format": "homs-multi-agent-server/1.0"
+    },
+    {
+      "origin": "workflow:ab2e8833-f02a-4b64-8678-726fb44e0df2",
+      "workflow_id": "ab2e8833-f02a-4b64-8678-726fb44e0df2",
+      "feature": null,
+      "request": "Review the listed admission time options against the hard constraints. Conflict-free means no overlap with recorded admissions, not confirmed capacity. Do not make any record changes.",
+      "status": "partially_accepted",
+      "stages": [
+        "planner",
+        "worker",
+        "reviewer",
+        "human"
+      ],
+      "step_times": [
+        [
+          "2026-10-22T23:40:03.791Z",
+          "2026-10-22T23:40:03.791Z"
+        ],
+        [
+          "2026-10-22T23:40:03.792Z",
+          "2026-10-22T23:40:03.792Z"
+        ],
+        [
+          "2026-10-22T23:40:03.792Z",
+          "2026-10-22T23:40:03.792Z"
+        ],
+        [
+          "2026-10-22T23:40:03.812Z",
+          "2026-10-22T23:40:03.812Z"
+        ]
+      ],
+      "planner": {
+        "plan": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "required_evidence": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ]
+      },
+      "worker": {
+        "result": "proposal_ready: 08:00-09:00",
+        "evidence_used": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ]
+      },
+      "reviewer": {
+        "verdict": "validated_with_risks",
+        "risks": [
+          "Student-1 has no authoritative future slot-capacity source. A conflict-free option is not a confirmed booking or capacity guarantee.",
+          "5 recorded admission(s) have no end time and start on another date; they were not compared."
+        ],
+        "recommendations": [
+          "The proposal is evidence-consistent, but identified risks require human review."
+        ]
+      },
+      "human": {
+        "decision": "partially_accepted",
+        "reviewer": null,
+        "comment": "Options acceptable but request three other times."
+      },
+      "final_result": {
+        "present": true,
+        "status": "partially_accepted",
+        "proposal": {
+          "selected_option_id": "slot-1",
+          "selected_option": "08:00-09:00",
+          "metric_delta": 1,
+          "projected_value": 1,
+          "reasoning": [
+            "Passed hard constraint: no_recorded_admission_overlap",
+            "Passed hard constraint: complete_schedule_evidence",
+            "No supplied option-specific risk indicator was identified."
+          ]
+        },
+        "review": {
+          "review_status": "validated_with_risks",
+          "validated_findings": [],
+          "validated_evidence_refs": [
+            {
+              "source": "worker_output",
+              "path": "proposed_solution.projected_value",
+              "value": 1
+            }
+          ],
+          "risks": [
+            "Student-1 has no authoritative future slot-capacity source. A conflict-free option is not a confirmed booking or capacity guarantee.",
+            "5 recorded admission(s) have no end time and start on another date; they were not compared."
+          ],
+          "unsupported_claims": [],
+          "recommended_option_id": "slot-1",
+          "recommendation": "The proposal is evidence-consistent, but identified risks require human review.",
+          "human_approval_required": true,
+          "mutation_verified_absent": true
+        },
+        "human_decision": "partially_accepted",
+        "mutation_executed": false
+      },
+      "mutation_safety": {
+        "worker_mutation_executed": false,
+        "reviewer_mutation_verified_absent": true,
+        "provenance_mutation_allowed": null,
+        "final_mutation_executed": false
+      },
+      "rag_provenance": null,
+      "mcp_provenance": null,
+      "audit_log": [
+        {
+          "timestamp": "2026-10-22T23:40:03.791Z",
+          "actor": "planner",
+          "event": "stage_started"
+        },
+        {
+          "timestamp": "2026-10-22T23:40:03.791Z",
+          "actor": "planner",
+          "event": "stage_completed"
+        },
+        {
+          "timestamp": "2026-10-22T23:40:03.792Z",
+          "actor": "worker",
+          "event": "stage_started"
+        },
+        {
+          "timestamp": "2026-10-22T23:40:03.792Z",
+          "actor": "worker",
+          "event": "stage_completed"
+        },
+        {
+          "timestamp": "2026-10-22T23:40:03.792Z",
+          "actor": "reviewer",
+          "event": "stage_started"
+        },
+        {
+          "timestamp": "2026-10-22T23:40:03.792Z",
+          "actor": "reviewer",
+          "event": "stage_completed"
+        },
+        {
+          "timestamp": "2026-10-22T23:40:03.812Z",
+          "actor": "human",
+          "event": "decision_recorded"
+        }
+      ],
+      "fallback_stages": [
+        "planner",
+        "worker",
+        "reviewer"
+      ],
+      "source_format": "homs-multi-agent-server/1.0"
+    }
+  ],
+  "checks": [
+    {
+      "id": "MA1",
+      "title": "Stage order",
+      "severity": "required",
+      "passed": true,
+      "detail": "planner -> worker -> reviewer -> human",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    {
+      "id": "MA2",
+      "title": "Planner output",
+      "severity": "required",
+      "passed": true,
+      "detail": "5 plan step(s), 4 required evidence item(s)",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    {
+      "id": "MA3",
+      "title": "Worker output",
+      "severity": "required",
+      "passed": true,
+      "detail": "result present, 4 evidence item(s) cited",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    {
+      "id": "MA4",
+      "title": "Evidence coverage",
+      "severity": "advisory",
+      "passed": true,
+      "detail": "all required evidence cited",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    {
+      "id": "MA5",
+      "title": "Reviewer output",
+      "severity": "required",
+      "passed": true,
+      "detail": "verdict='validated_with_risks', risks recorded, 1 recommendation(s)",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    {
+      "id": "MA6",
+      "title": "Human Review decision",
+      "severity": "required",
+      "passed": true,
+      "detail": "approved by unnamed reviewer",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    {
+      "id": "MA7",
+      "title": "Audit log",
+      "severity": "required",
+      "passed": true,
+      "detail": "7 ordered entries",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    {
+      "id": "MA8",
+      "title": "Workflow status",
+      "severity": "advisory",
+      "passed": true,
+      "detail": "status='approved', expected 'approved' or 'completed'",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    {
+      "id": "MA9",
+      "title": "Live model",
+      "severity": "advisory",
+      "passed": false,
+      "detail": "deterministic fallback used by: planner, worker, reviewer",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    {
+      "id": "MA10",
+      "title": "Final result",
+      "severity": "required",
+      "passed": true,
+      "detail": "status='approved', proposal present, reviewer result present",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    {
+      "id": "MA11",
+      "title": "Mutation safety",
+      "severity": "required",
+      "passed": true,
+      "detail": "worker_mutation_executed=False, reviewer_mutation_verified_absent=True, final_mutation_executed=False",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    {
+      "id": "MA12",
+      "title": "RAG provenance",
+      "severity": "advisory",
+      "passed": true,
+      "detail": "optional RAG provenance not present",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    {
+      "id": "MA13",
+      "title": "MCP provenance",
+      "severity": "advisory",
+      "passed": true,
+      "detail": "optional MCP provenance not present",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    {
+      "id": "MA1",
+      "title": "Stage order",
+      "severity": "required",
+      "passed": true,
+      "detail": "planner -> worker -> reviewer -> human",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    },
+    {
+      "id": "MA2",
+      "title": "Planner output",
+      "severity": "required",
+      "passed": true,
+      "detail": "5 plan step(s), 4 required evidence item(s)",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    },
+    {
+      "id": "MA3",
+      "title": "Worker output",
+      "severity": "required",
+      "passed": true,
+      "detail": "result present, 4 evidence item(s) cited",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    },
+    {
+      "id": "MA4",
+      "title": "Evidence coverage",
+      "severity": "advisory",
+      "passed": true,
+      "detail": "all required evidence cited",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    },
+    {
+      "id": "MA5",
+      "title": "Reviewer output",
+      "severity": "required",
+      "passed": true,
+      "detail": "verdict='validated_with_risks', risks recorded, 1 recommendation(s)",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    },
+    {
+      "id": "MA6",
+      "title": "Human Review decision",
+      "severity": "required",
+      "passed": true,
+      "detail": "partially_accepted by unnamed reviewer",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    },
+    {
+      "id": "MA6",
+      "title": "Human Review reason",
+      "severity": "advisory",
+      "passed": true,
+      "detail": "reason recorded",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    },
+    {
+      "id": "MA7",
+      "title": "Audit log",
+      "severity": "required",
+      "passed": true,
+      "detail": "7 ordered entries",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    },
+    {
+      "id": "MA8",
+      "title": "Workflow status",
+      "severity": "advisory",
+      "passed": true,
+      "detail": "status='partially_accepted', expected 'completed' or 'partially_accepted'",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    },
+    {
+      "id": "MA9",
+      "title": "Live model",
+      "severity": "advisory",
+      "passed": false,
+      "detail": "deterministic fallback used by: planner, worker, reviewer",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    },
+    {
+      "id": "MA10",
+      "title": "Final result",
+      "severity": "required",
+      "passed": true,
+      "detail": "status='partially_accepted', proposal present, reviewer result present",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    },
+    {
+      "id": "MA11",
+      "title": "Mutation safety",
+      "severity": "required",
+      "passed": true,
+      "detail": "worker_mutation_executed=False, reviewer_mutation_verified_absent=True, final_mutation_executed=False",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    },
+    {
+      "id": "MA12",
+      "title": "RAG provenance",
+      "severity": "advisory",
+      "passed": true,
+      "detail": "optional RAG provenance not present",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    },
+    {
+      "id": "MA13",
+      "title": "MCP provenance",
+      "severity": "advisory",
+      "passed": true,
+      "detail": "optional MCP provenance not present",
+      "subject": "ab2e8833-f02a-4b64-8678-726fb44e0df2"
+    }
+  ],
+  "adapt": {
+    "result": {
+      "id": "MA9",
+      "title": "Live model",
+      "severity": "advisory",
+      "passed": false,
+      "detail": "deterministic fallback used by: planner, worker, reviewer",
+      "subject": "bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658"
+    },
+    "error": null
+  },
+  "summary": {
+    "verdict": "pass",
+    "checks": 27,
+    "passed": 25,
+    "failed": [],
+    "warnings": [
+      "MA9 [bfc0f5f8-1fa6-4f40-a8cf-a858e5ce8658]",
+      "MA9 [ab2e8833-f02a-4b64-8678-726fb44e0df2]"
+    ],
+    "notes": []
+  }
+}

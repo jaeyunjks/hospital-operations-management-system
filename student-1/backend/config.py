@@ -33,6 +33,10 @@ RAG_ENABLED = os.getenv("RAG_ENABLED", "false").strip().lower() == "true"
 RAG_SERVER_URL = os.getenv("RAG_SERVER_URL", "http://127.0.0.1:8100").strip()
 RAG_TIMEOUT = float(os.getenv("RAG_TIMEOUT", "100"))
 
+MULTI_AGENT_ENABLED = os.getenv("MULTI_AGENT_ENABLED", "false").strip().lower() == "true"
+MULTI_AGENT_SERVER_URL = os.getenv("MULTI_AGENT_SERVER_URL", "http://host.docker.internal:8200").strip()
+MULTI_AGENT_TIMEOUT = float(os.getenv("MULTI_AGENT_TIMEOUT", "10"))
+
 # Domain Vocabulary
 PATIENT_STATUSES = ("Active", "Inactive", "Deceased", "Transferred")
 PATIENT_SEX = ("Male", "Female", "Alternate", "Unassigned")
