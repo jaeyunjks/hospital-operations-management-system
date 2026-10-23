@@ -183,6 +183,17 @@ PY
     --cookie "$COOKIE_FILE" --max-time 20 "$FRONTEND_URL/shifts")"
   grep -q 'Shift planner' <<<"$SHIFT_PAGE" || die \
     "Student 5 Shift Planner did not render through the deployed stack."
+elif [[ "$STUDENT" == "1" ]]; then
+  # `az containerapp exec` needs a TTY and fails on GitHub-hosted runners. The
+  # Student 1 census page is rendered from live backend and database reads; its
+  # seed fallback reads /database/schema.sql, which is absent from the frontend
+  # image, so a 200 here means the frontend -> backend -> database chain works.
+  log "Checking the Student 1 census page renders through the deployed stack."
+  CENSUS_PAGE="$(curl --fail --silent --show-error \
+    --retry 12 --retry-all-errors --retry-delay 5 \
+    --max-time 30 "$FRONTEND_URL/")"
+  grep -qi 'census' <<<"$CENSUS_PAGE" || die \
+    "Student 1 census page did not render through the deployed stack."
 else
   log "Checking internal backend health from the frontend container."
   remote_http_probe "$FRONTEND_APP" "$BACKEND_URL/health" 200 GET '{}'
