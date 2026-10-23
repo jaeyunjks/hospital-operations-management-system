@@ -242,7 +242,7 @@ upsert_app() {
   if az containerapp show --name "$app_name" \
     --resource-group "$HOMS_AZURE_RESOURCE_GROUP" --only-show-errors >/dev/null 2>&1; then
     log "Updating only $app_name."
-    if [[ "$STUDENT" == "5" ]]; then
+    if [[ "$STUDENT" == "1" || "$STUDENT" == "5" ]]; then
       # Full-YAML CLI updates can lose a managed-identity reference when the
       # database has deliberately been quiesced and has no ready revision.
       # Patch only the desired template through ARM: identity, registry,
