@@ -1,348 +1,135 @@
-# Student 5 - Staff & Shift Management
+# Student 5 — Staff & Shift Management
 
-Independent feature microservice set for the **Hospital Operations Management System**.
+Student 5 is the HOMS feature slice for hospital staff, availability, shifts,
+assignments, coverage, and AI-assisted staffing decisions. It contains separate
+HTMX frontend, Flask backend/API, and SQLite database microservices integrated
+through the root Docker Compose application.
 
-## Feature Owner
+Feature owner: **Yafie Farabi**
 
-- Owner: **Yafie Farabi**
-- Feature Area: **Staff & Shift Management**
+## Release 2 status
 
----
+The feature implements:
 
-# Feature Overview
+- staff, availability, shift, and assignment management;
+- shift CRUD and roster assignment operations;
+- coverage summaries and AI-assisted staff suggestions;
+- Staffing Recovery from the normal Shift Planner manager workflow;
+- RAG, MCP, and shared Multi-Agent integration for local Release 2 use;
+- manager-only workflow retrieval and Human Review;
+- Student 5 post-commit endpoint testing; and
+- an Azure Container Apps deployment for the frontend, backend, and persistent
+  database service.
 
-The Staff & Shift Management module supports hospital workforce coordination by managing staff information, availability, shift scheduling, staff assignments, and AI-assisted staffing recommendations.
+**Student 5 Azure frontend:**
+[https://s5-web.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/](https://s5-web.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/)
 
-The feature focuses on improving operational efficiency by helping hospital administrators coordinate workforce allocation.
+## Staffing Recovery workflow
 
-The module provides functionality for:
+Staffing Recovery is broader than the single-step staff suggestion function. A
+Staff Manager selects a shift and starts this advisory workflow:
 
-- Viewing staff information
-- Managing staff availability
-- Creating and managing shift schedules
-- Assigning staff members to shifts
-- Monitoring staffing coverage
-- Receiving AI-assisted staff recommendations
-
----
-
-# Release 0 Scope
-
-This feature implements the Release 0 foundation required for the ASD project:
-
-- Independent frontend microservice
-- Backend/API microservice
-- Database microservice
-- CRUD operations
-- AI-Mode integration using Ollama and approved open-source LLMs
-- Docker containerisation
-- GitHub Actions CI/CD integration
-
-The following capabilities are reserved for future releases:
-
-- Retrieval Augmented Generation (RAG)
-- Model Context Protocol (MCP)
-- Multi-agent workflows
-- Advanced cloud deployment
-
----
-
-# Microservice Architecture
-
-The feature follows a microservice architecture:
-
-```
-Hospital Staff User
-        |
-        v
-HTMX Frontend Microservice
-        |
-        | REST Communication
-        v
-Backend/API Microservice
-        |
-        | Database Communication
-        v
-Database Microservice
-
-
-Backend/API Microservice
-        |
-        v
-Ollama Runtime
-        |
-        v
-Approved Open Source LLM
+```text
+Selected shift
+  → authoritative backend recovery evidence
+  → advisory RAG policy context
+  → controlled read-only MCP context
+  → shared Multi-Agent Server
+  → Planner → Worker → Reviewer → Human Review
+  → final advisory result and persistent audit
 ```
 
----
+The Student 5 backend remains authoritative for shift state, coverage,
+eligibility, availability, and schedule conflicts. RAG supplies labelled policy
+guidance and source provenance; it cannot change deterministic eligibility.
+MCP supplies labelled read-only operational context through an allow-listed
+tool interface.
 
-# Component Responsibilities
+The shared Multi-Agent Server calls the configured local Ollama model for each
+role. Model output is schema- and semantically validated. In automatic mode, a
+failed model response may use the explicitly labelled deterministic fallback;
+the model attempt, validation result, and fallback provenance remain in the
+workflow audit.
 
-## Frontend Microservice
+Human Review accepts or rejects the recommendation only. Starting, polling, or
+reviewing a workflow never creates, updates, or removes a roster assignment.
+Any operational assignment remains a separate manager-controlled action.
 
-### Technology
+Implementation entry points include:
 
-- HTMX
-- HTML
-- CSS
-- JavaScript
+- [`backend/routes/recovery_routes.py`](backend/routes/recovery_routes.py)
+- [`backend/routes/recovery_workflow_routes.py`](backend/routes/recovery_workflow_routes.py)
+- [`backend/services/recovery_service.py`](backend/services/recovery_service.py)
+- [`backend/services/recovery_policy_service.py`](backend/services/recovery_policy_service.py)
+- [`backend/services/recovery_mcp_service.py`](backend/services/recovery_mcp_service.py)
+- [`backend/services/multi_agent_client.py`](backend/services/multi_agent_client.py)
+- [`frontend/templates/recovery_workflow.html`](frontend/templates/recovery_workflow.html)
 
-### Responsibilities
+Shared workflow audits are stored under
+[`../reports/multi-agent/`](../reports/multi-agent/). One complete Student 5
+example is
+[`workflow-d44bd416-2a97-4e51-b81e-fdd53f70e75c.json`](../reports/multi-agent/workflow-d44bd416-2a97-4e51-b81e-fdd53f70e75c.json).
 
-- Provide staff management interface
-- Display staff information
-- Display roster and shift information
-- Support shift assignment interactions
-- Display AI-generated recommendations
+## Architecture and local operation
 
----
-
-## Backend/API Microservice
-
-### Technology
-
-- Flask REST API
-
-### Responsibilities
-
-- Handle application business logic
-- Process staff and shift operations
-- Validate requests
-- Coordinate communication between frontend, database, and AI services
-
-The backend acts as the main service layer for Staff & Shift Management operations.
-
----
-
-## Database Microservice
-
-### Technology
-
-- SQLite
-
-### Responsibilities
-
-- Manage staff and shift operational data
-- Provide controlled database access
-- Support CRUD operations
-
-The backend communicates with the database through the database service rather than directly accessing database files.
-
----
-
-## AI Integration
-
-### Technology
-
-- Ollama Runtime
-- Approved Open Source LLM
-
-### Purpose
-
-The AI component provides decision-support capabilities for workforce management.
-
-### Planned AI Functions
-
-- Suggest suitable staff members for shifts
-- Analyse staffing coverage
-- Provide reasoning behind recommendations
-
-AI output is used as a recommendation and requires human review before operational decisions.
-
----
-
-# Functional Capabilities
-
-## Staff Management
-
-The module supports:
-
-- View staff information
-- Search and filter staff
-- Update staff availability
-
----
-
-## Shift Management
-
-The module supports:
-
-- Create shifts
-- View upcoming shifts
-- Update shift details
-- Remove shifts
-
----
-
-## Staff Assignment
-
-The module supports:
-
-- Assign staff to shifts
-- Remove staff assignments
-- Monitor staffing coverage requirements
-
----
-
-## AI-Assisted Staffing
-
-The module supports:
-
-- Analyse shift requirements
-- Recommend suitable available staff
-- Explain recommendation reasoning
-
----
-
-# Development Structure
-
-```
-student-5/
-├── frontend/
-│   └── HTMX frontend microservice
-│
-├── backend/
-│   └── Flask API microservice
-│
-├── database/
-│   └── SQLite database microservice
-│
-├── tests/
-│   └── Feature testing
-│
-└── Dockerfile
+```text
+HTMX frontend :3500
+  → Flask backend/API :5500
+      → SQLite database service :6500
+      → host-local Ollama / RAG / MCP / Multi-Agent services
 ```
 
----
+The frontend communicates with the Student 5 backend; it does not call the
+database or shared AI services directly. The backend calls the database service
+rather than opening the SQLite file itself.
 
-# Relationship With External Systems
+From the repository root, start the complete local Student 5 Release 2 stack
+with:
 
-The Staff & Shift Management module receives relevant employee information from external HR systems.
-
-The external HR system is responsible for maintaining authoritative employee records.
-
-This feature focuses on operational workforce management, including:
-
-- Staff availability
-- Shift planning
-- Workforce allocation
-- Coverage management
-
----
-
-# AI Development Approach
-
-AI functionality follows the ASD Agentic AI approach:
-
-Plan → Act → Observe → Adapt
-
-The AI-assisted development process will maintain documentation of:
-
-- Development prompts
-- AI-assisted implementation decisions
-- Review outputs
-- Improvement cycles
-
----
-
-# Testing Approach
-
-The feature will include testing for:
-
-## Functional Testing
-
-- Staff retrieval
-- Shift creation
-- Shift updates
-- Staff assignment operations
-
-## Integration Testing
-
-- Frontend communication with backend
-- Backend communication with database service
-- Backend communication with AI service
-
-## Non-Functional Testing
-
-Examples:
-
-- Service availability
-- API response validation
-- Error handling
-
----
-
-# Docker and CI/CD
-
-The feature will be containerised as part of the integrated Release 0 application.
-
-Components:
-
-- Frontend container
-- Backend/API container
-- Database container
-
-The feature will include:
-
-- Dockerfile configuration
-- GitHub Actions workflow
-- Automated validation pipeline
-
----
-
-# AI Evidence and Documentation
-
-AI-related development artefacts will be maintained separately:
-
-```
-docs/
-├── prompts/
-│   └── student-5/
-└── agent-logs/
-    └── student-5/
+```bash
+./scripts/start-student5-r2.sh
 ```
 
-These artefacts document:
+Stop it with:
 
-- AI prompts used during development
-- Context provided to AI agents
-- Agent workflow execution records
-- Development decisions
+```bash
+./scripts/stop-student5-r2.sh
+```
 
----
+## Testing and CI/CD
 
-# Current Development Status
+Student 5 tests cover CRUD, authorization, service integration, recovery
+evidence, RAG/MCP enrichment, asynchronous Multi-Agent lifecycle, Human Review,
+failure handling, and mutation safety.
 
-## Completed
+- Student workflow: [`../.github/workflows/student-5.yml`](../.github/workflows/student-5.yml)
+- Cloud workflow: [`../.github/workflows/cloud-deployment.yml`](../.github/workflows/cloud-deployment.yml)
+- Deployment script: [`../scripts/deploy/deploy-student.sh`](../scripts/deploy/deploy-student.sh)
+- Deployment validation: [`../scripts/deploy/deployment-testing.sh`](../scripts/deploy/deployment-testing.sh)
+- Azure deployment contract: [`../docs/release-2/azure-deployment.md`](../docs/release-2/azure-deployment.md)
 
-- Feature ownership assigned
-- Feature scope defined
-- Microservice architecture planned
-- Repository structure prepared
+Run the Student 5 suite from the repository root:
 
-## Upcoming Development Tasks
+```bash
+python3 -m pytest -q student-5/tests
+```
 
-1. Implement database microservice
-2. Implement backend API service
-3. Implement frontend interface
-4. Integrate Ollama AI functionality
-5. Add testing
-6. Configure CI/CD workflow
-7. Integrate with Docker Compose
+## Azure baseline
 
----
+The deployed Student 5 slice uses `s5-web`, `s5-api`, and `s5-db`. The frontend
+has external ingress; the backend and database use internal ingress. The SQLite
+database persists on the dedicated `student5-db` Azure Files share at
+`/data/staff_shift.db`, with one database replica.
 
-# Release 0 Definition of Done
+Release 2 deploys a deliberately non-AI cloud baseline:
 
-The feature will be considered complete when:
+```text
+AI_ENABLED=false
+MCP_ENABLED=false
+RAG_ENABLED=false
+MULTI_AGENT_ENABLED=false
+```
 
-- Frontend microservice is operational
-- Backend/API microservice is operational
-- Database microservice is operational
-- CRUD operations are implemented
-- AI-Mode integration is demonstrated
-- Docker containerisation is completed
-- GitHub Actions workflow succeeds
-- Testing evidence is collected
-- Feature is integrated into the shared application
+These settings do not remove local Release 2 functionality. They prevent the
+cloud backend from depending on host-local AI services and do not claim the
+optional cloud AI bonuses.

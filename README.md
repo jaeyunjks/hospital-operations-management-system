@@ -1,8 +1,9 @@
 # Hospital Operations Management System
 
-> **Status:** Release 1 integrated application. Student 1–5 feature services,
-> shared UI, Ollama AI-Mode, shared MCP and RAG services, the shared agentic
-> loop, Docker Compose, and CI workflows are implemented.
+> **Status:** Release 2 integrated application. Student 1–5 feature services,
+> shared UI, local AI services, the shared Multi-Agent workflow, Azure
+> deployment, and GitHub Actions validation/deployment workflows are
+> implemented.
 
 ## Project
 
@@ -79,13 +80,21 @@ shared homepage and the five frontend/backend/database feature stacks: 16
 application services in total.
 
 ### Release 2
-- **Multi-Agent System**.
-- Testing across the integrated application.
-- **Azure** cloud deployment.
 
-> Project-specific implementation details beyond the prescribed ASD release
-> requirements will be agreed by the team. See
-> [`docs/release-planning.md`](docs/release-planning.md).
+- Integrated local application through the root Docker Compose stack.
+- Shared host-local **AI-Mode**, **MCP**, **RAG**, and **Multi-Agent Server**.
+- A reusable **Planner → Worker → Reviewer → Human Review** workflow
+  with persistent audit history and deterministic fallback after failed model
+  output validation.
+- Pre-commit security checks and student/integration GitHub Actions workflows.
+- Reusable, per-student deployment to **Azure Container Apps** through Azure
+  Container Registry.
+- A safe cloud baseline where AI-Mode, MCP, RAG, and Multi-Agent integrations
+  are explicitly disabled unless a separate cloud extension is implemented.
+
+The shared AI services remain local and non-containerised. Feature backends
+provide the operational integration layer and retain responsibility for their
+own business rules and data mutations.
 
 ## Repository layout
 
@@ -139,30 +148,44 @@ docker compose ps
 
 Open the shared homepage at [http://localhost:3000](http://localhost:3000).
 
-### Local Release 1 demo mode
+### Local Release 2 AI services
 
-Use this startup order when demonstrating MCP and RAG through the containerised
-feature backends.
+Use the host-local AI services when demonstrating AI-Mode, MCP, RAG, or the
+Multi-Agent workflow through a containerised feature backend. Student 5 has a
+single launcher that starts its application slice and the required local
+services:
+
+```bash
+./scripts/start-student5-r2.sh
+```
+
+Use `./scripts/stop-student5-r2.sh` to stop that local stack. The manual setup
+below remains useful for other feature-specific demonstrations.
 
 Before the first run, install the shared servers' Python dependencies and pull
 the local models (repository root):
 
 ```bash
-python3 -m pip install -r ai-services/mcp-server/requirements.txt -r ai-services/rag-server/requirements.txt
+python3 -m pip install \
+  -r ai-services/mcp-server/requirements.txt \
+  -r ai-services/rag-server/requirements.txt \
+  -r ai-services/multi-agent-server/requirements.txt
 ```
 
 ```bash
 ollama pull llama3.1:8b
 ollama pull llama3.2:3b
 ollama pull qwen2.5:3b
+ollama pull deepseek-r1:8b
 ollama pull nomic-embed-text
 ```
 
 | Model | Used by |
 |---|---|
-| `llama3.1:8b` | Student 2 and Student 5 AI-Mode; the shared agentic loop |
-| `llama3.2:3b` | Student 3 AI-Mode; RAG server answers |
+| `llama3.1:8b` | Student 2 and Student 5 AI-Mode; agentic loop; Multi-Agent Planner |
+| `llama3.2:3b` | Student 3 AI-Mode; RAG server answers; Multi-Agent Worker |
 | `qwen2.5:3b` | Student 1 and Student 4 AI-Mode |
+| `deepseek-r1:8b` | Multi-Agent Reviewer |
 | `nomic-embed-text` | RAG server embeddings (`ingest.py` fails without it) |
 
 1. Start Ollama on the host (skip this if the Ollama app is already running):
@@ -193,9 +216,17 @@ ollama pull nomic-embed-text
    python3 ai-services/rag-server/server.py
    ```
 
-5. Explicitly enable MCP and RAG for the feature containers being
-   demonstrated. For Student 2, whose root-Compose variables intentionally use
-   a lowercase `student2_` prefix:
+5. Start the shared Multi-Agent Server when the feature workflow requires it:
+
+   ```bash
+   HOMS_MULTI_AGENT_HOST=0.0.0.0 \
+   HOMS_MULTI_AGENT_ALLOW_DOCKER_HOST=true \
+   python3 ai-services/multi-agent-server/api.py --model-mode auto
+   ```
+
+6. Explicitly enable the applicable MCP, RAG, and Multi-Agent integrations for
+   the feature container being demonstrated. For Student 2, whose root-Compose
+   variables intentionally use a lowercase `student2_` prefix:
 
    ```bash
    student2_MCP_ENABLED=true \
@@ -203,7 +234,8 @@ ollama pull nomic-embed-text
    docker compose up -d student-2-backend student-2-frontend
    ```
 
-   The corresponding enable variables for the other feature backends are:
+   The corresponding MCP/RAG enable variables for the other feature backends
+   are:
 
    - `STUDENT1_MCP_ENABLED` / `STUDENT1_RAG_ENABLED`
    - `STUDENT3_MCP_ENABLED` / `STUDENT3_RAG_ENABLED`
@@ -218,10 +250,42 @@ backends.
 ## Architecture
 
 See [`docs/architecture/`](docs/architecture/). High-level: five independent
-microservice sets use the shared homepage and host-local Ollama, MCP and RAG
-services. Frontends call only their own backends; the backends reach the shared
-services through configured HTTP boundaries. The shared Plan → Act → Observe →
-Adapt workflow is under [`ai-services/agentic-loop/`](ai-services/agentic-loop/).
+microservice sets use the shared homepage and host-local Ollama, MCP, RAG, and
+Multi-Agent services. Frontends call only their own backends; the backends
+reach shared services through configured HTTP boundaries. The shared
+Plan → Act → Observe → Adapt review modes are under
+[`ai-services/agentic-loop/`](ai-services/agentic-loop/), while the Release 2
+Planner → Worker → Reviewer → Human Review service is under
+[`ai-services/multi-agent-server/`](ai-services/multi-agent-server/).
+
+## Azure deployment
+
+The Release 2 deployment flow is:
+
+```text
+GitHub repository
+  → GitHub Actions validation
+  → Docker build
+  → Azure Container Registry
+  → Azure Container Apps
+```
+
+Azure authentication uses GitHub OIDC and a pre-created managed identity, not
+a long-lived Azure client secret. Deployments are scoped to one student's
+frontend, backend, and database services. The authoritative workflow and
+scripts are:
+
+- [`.github/workflows/cloud-deployment.yml`](.github/workflows/cloud-deployment.yml)
+- [`scripts/deploy/deploy-student.sh`](scripts/deploy/deploy-student.sh)
+- [`scripts/deploy/deployment-testing.sh`](scripts/deploy/deployment-testing.sh)
+- [`docs/release-2/azure-deployment.md`](docs/release-2/azure-deployment.md)
+
+The baseline cloud deployment sets `AI_ENABLED`, `MCP_ENABLED`, `RAG_ENABLED`,
+and `MULTI_AGENT_ENABLED` to `false`. The shared AI services are demonstrated
+locally and are not deployed by this baseline.
+
+**Student 5 Azure frontend:**
+[https://s5-web.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/](https://s5-web.purplepebble-f0501bb8.australiaeast.azurecontainerapps.io/)
 
 ## Development workflow
 
@@ -235,12 +299,11 @@ See [`docs/architecture/development-workflow.md`](docs/architecture/development-
 
 ## Testing
 
-Each student maintains tests under `student-N/tests/`. Testing and integration
-validation are performed throughout the project releases. Release 2 extends the
-testing approach with the prescribed pre-commit pytest validation and
-post-commit AI-assisted unit testing workflows.
-
-Helper scripts will live in [`scripts/test/`](scripts/test/).
+Each student maintains tests under `student-N/tests/`. Release 2 includes
+pre-commit security validation, per-student post-commit endpoint workflows,
+whole-application integration testing, deployment contract tests, and shared
+Multi-Agent/agentic-loop tests. Student 5's post-commit workflow is
+[`.github/workflows/student-5.yml`](.github/workflows/student-5.yml).
 
 ## Releases
 
