@@ -225,19 +225,13 @@ ollama pull nomic-embed-text
    ```
 
 6. Explicitly enable the applicable MCP, RAG, and Multi-Agent integrations for
-   the feature container being demonstrated. For Student 2, whose root-Compose
-   variables intentionally use a lowercase `student2_` prefix:
+   the feature container being demonstrated.
 
-   ```bash
-   student2_MCP_ENABLED=true \
-   student2_RAG_ENABLED=true \
-   docker compose up -d student-2-backend student-2-frontend
-   ```
-
-   The corresponding MCP/RAG enable variables for the other feature backends
+   The corresponding MCP/RAG enable variables for the feature backends
    are:
 
    - `STUDENT1_MCP_ENABLED` / `STUDENT1_RAG_ENABLED`
+   - `STUDENT2_MCP_ENABLED` / `STUDENT2_RAG_ENABLED`
    - `STUDENT3_MCP_ENABLED` / `STUDENT3_RAG_ENABLED`
    - `STUDENT4_MCP_ENABLED` / `STUDENT4_RAG_ENABLED`
    - `STUDENT5_MCP_ENABLED` / `STUDENT5_RAG_ENABLED`

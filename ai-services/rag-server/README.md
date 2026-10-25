@@ -92,13 +92,12 @@ the RAG server in Docker-access mode, and explicitly enable the relevant
 feature backend:
 
 - Student 1: `STUDENT1_RAG_ENABLED=true`
-- Student 2: `student2_RAG_ENABLED=true`
+- Student 2: `STUDENT2_RAG_ENABLED=true`
 - Student 3: `STUDENT3_RAG_ENABLED=true`
 - Student 4: `STUDENT4_RAG_ENABLED=true`
 - Student 5: `STUDENT5_RAG_ENABLED=true`
 
-Student 2 uses the lowercase `student2_` prefix in root Compose; the other
-students use uppercase `STUDENTN_` prefixes. Feature frontends never call this
+Feature frontends never call this
 server directly: they call their own backend, which fixes the feature scope and
 uses `http://host.docker.internal:8100` from its container.
 
@@ -225,8 +224,8 @@ Follow the same pattern as MCP access:
    snippet) and a confidence badge, and shows the insufficient-context message
    as its own clear state.
 4. `docker-compose.yml`: map a feature-specific root-Compose enable variable to
-   `RAG_ENABLED`, with a default of `false`. Students 1, 3, 4 and 5 use
-   `STUDENTN_RAG_ENABLED`; Student 2 uses `student2_RAG_ENABLED`. Set the
+   `RAG_ENABLED`, with a default of `false`. Students 1, 2, 3, 4 and 5 use
+   `STUDENTN_RAG_ENABLED`. Set the
    applicable variable to `true` for a local demo,
    `RAG_SERVER_URL: http://host.docker.internal:8100` and
    `extra_hosts: ["host.docker.internal:host-gateway"]` on the backend.
