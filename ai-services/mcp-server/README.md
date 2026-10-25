@@ -87,15 +87,12 @@ above, then explicitly enable the relevant feature backend with its
 root-Compose variable:
 
 - Student 1: `STUDENT1_MCP_ENABLED=true`
-- Student 2: `student2_MCP_ENABLED=true`
+- Student 2: `STUDENT2_MCP_ENABLED=true`
 - Student 3: `STUDENT3_MCP_ENABLED=true`
 - Student 4: `STUDENT4_MCP_ENABLED=true`
 - Student 5: `STUDENT5_MCP_ENABLED=true`
 
-Student 2 uses the lowercase `student2_` prefix in the authoritative root
-Compose file. The other students use uppercase `STUDENTN_` prefixes. Enabling
-MCP does not change the boundary: each frontend calls its own backend, and that
-backend calls the shared MCP server through `host.docker.internal:8000`.
+Enabling MCP does not change the boundary: each frontend calls its own backend, and that backend calls the shared MCP server through `host.docker.internal:8000`.
 
 ## Test
 

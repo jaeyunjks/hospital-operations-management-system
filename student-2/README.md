@@ -59,8 +59,8 @@ Student 2 backend to reach host Ollama at
 Root Compose maps the exact feature-specific variables below into the generic
 `MCP_ENABLED` and `RAG_ENABLED` settings consumed by the Student 2 backend:
 
-- `student2_MCP_ENABLED` — defaults to `false`
-- `student2_RAG_ENABLED` — defaults to `false`
+- `STUDENT2_MCP_ENABLED` — defaults to `false`
+- `STUDENT2_RAG_ENABLED` — defaults to `false`
 
 This lets the normal stack and CI start without local MCP or RAG processes.
 The Student 2 workflow also sets both the generic backend flags and these
@@ -79,8 +79,8 @@ Start host services in this order from the repository root:
 5. Start Student 2 with its exact root-Compose enable variables:
 
    ```bash
-   student2_MCP_ENABLED=true \
-   student2_RAG_ENABLED=true \
+   STUDENT2_MCP_ENABLED=true \
+   STUDENT2_RAG_ENABLED=true \
    docker compose up -d student-2-backend student-2-frontend
    ```
 
