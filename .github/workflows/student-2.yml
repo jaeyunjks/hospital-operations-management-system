@@ -27,8 +27,14 @@ jobs:
       PYTHONDONTWRITEBYTECODE: "1"
       MCP_ENABLED: "false"
       RAG_ENABLED: "false"
-      student2_MCP_ENABLED: "false"
-      student2_RAG_ENABLED: "false"
+      MULTI_AGENT_ENABLED: "false"
+      STUDENT2_MCP_ENABLED: "false"
+      STUDENT2_RAG_ENABLED: "false"
+      STUDENT2_MULTI_AGENT_ENABLED: "false"
+      # Only the Student 2 containers run in CI, so the Patient & Admission
+      # service is not reachable. The local stub treats every admission as
+      # active, which creating a clinical record needs.
+      STUDENT2_USE_EXTERNAL_STUBS: "true"
 
     steps:
       - name: Check out repository
@@ -53,7 +59,10 @@ jobs:
             -r student-2/database/requirements.txt
 
       - name: Run Student 2 tests
-        run: python -m pytest -q student-2/tests
+        run: |
+          mkdir -p test-results/student-2
+          python -m pytest -q student-2/tests \
+            --junitxml=test-results/student-2/unit.xml
 
       - name: Validate shared Compose configuration
         run: docker compose config --quiet
@@ -62,6 +71,8 @@ jobs:
         run: docker compose build student-2-database student-2-backend student-2-frontend
 
       - name: Start Student 2 services
+        # STUDENT2_USE_EXTERNAL_STUBS, set in the job env, keeps the Patient &
+        # Admission service out of the picture.
         run: docker compose up -d --wait --wait-timeout 120 student-2-frontend
 
       - name: Verify Student 2 HTTP services
@@ -99,8 +110,29 @@ jobs:
           assert "<!DOCTYPE html>" in html
           PY
 
-      - name: Verify Student 2 MCP and RAG are disabled
+      - name: Run Student 2 backend endpoint tests
+        # Release 2: two backend endpoint functions (acknowledge a care task,
+        # create a clinical record) tested against the running containers.
+        env:
+          STUDENT2_BACKEND_URL: http://localhost:5200
         run: |
+          mkdir -p test-results/student-2
+          python -m pytest -v student-2/tests/test_endpoints_ci.py \
+            --junitxml=test-results/student-2/junit.xml
+
+      - name: Upload endpoint test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: student-2-junit
+          path: |
+            test-results/student-2/unit.xml
+            test-results/student-2/junit.xml
+          if-no-files-found: error
+
+      - name: Verify Student 2 MCP, RAG and Multi-Agent are disabled
+        run: |
+          set -e
           python - <<'PY'
           import json
           import os
@@ -110,10 +142,11 @@ jobs:
 
           print("MCP_ENABLED =", os.environ.get("MCP_ENABLED"))
           print("RAG_ENABLED =", os.environ.get("RAG_ENABLED"))
+          print("MULTI_AGENT_ENABLED =", os.environ.get("MULTI_AGENT_ENABLED"))
 
           def read_status(url):
               # The status routes need a clinical role; they only read local config
-              # when disabled, so no MCP or RAG server is contacted here.
+              # when disabled, so no MCP, RAG or Multi-Agent server is contacted here.
               call = urllib.request.Request(
                   url, headers={"Accept": "application/json", "X-User-Role": "doctor"})
               try:
@@ -125,6 +158,7 @@ jobs:
           results = {
               "MCP": read_status("http://127.0.0.1:5200/api/mcp/status"),
               "RAG": read_status("http://127.0.0.1:5200/api/rag/status"),
+              "Multi-Agent": read_status("http://127.0.0.1:5200/api/multi-agent/status"),
           }
           for name, state in results.items():
               print("{} status: {}".format(name, state))
@@ -132,7 +166,7 @@ jobs:
           bad = [name for name, state in results.items() if state != "disabled"]
           if bad:
               sys.exit("FAIL: {} must be disabled in CI".format(" and ".join(bad)))
-          print("MCP and RAG are retained in the code and disabled for CI")
+          print("MCP, RAG and Multi-Agent are retained in the code and disabled for CI")
           PY
 
       - name: Show Student 2 container logs on failure
