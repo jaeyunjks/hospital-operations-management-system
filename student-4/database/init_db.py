@@ -6,13 +6,18 @@ Usage
     python init_db.py              # create rooms.db in this directory
     python init_db.py --check      # create, then run consistency checks
     python init_db.py --db /path/to/rooms.db
+    python init_db.py --db /data/rooms.db --if-needed   # container start
 
 Safe to re-run: schema.sql drops every table before recreating it.
+--if-needed leaves a database that already has every table untouched, so a
+persistent volume keeps its data across restarts.
 """
 
 import argparse
+import shutil
 import sqlite3
 import sys
+import tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -34,6 +39,39 @@ def build(db_path: Path) -> sqlite3.Connection:
     conn.executescript(SEED_FILE.read_text(encoding="utf-8"))
     conn.commit()
     return conn
+
+
+def has_schema(db_path: Path) -> bool:
+    """True when the file exists and already holds every table."""
+    if not db_path.exists() or db_path.stat().st_size == 0:
+        return False
+    try:
+        conn = sqlite3.connect(db_path.resolve().as_uri() + "?mode=ro&nolock=1", uri=True)
+        try:
+            names = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        return False
+    return set(TABLES) <= names
+
+
+def build_and_copy(db_path: Path) -> None:
+    """Build in a local temporary file, then copy it into place.
+
+    SQLite cannot lock files on Azure Files (SMB), so building directly on the
+    mounted share can leave an empty or half-built file. Building on local
+    disk and copying one finished file avoids that.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        local = Path(tmp) / db_path.name
+        conn = build(local)
+        problems = check(conn)
+        conn.close()
+        if problems:
+            raise SystemExit("Seed data failed its consistency check: " + "; ".join(problems))
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(local, db_path)
 
 
 def check(conn: sqlite3.Connection) -> list:
@@ -108,7 +146,20 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--db", type=Path, default=DEFAULT_DB, help="path to the SQLite file")
     parser.add_argument("--check", action="store_true", help="run consistency checks")
+    parser.add_argument(
+        "--if-needed",
+        action="store_true",
+        help="only build when the file is missing or has no schema; build locally then copy",
+    )
     args = parser.parse_args()
+
+    if args.if_needed:
+        if has_schema(args.db):
+            print("Using existing database " + str(args.db))
+            return 0
+        build_and_copy(args.db)
+        print("Created " + str(args.db) + " (built locally, then copied)")
+        return 0
 
     conn = build(args.db)
     print("Created " + str(args.db))
