@@ -183,6 +183,34 @@ PY
     --cookie "$COOKIE_FILE" --max-time 20 "$FRONTEND_URL/shifts")"
   grep -q 'Shift planner' <<<"$SHIFT_PAGE" || die \
     "Student 5 Shift Planner did not render through the deployed stack."
+elif [[ "$STUDENT" == "4" ]]; then
+  # `az containerapp exec` needs a TTY and fails on GitHub-hosted runners.
+  # Student 4's public /health asks the backend for its own /health, which in
+  # turn reads record counts from the database, so one public call validates
+  # the frontend -> backend -> database chain on Azure Files.
+  log "Checking Student 4 frontend, backend and database through public health."
+  HEALTH_JSON="$(curl --fail --silent --show-error \
+    --retry 12 --retry-all-errors --retry-delay 5 \
+    --max-time 30 "$FRONTEND_URL/health")"
+  python3 - "$HEALTH_JSON" <<'PY'
+import json
+import sys
+
+health = json.loads(sys.argv[1])
+assert health.get("error") is None, health.get("error")
+backend = health.get("backend") or {}
+database = backend.get("database") or {}
+assert database.get("ok") is True, database
+records = (database.get("detail") or {}).get("records") or {}
+assert records.get("beds", 0) >= 10, records
+PY
+
+  log "Checking the Student 4 bed availability page renders through the deployed stack."
+  AVAILABILITY_PAGE="$(curl --fail --silent --show-error \
+    --retry 6 --retry-all-errors --retry-delay 5 \
+    --max-time 30 "$FRONTEND_URL/")"
+  grep -q 'Bed availability' <<<"$AVAILABILITY_PAGE" || die \
+    "Student 4 bed availability page did not render through the deployed stack."
 elif [[ "$STUDENT" == "1" ]]; then
   # `az containerapp exec` needs a TTY and fails on GitHub-hosted runners. The
   # Student 1 census page is rendered from live backend and database reads; its
