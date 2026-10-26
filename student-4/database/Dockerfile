@@ -17,4 +17,6 @@ ENV PORT=6400 FLASK_DEBUG=0 DB_PATH=/data/rooms.db
 RUN mkdir -p /data
 EXPOSE 6400
 
-CMD ["sh", "-c", "if [ ! -s \"$DB_PATH\" ]; then python init_db.py --db \"$DB_PATH\" --check; fi; exec python app.py"]
+# Seed only when the file is missing or has no tables, so a mounted volume
+# (Azure Files in the cloud) keeps its data across restarts.
+CMD ["sh", "-c", "python init_db.py --db \"$DB_PATH\" --if-needed && exec python app.py"]

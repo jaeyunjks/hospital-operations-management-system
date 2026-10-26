@@ -7,11 +7,28 @@ app.py, as required by the HOMS collaboration rules.
 
 import os
 import sqlite3
+import threading
 from pathlib import Path
 
 from flask import g
 
 DB_PATH = Path(os.getenv("DB_PATH", Path(__file__).resolve().parent / "rooms.db"))
+
+# Azure Files (SMB) cannot complete SQLite's byte-range locking. The cloud
+# deployment sets STUDENT4_SQLITE_NOLOCK, so SQLite opens the file without
+# locks and this process serialises every request's connection instead.
+# Local and Docker runs keep SQLite's normal locking.
+NOLOCK = os.getenv("STUDENT4_SQLITE_NOLOCK", "").strip().lower() in {"1", "true", "yes", "on"}
+BUSY_TIMEOUT_SECONDS = 30
+_nolock_lock = threading.RLock()
+
+
+def connect(path):
+    """Open the SQLite file, without file locks when NOLOCK is set."""
+    if NOLOCK:
+        uri = Path(path).resolve().as_uri() + "?nolock=1"
+        return sqlite3.connect(uri, uri=True, timeout=BUSY_TIMEOUT_SECONDS)
+    return sqlite3.connect(path, timeout=BUSY_TIMEOUT_SECONDS)
 
 
 class DataError(Exception):
@@ -31,7 +48,14 @@ def get_connection():
                 "Database not found at {}. Run: python init_db.py --check".format(DB_PATH),
                 status=500,
             )
-        g.db = sqlite3.connect(DB_PATH)
+        if NOLOCK:
+            _nolock_lock.acquire()
+        try:
+            g.db = connect(DB_PATH)
+        except Exception:
+            if NOLOCK:
+                _nolock_lock.release()
+            raise
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON")
     return g.db
@@ -42,6 +66,8 @@ def close_connection(_exception=None):
     connection = g.pop("db", None)
     if connection is not None:
         connection.close()
+        if NOLOCK:
+            _nolock_lock.release()
 
 
 def query(sql, params=()):
