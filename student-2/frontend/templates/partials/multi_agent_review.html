@@ -26,6 +26,10 @@
   marked required so the browser stops an empty Correct; the other three buttons carry
   formnovalidate, so for them it stays optional.
 
+  Finished: after the doctor's decision, a "Run a new check" form posts the admission_id to
+  /ai/discharge-review/start and the answer replaces this whole piece. It is left out when
+  the workflow has no admission_id, and is never shown while awaiting a decision.
+
   The AI is advisory only: nothing here discharges a patient. All text is autoescaped by
   Jinja. Nothing here uses |safe.
 #}
@@ -193,7 +197,7 @@
 
         {% else %}
 
-          {# Finished: read-only, no buttons. #}
+          {# Finished: read-only, no decision buttons. #}
           <div class="stack stack--sm">
             <p class="u-label">Doctor's decision</p>
             {% if decided and decided.decision is string and decided.decision %}
@@ -207,6 +211,23 @@
               <p class="review-text">No decision shown</p>
             {% endif %}
           </div>
+
+          {# A new run for the same admission. Needs the admission id. #}
+          {% if admission_id is not none %}
+            <form class="stack stack--sm"
+                  hx-post="/ai/discharge-review/start"
+                  hx-target="closest .discharge-review"
+                  hx-swap="outerHTML"
+                  hx-disabled-elt="find button">
+              <input type="hidden" name="admission_id" value="{{ admission_id }}">
+              <div class="row">
+                <button class="btn-secondary" type="submit">Run a new check</button>
+                {# Shown only while this form's request is running. #}
+                <span class="htmx-indicator u-label">Starting check…</span>
+              </div>
+              <p class="field__hint">Starts a fresh check with the admission's current data</p>
+            </form>
+          {% endif %}
 
         {% endif %}
 

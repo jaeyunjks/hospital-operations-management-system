@@ -10,8 +10,9 @@
               state set to 'recorded' once the doctor's decision is saved.
     message   disabled, unavailable, forbidden, error: the backend's own text. May be missing.
     code      error only: the backend's error code. Missing for an unusable workflow id.
-    workflow  failed, recorded: the backend workflow. Used here: admission_id (title) and,
-              for recorded, decision.decision.
+    workflow  failed, recorded: the backend workflow. Used here: admission_id (title; for
+              failed also the "Run a new check" form, left out without one) and, for
+              recorded, decision.decision.
     logged    recorded only: true or false. false means the review log was not saved.
 
   Wording is fixed per state. The backend's message is added as a second line, never
@@ -68,6 +69,24 @@
 
     {% if unlogged %}
       <p class="alert__body">The review log was not saved</p>
+    {% endif %}
+
+    {# Failed only: a new run for the same admission. Needs the admission id, and is
+       never shown in the "recorded" banner. #}
+    {% if shown == 'failed' and admission_id is not none %}
+      <form class="stack stack--sm"
+            hx-post="/ai/discharge-review/start"
+            hx-target="closest .discharge-review"
+            hx-swap="outerHTML"
+            hx-disabled-elt="find button">
+        <input type="hidden" name="admission_id" value="{{ admission_id }}">
+        <div class="row">
+          <button class="btn-secondary" type="submit">Run a new check</button>
+          {# Shown only while this form's request is running. #}
+          <span class="htmx-indicator u-label">Starting check…</span>
+        </div>
+        <p class="field__hint">Starts a fresh check with the admission's current data</p>
+      </form>
     {% endif %}
   </div>
 </div>

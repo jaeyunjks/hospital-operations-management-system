@@ -198,7 +198,7 @@
                             {% if role == 'nurse' and t.status == 'pending' %}
                               <button class="btn-secondary btn-compact"
                                       data-task-action
-                                      hx-put="http://localhost:5200/api/care-tasks/{{ t.task_id }}/acknowledge"
+                                      hx-put="/actions/care-tasks/{{ t.task_id }}/acknowledge"
                                       hx-headers='{"X-User-Role": "{{ role }}"}'
                                       hx-disabled-elt="closest [data-task-actions] button">
                                 Acknowledge
@@ -207,7 +207,7 @@
                             {% if role == 'nurse' and t.status == 'acknowledged' %}
                               <button class="btn-primary btn-compact"
                                       data-task-action
-                                      hx-put="http://localhost:5200/api/care-tasks/{{ t.task_id }}/complete"
+                                      hx-put="/actions/care-tasks/{{ t.task_id }}/complete"
                                       hx-headers='{"X-User-Role": "{{ role }}"}'
                                       hx-disabled-elt="closest [data-task-actions] button">
                                 Complete
@@ -215,7 +215,7 @@
                             {% endif %}
                             <button class="btn-danger btn-compact"
                                     data-task-action
-                                    hx-delete="http://localhost:5200/api/care-tasks/{{ t.task_id }}"
+                                    hx-delete="/actions/care-tasks/{{ t.task_id }}"
                                     hx-headers='{"X-User-Role": "{{ role }}"}'
                                     hx-confirm="Cancel task #{{ t.task_id }}?"
                                     hx-disabled-elt="closest [data-task-actions] button">

@@ -484,3 +484,44 @@ def test_review_does_not_touch_frozen_ai_fields(client, db_mock, as_user):
     assert returned["model_used"] == MODEL_NAME
     assert returned["admission_id"] == ADMISSION_ID
     assert returned["summary_scope"] == "clinical"
+
+
+# ==========================================================================
+# 10. A discharge readiness decision is final: the review route refuses it.
+# ==========================================================================
+@pytest.mark.parametrize("actor", [DOCTOR, NURSE], ids=["doctor", "nurse"])
+def test_review_refuses_a_discharge_readiness_row(client, db_mock, as_user, actor):
+    """
+    A discharge_readiness row is saved already decided. PUT .../review answers
+    409 with the fixed message for any caller (here the requester doctor and
+    nurse 7) and never calls db.update_ai_summary.
+    """
+    as_user(actor)
+    db_mock.get_ai_summary.return_value = _summary_row(
+        summary_id=1, scope="discharge_readiness", review_status="accepted"
+    )
+
+    resp = client.put("/api/ai/summaries/1/review", json={"review_status": "edited"})
+
+    assert resp.status_code == 409
+    assert resp.get_json() == {
+        "error": "Discharge readiness decisions are final and cannot be reviewed again."
+    }
+    db_mock.update_ai_summary.assert_not_called()
+
+
+def test_review_still_works_on_a_clinical_row(client, db_mock, as_user):
+    """The 409 is only for discharge_readiness: a 'clinical' row is reviewed as before."""
+    as_user(DOCTOR)
+    db_mock.get_ai_summary.return_value = _summary_row(summary_id=1, scope="clinical")
+    db_mock.update_ai_summary.return_value = _summary_row(
+        summary_id=1, review_status="accepted", reviewed_by_staff_id=DOCTOR["id"]
+    )
+
+    resp = client.put("/api/ai/summaries/1/review", json={"review_status": "accepted"})
+
+    assert resp.status_code == 200
+    assert resp.get_json()["ai_summary"]["review_status"] == "accepted"
+    db_mock.update_ai_summary.assert_called_once_with(
+        1, {"review_status": "accepted", "reviewed_by_staff_id": DOCTOR["id"]}
+    )
