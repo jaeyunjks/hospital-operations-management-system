@@ -183,6 +183,20 @@ PY
     --cookie "$COOKIE_FILE" --max-time 20 "$FRONTEND_URL/shifts")"
   grep -q 'Shift planner' <<<"$SHIFT_PAGE" || die \
     "Student 5 Shift Planner did not render through the deployed stack."
+elif [[ "$STUDENT" == "2" ]]; then
+  # `az containerapp exec` needs a TTY and fails on GitHub-hosted runners.
+  # The Student 2 dashboard is rendered from a live backend read, which in turn
+  # reads the database, so a 200 without a reachability error validates the
+  # frontend -> backend -> database chain on Azure Files.
+  log "Checking the Student 2 dashboard renders through the deployed stack."
+  DASHBOARD_PAGE="$(curl --fail --silent --show-error \
+    --retry 12 --retry-all-errors --retry-delay 5 \
+    --max-time 30 "$FRONTEND_URL/")"
+  grep -q 'Clinical Staff Management' <<<"$DASHBOARD_PAGE" || die \
+    "Student 2 dashboard did not render through the deployed stack."
+  if grep -q 'Could not reach' <<<"$DASHBOARD_PAGE"; then
+    die "Student 2 dashboard rendered but could not reach the backend or database."
+  fi
 elif [[ "$STUDENT" == "4" ]]; then
   # `az containerapp exec` needs a TTY and fails on GitHub-hosted runners.
   # Student 4's public /health asks the backend for its own /health, which in
