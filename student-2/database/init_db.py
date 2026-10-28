@@ -20,7 +20,10 @@ Behaviour:
 
 import argparse
 import os
+import shutil
 import sqlite3
+import tempfile
+from pathlib import Path
 
 # schema.sql / seed_data.sql live next to this file. Resolve relative to the
 # module so it works regardless of the caller's working directory.
@@ -37,6 +40,54 @@ TABLES = [
     "consultation_requests",
     "clinical_records",
 ]
+
+
+# Azure Files (SMB) cannot complete SQLite's byte-range locking. The cloud
+# deployment sets STUDENT2_SQLITE_NOLOCK, so the file is opened without locks
+# (database/app.py then serves one request at a time). Local and Docker runs
+# keep SQLite's normal locking.
+NOLOCK = os.environ.get("STUDENT2_SQLITE_NOLOCK", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def connect(path):
+    """Open the SQLite file, without file locks when NOLOCK is set."""
+    if NOLOCK:
+        uri = Path(path).resolve().as_uri() + "?nolock=1"
+        return sqlite3.connect(uri, uri=True, timeout=30)
+    return sqlite3.connect(path, timeout=30)
+
+
+def _has_all_tables(db_path):
+    """True when the file exists and already holds every table this service owns."""
+    if not os.path.exists(db_path) or os.path.getsize(db_path) == 0:
+        return False
+    try:
+        conn = connect(db_path)
+        try:
+            return set(TABLES) <= _existing_tables(conn)
+        finally:
+            conn.close()
+    except sqlite3.DatabaseError:
+        return False
+
+
+def _build_locally_and_copy(db_path):
+    """Build schema + seed on local disk, then copy the finished file into place.
+
+    Building directly on Azure Files can fail half way ("database is locked")
+    and leave a file without tables, so the cloud build happens locally.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        local = os.path.join(tmp, os.path.basename(db_path))
+        conn = sqlite3.connect(local)
+        try:
+            conn.execute("PRAGMA foreign_keys = ON")
+            _create_schema(conn)
+            _load_seed(conn)
+            conn.commit()
+        finally:
+            conn.close()
+        shutil.copyfile(local, db_path)
 
 
 def get_db_path():
@@ -112,7 +163,12 @@ def init_db(reset=False):
     if parent:
         os.makedirs(parent, exist_ok=True)
 
-    conn = sqlite3.connect(db_path)
+    if NOLOCK and not reset and not _has_all_tables(db_path):
+        _build_locally_and_copy(db_path)
+        print(f"[init_db] built schema and seed data locally, then copied to {db_path}")
+        return db_path
+
+    conn = connect(db_path)
     try:
         conn.execute("PRAGMA foreign_keys = ON")
 
