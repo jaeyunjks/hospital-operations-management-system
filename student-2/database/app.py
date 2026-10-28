@@ -25,7 +25,7 @@ import sqlite3
 
 from flask import Flask, jsonify, request
 
-from init_db import get_db_path, init_db
+from init_db import NOLOCK, connect, get_db_path, init_db
 
 app = Flask(__name__)
 
@@ -100,7 +100,7 @@ TABLES = {
 # ------------------------------------------------------------
 def get_conn():
     """Open a connection to the SQLite file (same path resolution as init_db)."""
-    conn = sqlite3.connect(get_db_path())
+    conn = connect(get_db_path())
     conn.row_factory = sqlite3.Row          # rows behave like dicts
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -284,4 +284,6 @@ init_db()
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "6200"))
-    app.run(host="0.0.0.0", port=port)
+    # With NOLOCK (Azure Files) SQLite has no file locks, so serve one request
+    # at a time instead of in parallel threads.
+    app.run(host="0.0.0.0", port=port, threaded=not NOLOCK)
