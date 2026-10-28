@@ -1,0 +1,3 @@
+﻿Ruff security rules (S)..................................................Passed
+detect-secrets (committed secrets).......................................Passed
+pip-audit (all service requirements).....................................Passed
