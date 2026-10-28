@@ -195,7 +195,7 @@
                       <hr class="divider">
                       <form class="stack stack--sm"
                             data-respond-form
-                            hx-put="http://localhost:5200/api/consultations/{{ c.request_id }}/respond"
+                            hx-put="/actions/consultations/{{ c.request_id }}/respond"
                             hx-ext="json-enc"
                             hx-headers='{"X-User-Role": "{{ role }}"}'
                             hx-disabled-elt="find button">
@@ -220,7 +220,7 @@
                       #}
                       <hr class="divider">
                       <form data-cancel-form
-                            hx-delete="http://localhost:5200/api/consultations/{{ c.request_id }}"
+                            hx-delete="/actions/consultations/{{ c.request_id }}"
                             hx-headers='{"X-User-Role": "{{ role }}"}'
                             hx-disabled-elt="find button"
                             hx-confirm="Cancel consultation request #{{ c.request_id }}?">

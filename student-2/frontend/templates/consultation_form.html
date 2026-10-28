@@ -174,7 +174,7 @@
                       a withdrawn note, on failure the backend's message.
                     #}
                     <form data-cancel-form
-                          hx-delete="http://localhost:5200/api/consultations/{{ consult.request_id }}"
+                          hx-delete="/actions/consultations/{{ consult.request_id }}"
                           hx-headers='{"X-User-Role": "{{ role }}"}'
                           hx-disabled-elt="find button"
                           hx-confirm="Withdraw consultation request #{{ consult.request_id }}?">

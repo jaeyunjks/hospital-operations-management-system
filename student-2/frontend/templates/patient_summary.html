@@ -214,7 +214,7 @@
                   (the backend freezes summary_text and would ignore it anyway).
                 #}
                 <form id="review-form"
-                      hx-put="http://localhost:5200/api/ai/summaries/{{ ai.summary_id }}/review"
+                      hx-put="/actions/ai/summaries/{{ ai.summary_id }}/review"
                       hx-ext="json-enc"
                       hx-headers='{"X-User-Role": "{{ role }}"}'
                       hx-params="review_status,reviewed_by_staff_id"

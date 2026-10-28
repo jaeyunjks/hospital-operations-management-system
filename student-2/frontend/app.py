@@ -47,6 +47,7 @@ import re
 import requests
 from flask import (
     Flask,
+    Response,
     make_response,
     redirect,
     render_template,
@@ -652,6 +653,76 @@ def ai_discharge_review_decision(workflow_id):
         timeout=DISCHARGE_REVIEW_TIMEOUT,
     )
     return _discharge_reply(data, error)
+
+
+# ============================================================
+# Action relay
+# The page scripts need the backend's own JSON reply and HTTP status (they read
+# its 'error' key), and in Azure the backend is internal-only, so the browser
+# cannot call it. Each route below forwards ONE fixed backend endpoint and
+# hands the reply back unchanged. Not a general proxy: the only part of a
+# backend path that comes from the request is the integer id.
+# ============================================================
+_ERROR_RELAY_UNREACHABLE = "Could not reach the backend."
+
+
+def _relay(method, path):
+    """
+    Forward this request to the backend `path` and return its reply as it came:
+    body, status code and Content-Type. A JSON body is forwarded only when the
+    request has one. If the backend cannot be reached: 502 with a fixed message.
+    """
+    kwargs = {}
+    body = request.get_json(silent=True)
+    if body is not None:
+        kwargs["json"] = body
+
+    try:
+        resp = requests.request(
+            method,
+            "{}{}".format(BACKEND_API_URL, path),
+            headers={"X-User-Role": current_role()},
+            timeout=BACKEND_TIMEOUT,
+            **kwargs
+        )
+    except requests.RequestException:
+        return {"error": _ERROR_RELAY_UNREACHABLE}, 502
+
+    return Response(
+        resp.content,
+        status=resp.status_code,
+        content_type=resp.headers.get("Content-Type"),
+    )
+
+
+@app.put("/actions/care-tasks/<int:task_id>/acknowledge")
+def action_care_task_acknowledge(task_id):
+    return _relay("PUT", "/api/care-tasks/{}/acknowledge".format(task_id))
+
+
+@app.put("/actions/care-tasks/<int:task_id>/complete")
+def action_care_task_complete(task_id):
+    return _relay("PUT", "/api/care-tasks/{}/complete".format(task_id))
+
+
+@app.delete("/actions/care-tasks/<int:task_id>")
+def action_care_task_cancel(task_id):
+    return _relay("DELETE", "/api/care-tasks/{}".format(task_id))
+
+
+@app.put("/actions/consultations/<int:request_id>/respond")
+def action_consultation_respond(request_id):
+    return _relay("PUT", "/api/consultations/{}/respond".format(request_id))
+
+
+@app.delete("/actions/consultations/<int:request_id>")
+def action_consultation_cancel(request_id):
+    return _relay("DELETE", "/api/consultations/{}".format(request_id))
+
+
+@app.put("/actions/ai/summaries/<int:summary_id>/review")
+def action_ai_summary_review(summary_id):
+    return _relay("PUT", "/api/ai/summaries/{}/review".format(summary_id))
 
 
 # ------------------------------------------------------------

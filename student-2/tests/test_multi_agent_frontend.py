@@ -189,6 +189,25 @@ def _has_controls(body):
     return any(marker in body for marker in ("<form", "<button", "<textarea", "hx-post"))
 
 
+NEW_CHECK_BUTTON = "Run a new check"
+NEW_CHECK_HINT = "Starts a fresh check with the admission's current data"
+
+
+def _assert_only_new_check_form(body, admission_id=ADMISSION_ID):
+    """The one control on the piece is the "Run a new check" form for this admission."""
+    assert body.count("<form") == 1
+    assert body.count("<button") == 1 and "<textarea" not in body
+    assert body.count("hx-post") == 1
+    assert 'hx-post="/ai/discharge-review/start"' in body
+    assert 'hx-target="closest .discharge-review"' in body
+    assert 'hx-swap="outerHTML"' in body
+    assert 'hx-disabled-elt="find button"' in body
+    assert f'<input type="hidden" name="admission_id" value="{admission_id}">' in body
+    assert f'class="btn-secondary" type="submit">{NEW_CHECK_BUTTON}</button>' in body
+    assert NEW_CHECK_HINT in body
+    assert _decision_values(body) == []
+
+
 ATTACK = '"><img src=x onerror=alert(1)><script>alert(1)</script>'
 
 
@@ -331,6 +350,9 @@ def test_finished_state(client, http, route, status):
     assert _DECISION_FOR_STATUS[status].replace("_", " ").capitalize() in body
     assert "Agreed with the Reviewer." in body
     assert "Hold discharge until the surgery is cleared." in body  # result still shown
+    # a new run can be started, after the doctor's decision
+    _assert_only_new_check_form(body)
+    assert body.index("Doctor's decision") < body.index("<form")
 
 
 def test_finished_state_without_a_comment_or_decision(client, http):
@@ -354,6 +376,31 @@ def test_failed_state(client, http, route):
     assert f"Discharge readiness check failed, admission {ADMISSION_ID}" in body
     assert "alert--danger" in body and "status--danger" in body
     assert "ai-panel" not in body
+    # The one control is the form that starts a new check for this admission.
+    _assert_only_new_check_form(body)
+
+
+@pytest.mark.parametrize("route", ROUTES)
+@pytest.mark.parametrize("admission_id", [None, ""], ids=["null", "empty"])
+def test_failed_state_without_an_admission_id_has_no_form(client, http, route, admission_id):
+    wf = _workflow("failed", admission_id=admission_id, outcome=None, checks=[], gap=None,
+                   recommendation=None)
+
+    _, body = _get(client, route, http, _ok(wf))
+
+    assert "Discharge readiness check failed" in body
+    assert ", admission" not in body
+    assert NEW_CHECK_BUTTON not in body and NEW_CHECK_HINT not in body
+    assert not _has_controls(body)
+
+
+def test_failed_state_with_no_admission_id_key_has_no_form(client, http):
+    wf = _workflow("failed", outcome=None, checks=[], gap=None, recommendation=None)
+    del wf["admission_id"]
+
+    _, body = _get(client, "latest", http, _ok(wf))
+
+    assert "Discharge readiness check failed" in body
     assert not _has_controls(body)
 
 
@@ -484,7 +531,11 @@ def test_decision_reply_confirms_the_decision(client, http):
     assert "Decision: Partially accept" in body
     assert "alert--success" in body
     assert "The review log was not saved" not in body
-    assert not _has_controls(body)  # and the buttons are gone
+    assert _decision_values(body) == []  # and the decision buttons are gone
+    # The form to start a new check sits below the decision, outside the banner.
+    _assert_only_new_check_form(body)
+    assert body.index("Doctor's decision") < body.index("<form")
+    assert body.index("Decision: Partially accept") < body.index("Doctor's decision")
 
 
 def test_decision_reply_says_when_the_log_was_not_saved(client, http):
@@ -658,8 +709,42 @@ def test_finished_piece_has_neither(client, http, route, status):
     assert _decision_values(body) == []
     assert "Approve review" not in body
     assert "Reject review" not in body
-    assert not _has_controls(body)
+    assert "<textarea" not in body
     assert "/decision" not in body
+    _assert_only_new_check_form(body)  # the only control left
+
+
+@pytest.mark.parametrize("route", ROUTES)
+@pytest.mark.parametrize("admission_id", [None, ""], ids=["null", "empty"])
+def test_finished_piece_without_an_admission_id_has_no_form(client, http, route, admission_id):
+    wf = _finished_workflow("approved", admission_id=admission_id)
+
+    _, body = _get(client, route, http, _ok(wf))
+
+    assert "Doctor's decision" in body
+    assert NEW_CHECK_BUTTON not in body
+    assert not _has_controls(body)
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_awaiting_review_has_only_the_four_decision_buttons(client, http, route):
+    _, body = _get(client, route, http, _ok(_workflow()))
+
+    assert _decision_values(body) == ["approve", "correct", "partially_accept", "reject"]
+    assert body.count("<button") == 4
+    assert body.count("<form") == 1  # the decision form, nothing for a new check
+    assert NEW_CHECK_BUTTON not in body and NEW_CHECK_HINT not in body
+    assert "/ai/discharge-review/start" not in body
+
+
+@pytest.mark.parametrize("route", ROUTES)
+def test_no_new_check_form_while_running_or_on_other_banners(client, http, route):
+    _, body = _get(client, route, http, _ok(_running_workflow()))
+    assert NEW_CHECK_BUTTON not in body and "/ai/discharge-review/start" not in body
+
+    for reply, *_ in _MESSAGE_STATES.values():
+        _, body = _get(client, route, http, reply)
+        assert NEW_CHECK_BUTTON not in body and "/ai/discharge-review/start" not in body
 
 
 def test_an_awaiting_review_without_an_id_has_no_dead_form(client, http):

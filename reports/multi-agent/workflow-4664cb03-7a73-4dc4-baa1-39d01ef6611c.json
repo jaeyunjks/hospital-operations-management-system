@@ -1,0 +1,637 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "4664cb03-7a73-4dc4-baa1-39d01ef6611c",
+  "timestamp": "2026-10-28T04:10:01.267Z",
+  "task": "Discharge readiness review: admission 1",
+  "input_evidence": {
+    "schema_version": "1.0",
+    "evidence_type": "student2_discharge_readiness",
+    "scenario": "Hospital discharge readiness review for one admission",
+    "current_state": {
+      "admission": {
+        "admission_id": 1
+      },
+      "patient_id": 1
+    },
+    "open_care_tasks": 0,
+    "pending_consultations": 0,
+    "scheduled_surgeries": 0,
+    "note_status": "mixed",
+    "objective": {
+      "metric": "readiness checks met",
+      "current": 3,
+      "target": 3,
+      "unit": "check"
+    },
+    "options": [
+      {
+        "id": "ready_to_discharge",
+        "label": "ready_to_discharge",
+        "attributes": {
+          "no_open_care_tasks": true,
+          "no_pending_consultations": true,
+          "no_scheduled_surgery": true
+        },
+        "outcomes": {
+          "metric_delta": 0,
+          "projected_value": 3
+        },
+        "risk_indicators": []
+      }
+    ],
+    "constraints": [
+      {
+        "id": "no_open_care_tasks",
+        "scope": "option",
+        "type": "hard",
+        "field": "no_open_care_tasks",
+        "operator": "equals",
+        "value": true,
+        "description": "Every care task for the admission must be completed or cancelled."
+      },
+      {
+        "id": "no_pending_consultations",
+        "scope": "option",
+        "type": "hard",
+        "field": "no_pending_consultations",
+        "operator": "equals",
+        "value": true,
+        "description": "No consultation request for the admission may still be waiting."
+      },
+      {
+        "id": "no_scheduled_surgery",
+        "scope": "option",
+        "type": "hard",
+        "field": "no_scheduled_surgery",
+        "operator": "equals",
+        "value": true,
+        "description": "No surgery for the admission may still be scheduled."
+      },
+      {
+        "id": "human_approval",
+        "scope": "workflow",
+        "type": "approval",
+        "description": "The assigned doctor decides; AI is advisory only."
+      }
+    ],
+    "unknowns": [
+      "Clinical stability of the patient beyond these three checks.",
+      "Whether the clinical record notes are complete; note_status is information only.",
+      "Whether any task, consultation or surgery changes after this snapshot."
+    ]
+  },
+  "planner": {
+    "started_at": "2026-10-28T04:10:01.305Z",
+    "completed_at": "2026-10-28T04:10:01.309Z",
+    "input": {
+      "task": "Discharge readiness review: admission 1",
+      "evidence": {
+        "schema_version": "1.0",
+        "evidence_type": "student2_discharge_readiness",
+        "scenario": "Hospital discharge readiness review for one admission",
+        "current_state": {
+          "admission": {
+            "admission_id": 1
+          },
+          "patient_id": 1
+        },
+        "open_care_tasks": 0,
+        "pending_consultations": 0,
+        "scheduled_surgeries": 0,
+        "note_status": "mixed",
+        "objective": {
+          "metric": "readiness checks met",
+          "current": 3,
+          "target": 3,
+          "unit": "check"
+        },
+        "options": [
+          {
+            "id": "ready_to_discharge",
+            "label": "ready_to_discharge",
+            "attributes": {
+              "no_open_care_tasks": true,
+              "no_pending_consultations": true,
+              "no_scheduled_surgery": true
+            },
+            "outcomes": {
+              "metric_delta": 0,
+              "projected_value": 3
+            },
+            "risk_indicators": []
+          }
+        ],
+        "constraints": [
+          {
+            "id": "no_open_care_tasks",
+            "scope": "option",
+            "type": "hard",
+            "field": "no_open_care_tasks",
+            "operator": "equals",
+            "value": true,
+            "description": "Every care task for the admission must be completed or cancelled."
+          },
+          {
+            "id": "no_pending_consultations",
+            "scope": "option",
+            "type": "hard",
+            "field": "no_pending_consultations",
+            "operator": "equals",
+            "value": true,
+            "description": "No consultation request for the admission may still be waiting."
+          },
+          {
+            "id": "no_scheduled_surgery",
+            "scope": "option",
+            "type": "hard",
+            "field": "no_scheduled_surgery",
+            "operator": "equals",
+            "value": true,
+            "description": "No surgery for the admission may still be scheduled."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "The assigned doctor decides; AI is advisory only."
+          }
+        ],
+        "unknowns": [
+          "Clinical stability of the patient beyond these three checks.",
+          "Whether the clinical record notes are complete; note_status is information only.",
+          "Whether any task, consultation or surgery changes after this snapshot."
+        ]
+      }
+    },
+    "output": {
+      "goal": "Discharge readiness review: admission 1",
+      "required_evidence": [
+        "objective",
+        "options",
+        "constraints",
+        "unknowns"
+      ],
+      "planned_steps": [
+        "Measure the gap between the current and target state.",
+        "Evaluate each supplied option against every hard constraint.",
+        "Compare eligible options using supplied risks and policy context.",
+        "Propose a reversible recommendation without executing a mutation.",
+        "Send the proposal and evidence to an independent reviewer."
+      ],
+      "constraints": [
+        "Every care task for the admission must be completed or cancelled.",
+        "No consultation request for the admission may still be waiting.",
+        "No surgery for the admission may still be scheduled.",
+        "The assigned doctor decides; AI is advisory only."
+      ],
+      "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": false,
+      "fallback_reason": null,
+      "attempts": [],
+      "semantic_validation": {
+        "stage": "planner",
+        "valid": true,
+        "issues": [],
+        "retry_triggered": false,
+        "fallback_triggered": false,
+        "rejected_attempts": []
+      },
+      "attempt_count": 0
+    }
+  },
+  "worker": {
+    "started_at": "2026-10-28T04:10:01.358Z",
+    "completed_at": "2026-10-28T04:10:01.359Z",
+    "input": {
+      "task": "Discharge readiness review: admission 1",
+      "planner_output": {
+        "goal": "Discharge readiness review: admission 1",
+        "required_evidence": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ],
+        "planned_steps": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "constraints": [
+          "Every care task for the admission must be completed or cancelled.",
+          "No consultation request for the admission may still be waiting.",
+          "No surgery for the admission may still be scheduled.",
+          "The assigned doctor decides; AI is advisory only."
+        ],
+        "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+      },
+      "evidence": {
+        "schema_version": "1.0",
+        "evidence_type": "student2_discharge_readiness",
+        "scenario": "Hospital discharge readiness review for one admission",
+        "current_state": {
+          "admission": {
+            "admission_id": 1
+          },
+          "patient_id": 1
+        },
+        "open_care_tasks": 0,
+        "pending_consultations": 0,
+        "scheduled_surgeries": 0,
+        "note_status": "mixed",
+        "objective": {
+          "metric": "readiness checks met",
+          "current": 3,
+          "target": 3,
+          "unit": "check"
+        },
+        "options": [
+          {
+            "id": "ready_to_discharge",
+            "label": "ready_to_discharge",
+            "attributes": {
+              "no_open_care_tasks": true,
+              "no_pending_consultations": true,
+              "no_scheduled_surgery": true
+            },
+            "outcomes": {
+              "metric_delta": 0,
+              "projected_value": 3
+            },
+            "risk_indicators": []
+          }
+        ],
+        "constraints": [
+          {
+            "id": "no_open_care_tasks",
+            "scope": "option",
+            "type": "hard",
+            "field": "no_open_care_tasks",
+            "operator": "equals",
+            "value": true,
+            "description": "Every care task for the admission must be completed or cancelled."
+          },
+          {
+            "id": "no_pending_consultations",
+            "scope": "option",
+            "type": "hard",
+            "field": "no_pending_consultations",
+            "operator": "equals",
+            "value": true,
+            "description": "No consultation request for the admission may still be waiting."
+          },
+          {
+            "id": "no_scheduled_surgery",
+            "scope": "option",
+            "type": "hard",
+            "field": "no_scheduled_surgery",
+            "operator": "equals",
+            "value": true,
+            "description": "No surgery for the admission may still be scheduled."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "The assigned doctor decides; AI is advisory only."
+          }
+        ],
+        "unknowns": [
+          "Clinical stability of the patient beyond these three checks.",
+          "Whether the clinical record notes are complete; note_status is information only.",
+          "Whether any task, consultation or surgery changes after this snapshot."
+        ]
+      }
+    },
+    "output": {
+      "status": "proposal_ready",
+      "plan_steps_followed": [
+        "Measure the gap between the current and target state.",
+        "Evaluate each supplied option against every hard constraint.",
+        "Compare eligible options using supplied risks and policy context.",
+        "Propose a reversible recommendation without executing a mutation.",
+        "Send the proposal and evidence to an independent reviewer."
+      ],
+      "missing_planner_evidence": [],
+      "gap": {
+        "metric": "readiness checks met",
+        "current": 3,
+        "target": 3,
+        "deficit": 0
+      },
+      "evaluated_options": [
+        {
+          "option_id": "ready_to_discharge",
+          "label": "ready_to_discharge",
+          "hard_constraint_checks": [
+            {
+              "constraint_id": "no_open_care_tasks",
+              "passed": true
+            },
+            {
+              "constraint_id": "no_pending_consultations",
+              "passed": true
+            },
+            {
+              "constraint_id": "no_scheduled_surgery",
+              "passed": true
+            }
+          ],
+          "eligible": true,
+          "risk_indicators": []
+        }
+      ],
+      "proposed_solution": {
+        "selected_option_id": "ready_to_discharge",
+        "selected_option": "ready_to_discharge",
+        "metric_delta": 0,
+        "projected_value": 3,
+        "reasoning": [
+          "Passed hard constraint: no_open_care_tasks",
+          "Passed hard constraint: no_pending_consultations",
+          "Passed hard constraint: no_scheduled_surgery",
+          "No supplied option-specific risk indicator was identified."
+        ]
+      },
+      "limitations": [
+        "Clinical stability of the patient beyond these three checks.",
+        "Whether the clinical record notes are complete; note_status is information only.",
+        "Whether any task, consultation or surgery changes after this snapshot."
+      ],
+      "mutation_executed": false
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": false,
+      "fallback_reason": null,
+      "attempts": [],
+      "semantic_validation": {
+        "stage": "worker",
+        "valid": true,
+        "issues": [],
+        "retry_triggered": false,
+        "fallback_triggered": false,
+        "rejected_attempts": []
+      },
+      "attempt_count": 0
+    }
+  },
+  "reviewer": {
+    "started_at": "2026-10-28T04:10:01.399Z",
+    "completed_at": "2026-10-28T04:10:01.400Z",
+    "input": {
+      "task": "Discharge readiness review: admission 1",
+      "planner_output": {
+        "goal": "Discharge readiness review: admission 1",
+        "required_evidence": [
+          "objective",
+          "options",
+          "constraints",
+          "unknowns"
+        ],
+        "planned_steps": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "constraints": [
+          "Every care task for the admission must be completed or cancelled.",
+          "No consultation request for the admission may still be waiting.",
+          "No surgery for the admission may still be scheduled.",
+          "The assigned doctor decides; AI is advisory only."
+        ],
+        "expected_result": "A structured, evidence-backed proposal that remains pending until explicit human review."
+      },
+      "worker_output": {
+        "status": "proposal_ready",
+        "plan_steps_followed": [
+          "Measure the gap between the current and target state.",
+          "Evaluate each supplied option against every hard constraint.",
+          "Compare eligible options using supplied risks and policy context.",
+          "Propose a reversible recommendation without executing a mutation.",
+          "Send the proposal and evidence to an independent reviewer."
+        ],
+        "missing_planner_evidence": [],
+        "gap": {
+          "metric": "readiness checks met",
+          "current": 3,
+          "target": 3,
+          "deficit": 0
+        },
+        "evaluated_options": [
+          {
+            "option_id": "ready_to_discharge",
+            "label": "ready_to_discharge",
+            "hard_constraint_checks": [
+              {
+                "constraint_id": "no_open_care_tasks",
+                "passed": true
+              },
+              {
+                "constraint_id": "no_pending_consultations",
+                "passed": true
+              },
+              {
+                "constraint_id": "no_scheduled_surgery",
+                "passed": true
+              }
+            ],
+            "eligible": true,
+            "risk_indicators": []
+          }
+        ],
+        "proposed_solution": {
+          "selected_option_id": "ready_to_discharge",
+          "selected_option": "ready_to_discharge",
+          "metric_delta": 0,
+          "projected_value": 3,
+          "reasoning": [
+            "Passed hard constraint: no_open_care_tasks",
+            "Passed hard constraint: no_pending_consultations",
+            "Passed hard constraint: no_scheduled_surgery",
+            "No supplied option-specific risk indicator was identified."
+          ]
+        },
+        "limitations": [
+          "Clinical stability of the patient beyond these three checks.",
+          "Whether the clinical record notes are complete; note_status is information only.",
+          "Whether any task, consultation or surgery changes after this snapshot."
+        ],
+        "mutation_executed": false
+      },
+      "worker_execution": {
+        "provider": "deterministic_fallback",
+        "fallback_used": false
+      },
+      "evidence": {
+        "schema_version": "1.0",
+        "evidence_type": "student2_discharge_readiness",
+        "scenario": "Hospital discharge readiness review for one admission",
+        "current_state": {
+          "admission": {
+            "admission_id": 1
+          },
+          "patient_id": 1
+        },
+        "open_care_tasks": 0,
+        "pending_consultations": 0,
+        "scheduled_surgeries": 0,
+        "note_status": "mixed",
+        "objective": {
+          "metric": "readiness checks met",
+          "current": 3,
+          "target": 3,
+          "unit": "check"
+        },
+        "options": [
+          {
+            "id": "ready_to_discharge",
+            "label": "ready_to_discharge",
+            "attributes": {
+              "no_open_care_tasks": true,
+              "no_pending_consultations": true,
+              "no_scheduled_surgery": true
+            },
+            "outcomes": {
+              "metric_delta": 0,
+              "projected_value": 3
+            },
+            "risk_indicators": []
+          }
+        ],
+        "constraints": [
+          {
+            "id": "no_open_care_tasks",
+            "scope": "option",
+            "type": "hard",
+            "field": "no_open_care_tasks",
+            "operator": "equals",
+            "value": true,
+            "description": "Every care task for the admission must be completed or cancelled."
+          },
+          {
+            "id": "no_pending_consultations",
+            "scope": "option",
+            "type": "hard",
+            "field": "no_pending_consultations",
+            "operator": "equals",
+            "value": true,
+            "description": "No consultation request for the admission may still be waiting."
+          },
+          {
+            "id": "no_scheduled_surgery",
+            "scope": "option",
+            "type": "hard",
+            "field": "no_scheduled_surgery",
+            "operator": "equals",
+            "value": true,
+            "description": "No surgery for the admission may still be scheduled."
+          },
+          {
+            "id": "human_approval",
+            "scope": "workflow",
+            "type": "approval",
+            "description": "The assigned doctor decides; AI is advisory only."
+          }
+        ],
+        "unknowns": [
+          "Clinical stability of the patient beyond these three checks.",
+          "Whether the clinical record notes are complete; note_status is information only.",
+          "Whether any task, consultation or surgery changes after this snapshot."
+        ]
+      }
+    },
+    "output": {
+      "review_status": "validated_with_risks",
+      "validated_findings": [],
+      "validated_evidence_refs": [
+        {
+          "source": "worker_output",
+          "path": "proposed_solution.projected_value",
+          "value": 3
+        }
+      ],
+      "risks": [
+        "Clinical stability of the patient beyond these three checks.",
+        "Whether the clinical record notes are complete; note_status is information only.",
+        "Whether any task, consultation or surgery changes after this snapshot."
+      ],
+      "unsupported_claims": [],
+      "recommended_option_id": "ready_to_discharge",
+      "recommendation": "The proposal is evidence-consistent, but identified risks require human review.",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "execution": {
+      "provider": "deterministic_fallback",
+      "model": null,
+      "fallback_used": false,
+      "fallback_reason": null,
+      "attempts": [],
+      "semantic_validation": {
+        "stage": "reviewer",
+        "valid": true,
+        "issues": [],
+        "retry_triggered": false,
+        "fallback_triggered": false,
+        "rejected_attempts": []
+      },
+      "attempt_count": 0
+    }
+  },
+  "human_review": {
+    "decision": "approve",
+    "comments": "",
+    "timestamp": "2026-10-28T04:12:13.154Z"
+  },
+  "final_status": "approved",
+  "final_result": {
+    "status": "approved",
+    "proposal": {
+      "selected_option_id": "ready_to_discharge",
+      "selected_option": "ready_to_discharge",
+      "metric_delta": 0,
+      "projected_value": 3,
+      "reasoning": [
+        "Passed hard constraint: no_open_care_tasks",
+        "Passed hard constraint: no_pending_consultations",
+        "Passed hard constraint: no_scheduled_surgery",
+        "No supplied option-specific risk indicator was identified."
+      ]
+    },
+    "review": {
+      "review_status": "validated_with_risks",
+      "validated_findings": [],
+      "validated_evidence_refs": [
+        {
+          "source": "worker_output",
+          "path": "proposed_solution.projected_value",
+          "value": 3
+        }
+      ],
+      "risks": [
+        "Clinical stability of the patient beyond these three checks.",
+        "Whether the clinical record notes are complete; note_status is information only.",
+        "Whether any task, consultation or surgery changes after this snapshot."
+      ],
+      "unsupported_claims": [],
+      "recommended_option_id": "ready_to_discharge",
+      "recommendation": "The proposal is evidence-consistent, but identified risks require human review.",
+      "human_approval_required": true,
+      "mutation_verified_absent": true
+    },
+    "human_decision": "approve",
+    "human_comments_or_correction": "",
+    "mutation_executed": false
+  },
+  "completed_at": "2026-10-28T04:12:13.155Z"
+}

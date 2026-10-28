@@ -298,6 +298,13 @@ def review_summary(summary_id):
             return _error("no AI summary with id {}".format(summary_id), 404)
         return _error("could not read the AI summary: {}".format(exc), 502)
 
+    # --- A discharge readiness decision is final from the start: it is written
+    #     once by the Multi-Agent flow and is never reviewed again. -----------
+    if summary.get("summary_scope") == "discharge_readiness":
+        return _error(
+            "Discharge readiness decisions are final and cannot be reviewed again.", 409
+        )
+
     # --- Authorisation: original requester OR an assignment relationship to
     #     the same admission. Fail loudly if neither holds. ----------------
     if not _may_review(summary, role, user_id):
